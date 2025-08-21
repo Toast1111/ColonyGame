@@ -10,6 +10,7 @@ export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock"
 
 export type BuildingDef = {
   name: string;
+  description?: string; // Building description for UI
   key?: string;
   cost?: Partial<Resources>;
   hp: number;
@@ -26,9 +27,12 @@ export type BuildingDef = {
   // utility
   healRate?: number; // hp per second
   healRange?: number; // pixels
+  storageBonus?: number; // additional storage capacity
   // production
   prodKind?: keyof Resources;
   prodRateSec?: number; // amount per second
+  // movement
+  speedBonus?: number; // movement speed multiplier on this tile
 };
 
 export type Building = BuildingDef & {
@@ -40,7 +44,7 @@ export type Building = BuildingDef & {
 
 export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting';
 
-export type Colonist = { x: number; y: number; r: number; hp: number; speed: number; task: string | null; target: any; carrying: any; hunger: number; alive: boolean; color: string; t: number; fatigue?: number; state?: ColonistState; stateSince?: number; path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; lastHp?: number; hurt?: number; inside?: import('./types').Building | null; hideTimer?: number; safeTarget?: import('./types').Building | null; safeTimer?: number; reservedBuildFor?: import('./types').Building | null };
+export type Colonist = { x: number; y: number; r: number; hp: number; speed: number; task: string | null; target: any; carrying: any; hunger: number; alive: boolean; color: string; t: number; fatigue?: number; state?: ColonistState; stateSince?: number; path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; lastHp?: number; hurt?: number; inside?: import('./types').Building | null; hideTimer?: number; safeTarget?: import('./types').Building | null; safeTimer?: number; reservedBuildFor?: import('./types').Building | null; stuckTimer?: number };
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };
 

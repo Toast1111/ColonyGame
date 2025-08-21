@@ -119,45 +119,101 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
   }
 }
 
-export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, parts: { res: { wood: number; stone: number; food: number }, colonists: number, cap: number, hiding: number, day: number, tDay: number, isNight: boolean, hotbar: Array<{ key: string; name: string; cost: string; selected: boolean }>, messages: Message[] }) {
-  const PAD = 10; const BARH = 34; const W = canvas.width;
-  ctx.fillStyle = '#0b122088'; ctx.fillRect(0, 0, W, BARH);
-  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.strokeRect(0, .5, W, BARH);
-  ctx.fillStyle = '#dbeafe'; ctx.font = '600 14px system-ui,Segoe UI,Roboto';
+export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, parts: { res: { wood: number; stone: number; food: number }, colonists: number, cap: number, hiding: number, day: number, tDay: number, isNight: boolean, hotbar: Array<{ key: string; name: string; cost: string; selected: boolean }>, messages: Message[], storage?: { used: number; max: number } }, game: any) {
+  const scale = game.uiScale;
+  const PAD = game.scale(10);
+  const BARH = game.scale(34);
+  const W = canvas.width;
+  
+  // Top bar background
+  ctx.fillStyle = '#0b122088'; 
+  ctx.fillRect(0, 0, W, BARH);
+  ctx.strokeStyle = '#1e293b'; 
+  ctx.lineWidth = 1; 
+  ctx.strokeRect(0, .5, W, BARH);
+  
+  // Resource bars
+  ctx.fillStyle = '#dbeafe'; 
+  ctx.font = game.getScaledFont(14, '600');
   let x = PAD;
-  pill(ctx, x, 8, `Wood: ${parts.res.wood | 0}`, '#b08968'); x += 140;
-  pill(ctx, x, 8, `Stone: ${parts.res.stone | 0}`, '#9aa5b1'); x += 150;
-  pill(ctx, x, 8, `Food: ${parts.res.food | 0}`, '#9ae6b4'); x += 140;
-  const popText = `Colonists: ${parts.colonists}/${parts.cap}`; pill(ctx, x, 8, popText, '#93c5fd'); x += 190;
-  const hidText = `Hiding: ${parts.hiding}`; pill(ctx, x, 8, hidText, '#60a5fa'); x += 120;
-  const timeText = `Day ${parts.day} — ${(parts.tDay * 24) | 0}:00 ${parts.isNight ? '🌙' : '☀️'}`; pill(ctx, x, 8, timeText, parts.isNight ? '#ffd166' : '#6ee7ff');
-  const hbY = canvas.height - 46; const hbItemW = 150; x = PAD;
-  ctx.fillStyle = '#0b122088'; ctx.fillRect(0, hbY, canvas.width, 46);
-  ctx.strokeStyle = '#1e293b'; ctx.strokeRect(0, hbY + .5, canvas.width, 46);
-  ctx.font = '500 13px system-ui,Segoe UI,Roboto';
+  
+  const resourceSpacing = game.scale(140);
+  pill(ctx, x, game.scale(8), `Wood: ${Math.floor(parts.res.wood)}`, '#b08968', game); x += resourceSpacing;
+  pill(ctx, x, game.scale(8), `Stone: ${Math.floor(parts.res.stone)}`, '#9aa5b1', game); x += Math.max(resourceSpacing, game.scale(150));
+  pill(ctx, x, game.scale(8), `Food: ${Math.floor(parts.res.food)}`, '#9ae6b4', game); x += resourceSpacing;
+  
+  // Storage capacity display
+  if (parts.storage) {
+    const storagePercent = Math.floor(parts.storage.used / parts.storage.max * 100);
+    const storageColor = storagePercent > 90 ? '#ef4444' : storagePercent > 70 ? '#eab308' : '#22c55e';
+    pill(ctx, x, game.scale(8), `Storage: ${Math.floor(parts.storage.used)}/${parts.storage.max} (${storagePercent}%)`, storageColor, game); 
+    x += game.scale(180);
+  }
+  
+  const popText = `Colonists: ${parts.colonists}/${parts.cap}`; 
+  pill(ctx, x, game.scale(8), popText, '#93c5fd', game); x += Math.max(resourceSpacing, game.scale(190));
+  const hidText = `Hiding: ${parts.hiding}`; 
+  pill(ctx, x, game.scale(8), hidText, '#60a5fa', game); x += game.scale(120);
+  const timeText = `Day ${parts.day} — ${(parts.tDay * 24) | 0}:00 ${parts.isNight ? '🌙' : '☀️'}`; 
+  pill(ctx, x, game.scale(8), timeText, parts.isNight ? '#ffd166' : '#6ee7ff', game);
+  
+  // Hotbar
+  const hbY = canvas.height - game.scale(46); 
+  const hbItemW = Math.max(game.scale(120), Math.min(game.scale(180), (canvas.width - PAD * 2) / parts.hotbar.length));
+  x = PAD;
+  
+  ctx.fillStyle = '#0b122088'; 
+  ctx.fillRect(0, hbY, canvas.width, game.scale(46));
+  ctx.strokeStyle = '#1e293b'; 
+  ctx.strokeRect(0, hbY + .5, canvas.width, game.scale(46));
+  ctx.font = game.getScaledFont(13);
+  
   for (let i = 0; i < parts.hotbar.length; i++) {
     const h = parts.hotbar[i];
-    drawHot(ctx, x + 2, hbY + 6, hbItemW - 6, 34, `${i + 1}. ${h.name}`, h.cost, h.selected);
+    drawHot(ctx, x + game.scale(2), hbY + game.scale(6), hbItemW - game.scale(6), game.scale(34), `${i + 1}. ${h.name}`, h.cost, h.selected, game);
     x += hbItemW;
   }
-  let my = BARH + 6;
-  for (let i = parts.messages.length - 1; i >= 0; i--) { const m = parts.messages[i]; drawMsg(ctx, W - 360, my, m.text); my += 22; }
+  
+  // Messages - responsive positioning
+  let my = BARH + game.scale(6);
+  const msgWidth = Math.min(game.scale(360), canvas.width - PAD * 2);
+  for (let i = parts.messages.length - 1; i >= 0; i--) { 
+    const m = parts.messages[i]; 
+    drawMsg(ctx, W - msgWidth - PAD, my, m.text, msgWidth, game); 
+    my += game.scale(22); 
+  }
 }
 
-function pill(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string) {
-  const w = ctx.measureText(text).width + 18; const h = 20;
-  ctx.fillStyle = '#0f172a'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#1e293b'; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
-  ctx.fillStyle = color; ctx.fillRect(x + 2, y + 2, 6, h - 4);
-  ctx.fillStyle = '#dbeafe'; ctx.fillText(text, x + 12, y + 14);
+function pill(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, game: any) {
+  const w = ctx.measureText(text).width + game.scale(18); 
+  const h = game.scale(20);
+  ctx.fillStyle = '#0f172a'; 
+  ctx.fillRect(x, y, w, h); 
+  ctx.strokeStyle = '#1e293b'; 
+  ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+  ctx.fillStyle = color; 
+  ctx.fillRect(x + game.scale(2), y + game.scale(2), game.scale(6), h - game.scale(4));
+  ctx.fillStyle = '#dbeafe'; 
+  ctx.fillText(text, x + game.scale(12), y + game.scale(14));
 }
-function drawHot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, cost: string, selected: boolean) {
-  ctx.fillStyle = selected ? '#102034' : '#0f172a'; ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = selected ? '#4b9fff' : '#1e293b'; ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
-  ctx.fillStyle = '#dbeafe'; ctx.fillText(label, x + 8, y + 20);
-  ctx.fillStyle = '#9fb3c8'; ctx.fillText(cost, x + w - 48, y + 20);
+
+function drawHot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, cost: string, selected: boolean, game: any) {
+  ctx.fillStyle = selected ? '#102034' : '#0f172a'; 
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = selected ? '#4b9fff' : '#1e293b'; 
+  ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
+  ctx.fillStyle = '#dbeafe'; 
+  ctx.fillText(label, x + game.scale(8), y + game.scale(20));
+  ctx.fillStyle = '#9fb3c8'; 
+  ctx.fillText(cost, x + w - game.scale(48), y + game.scale(20));
 }
-function drawMsg(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
-  ctx.fillStyle = '#0f172aee'; ctx.fillRect(x, y, 340, 20);
-  ctx.strokeStyle = '#1e293b'; ctx.strokeRect(x + .5, y + .5, 340 - 1, 20 - 1);
-  ctx.fillStyle = '#dbeafe'; ctx.fillText(text, x + 8, y + 14);
+
+function drawMsg(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, width: number, game: any) {
+  const h = game.scale(20);
+  ctx.fillStyle = '#0f172aee'; 
+  ctx.fillRect(x, y, width, h);
+  ctx.strokeStyle = '#1e293b'; 
+  ctx.strokeRect(x + .5, y + .5, width - 1, h - 1);
+  ctx.fillStyle = '#dbeafe'; 
+  ctx.fillText(text, x + game.scale(8), y + game.scale(14));
 }

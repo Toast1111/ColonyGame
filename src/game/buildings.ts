@@ -2,17 +2,126 @@ import { T, COLORS } from "./constants";
 import type { Building, BuildingDef, Resources } from "./types";
 
 export const BUILD_TYPES: Record<string, BuildingDef> = {
-  house: { category:'Housing', name: 'House', key: '1', cost: { wood: 20, stone: 5 }, hp: 220, size: { w: 2, h: 2 }, build: 100, color: COLORS.house, popCap: 2 },
-  farm:  { category:'Production', name: 'Farm', key: '2', cost: { wood: 15 }, hp: 120, size: { w: 2, h: 2 }, build: 80, color: COLORS.farm, growTime: 1 },
-  turret:{ category:'Defense', name: 'Turret', key: '3', cost: { wood: 10, stone: 20 }, hp: 160, size: { w: 1, h: 1 }, build: 120, color: COLORS.turret, range: 190, fireRate: 0.6, dps: 30 },
-  wall:  { category:'Defense', name: 'Wall', key: '4', cost: { wood: 5, stone: 5 }, hp: 150, size: { w: 1, h: 1 }, build: 40, color: COLORS.wall },
-  stock: { category:'Utility', name: 'Stockpile', key: '5', cost: { wood: 10 }, hp: 140, size: { w: 2, h: 2 }, build: 60, color: COLORS.stock },
-  tent:  { category:'Utility', name: 'Recruit Tent', key: '6', cost: { wood: 30, food: 10 }, hp: 140, size: { w: 2, h: 2 }, build: 80, color: COLORS.tent },
-  // New buildings
-  warehouse: { category:'Utility', name: 'Warehouse', key:'7', cost: { wood: 40, stone: 20 }, hp: 260, size: { w: 3, h: 2 }, build: 160, color: COLORS.stock },
-  well:      { category:'Production', name: 'Well', key:'8', cost: { stone: 25 }, hp: 160, size: { w: 1, h: 1 }, build: 80, color: COLORS.farm, prodKind:'food', prodRateSec: 0.2 },
-  infirmary: { category:'Utility', name: 'Infirmary', key:'9', cost: { wood: 30, stone: 20, food: 10 }, hp: 200, size: { w: 2, h: 2 }, build: 140, color: COLORS.bld, healRate: 3, healRange: 140 },
-  path:     { category:'Utility', name: 'Path', key:'0', cost: { wood: 1 }, hp: 1, size: { w: 1, h: 1 }, build: 5, color: '#475569' },
+  house: { 
+    category:'Housing', 
+    name: 'House', 
+    description: 'Provides shelter for 2 colonists. Colonists can rest inside to recover fatigue.',
+    key: '1', 
+    cost: { wood: 20, stone: 5 }, 
+    hp: 220, 
+    size: { w: 2, h: 2 }, 
+    build: 100, 
+    color: COLORS.house, 
+    popCap: 2 
+  },
+  farm: { 
+    category:'Production', 
+    name: 'Farm', 
+    description: 'Grows crops that colonists can harvest for food. Takes 2 days to grow.',
+    key: '2', 
+    cost: { wood: 15 }, 
+    hp: 120, 
+    size: { w: 2, h: 2 }, 
+    build: 80, 
+    color: COLORS.farm, 
+    growTime: 1 // 1 unit = 2 days with 0.5 growth per day
+  },
+  turret: { 
+    category:'Defense', 
+    name: 'Turret', 
+    description: 'Automated defense structure. Shoots at enemies within range.',
+    key: '3', 
+    cost: { wood: 10, stone: 20 }, 
+    hp: 160, 
+    size: { w: 1, h: 1 }, 
+    build: 120, 
+    color: COLORS.turret, 
+    range: 190, 
+    fireRate: 0.6, 
+    dps: 30 
+  },
+  wall: { 
+    category:'Defense', 
+    name: 'Wall', 
+    description: 'Blocks enemy movement. Essential for creating defensive perimeters.',
+    key: '4', 
+    cost: { wood: 5, stone: 5 }, 
+    hp: 150, 
+    size: { w: 1, h: 1 }, 
+    build: 40, 
+    color: COLORS.wall 
+  },
+  stock: { 
+    category:'Utility', 
+    name: 'Stockpile', 
+    description: 'Increases resource storage capacity by 100. Colonists will store materials here.',
+    key: '5', 
+    cost: { wood: 10 }, 
+    hp: 140, 
+    size: { w: 2, h: 2 }, 
+    build: 60, 
+    color: COLORS.stock,
+    storageBonus: 100
+  },
+  tent: { 
+    category:'Utility', 
+    name: 'Recruit Tent', 
+    description: 'Attracts new colonists every 60 seconds. Requires 15 food per recruit.',
+    key: '6', 
+    cost: { wood: 30, food: 10 }, 
+    hp: 140, 
+    size: { w: 2, h: 2 }, 
+    build: 80, 
+    color: COLORS.tent 
+  },
+  warehouse: { 
+    category:'Utility', 
+    name: 'Warehouse', 
+    description: 'Large storage facility. Increases resource capacity by 300.',
+    key:'7', 
+    cost: { wood: 40, stone: 20 }, 
+    hp: 260, 
+    size: { w: 3, h: 2 }, 
+    build: 160, 
+    color: COLORS.stock,
+    storageBonus: 300
+  },
+  well: { 
+    category:'Production', 
+    name: 'Well', 
+    description: 'Provides clean water. Colonists can collect water here for food production.',
+    key:'8', 
+    cost: { stone: 25 }, 
+    hp: 160, 
+    size: { w: 1, h: 1 }, 
+    build: 80, 
+    color: COLORS.farm
+  },
+  infirmary: { 
+    category:'Utility', 
+    name: 'Infirmary', 
+    description: 'Heals injured colonists within range. Essential for colony survival.',
+    key:'9', 
+    cost: { wood: 30, stone: 20, food: 10 }, 
+    hp: 200, 
+    size: { w: 2, h: 2 }, 
+    build: 140, 
+    color: COLORS.bld, 
+    healRate: 3, 
+    healRange: 140 
+  },
+  path: { 
+    category:'Utility', 
+    name: 'Path', 
+    description: 'Improves colonist movement speed by 50%. Cheap way to optimize traffic flow.',
+    key:'0', 
+    cost: { wood: 1 }, 
+    hp: 1, 
+    size: { w: 1, h: 1 }, 
+    build: 5, 
+    color: '#475569',
+    speedBonus: 1.5
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {
