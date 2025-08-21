@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Colony Survival 2D — single‑file HTML</title>
+<style>
+  :root{--bg:#0b0f14;--fg:#e6f0ff;--accent:#6ee7ff;--muted:#9fb3c8;--good:#7CFC00;--bad:#ff6b6b;--warn:#ffd166}
+  html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b0f14 0%, #0e121a 60%, #0b0f14 100%);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif}
+  #wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr;}
+  header{display:flex;gap:.75rem;align-items:center;padding:.5rem .75rem;border-bottom:1px solid #18202c;background:#0d131b88;backdrop-filter:blur(6px)}
+  header h1{font-size:14px;font-weight:600;margin:0;letter-spacing:0.4px;color:var(--muted)}
+  header .spacer{flex:1}
+  header button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.4rem .6rem;border-radius:.6rem;cursor:pointer}
+  header button:hover{border-color:#2b3d59}
+  #game{display:block;width:100%;height:100%}
+  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#0f172288;border:1px solid #1f2a3a;color:#dfe9ff;padding:.55rem .8rem;border-radius:.6rem;box-shadow:0 10px 30px #00000066;opacity:0;pointer-events:none;transition:opacity .25s ease}
+  #help{position:fixed;inset:auto 12px 12px auto;max-width:min(520px,42vw);background:#0f172aee;border:1px solid #1e293b;color:#dbeafe;padding:12px 14px;border-radius:12px;box-shadow:0 16px 32px #0008;display:none}
+  #help h2{margin:.1rem 0 .25rem 0;font-size:16px}
+  #help .col{display:grid;grid-template-columns:1fr 1fr;gap:.5rem}
+  #help kbd{background:#121a28;border:1px solid #1e293b;border-bottom-color:#0b1220;border-radius:6px;padding:.1rem .35rem;font-size:12px}
+  #help ul{margin:.2rem 0 .2rem 1rem;padding:0}
+  #help li{margin:.2rem 0;}
+  #legend{position:fixed;left:12px;bottom:12px;background:#0f172aee;border:1px solid #1e293b;color:#dbeafe;border-radius:12px;padding:8px 10px;font-size:12px;line-height:1.35}
+  .tag{display:inline-block;padding:.05rem .35rem;border-radius:.35rem;margin-right:.3rem;font-weight:600}
+  .t-colonist{background:#c7f9cc22;border:1px solid #c7f9cc55;color:#c7f9cc}
+  .t-enemy{background:#ffd6d622;border:1px solid #ffd6d655;color:#ffd6d6}
+  .t-tree{background:#c4f1be22;border:1px solid #c4f1be55;color:#c4f1be}
+  .t-rock{background:#cbd5e122;border:1px solid #cbd5e155;color:#cbd5e1}
+  .t-bld{background:#93c5fd22;border:1px solid #93c5fd55;color:#93c5fd}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <h1>Colony Survival 2D — single‑file • <span id="ver">v1.0</span></h1>
+    <span class="spacer"></span>
+    <button id="btnNew">New Game</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnHelp">Help (H)</button>
+  </header>
+  <canvas id="game" width="1280" height="720"></canvas>
+</div>
+<div id="toast"></div>
+<div id="help">
+  <h2>How to play</h2>
+  <div class="col">
+    <div>
+      <b>Goal:</b>
+      <ul>
+        <li>Gather <b>wood</b> & <b>stone</b>, build <b>farms</b> for food, add <b>houses</b> for pop cap.</li>
+        <li>Survive nightly raids using <b>turrets</b> and <b>walls</b>.</li>
+        <li>Recruit more colonists with a <b>Recruit Tent</b> and enough food.</li>
+      </ul>
+      <b>Controls:</b>
+      <ul>
+        <li><kbd>1</kbd> House • <kbd>2</kbd> Farm • <kbd>3</kbd> Turret • <kbd>4</kbd> Wall • <kbd>5</kbd> Stockpile • <kbd>6</kbd> Recruit Tent</li>
+        <li><kbd>LMB</kbd> place • <kbd>RMB</kbd> cancel/erase (buildings)</li>
+        <li><kbd>WASD</kbd> pan camera • <kbd>Space</kbd> pause • <kbd>H</kbd> toggle this help</li>
+        <li><kbd>+</kbd>/<kbd>-</kbd> zoom • <kbd>F</kbd> fast-forward</li>
+      </ul>
+    </div>
+    <div>
+      <b>Tips:</b>
+      <ul>
+        <li>Each dawn, colonists eat 1 food. Starvation = death.</li>
+        <li>Farms mature daily; colonists will auto-harvest.</li>
+        <li>Buildings consume resources on placement; colonists must <i>build</i> them to finish.</li>
+        <li>Turrets auto-fire at enemies within range.</li>
+        <li>Survive to Day 8 to win. Lose if all colonists die or HQ falls.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+<div id="legend">
+  <span class="tag t-colonist">Colonist</span>
+  <span class="tag t-enemy">Enemy</span>
+  <span class="tag t-tree">Tree</span>
+  <span class="tag t-rock">Rock</span>
+  <span class="tag t-bld">Building</span>
+</div>
+<script>
+(() => {
+  'use strict';
+  // ===== Utility =====
+  const rand = (a,b)=>Math.random()*(b-a)+a;
+  const randi=(a,b)=>Math.floor(rand(a,b));
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const dist2=(a,b)=>{const dx=a.x-b.x, dy=a.y-b.y; return dx*dx+dy*dy};
+  const length=(v)=>Math.hypot(v.x,v.y);
+  const norm=(v)=>{const l=length(v)||1; return {x:v.x/l,y:v.y/l}};
+  const add=(a,b)=>({x:a.x+b.x,y:a.y+b.y});
+  const sub=(a,b)=>({x:a.x-b.x,y:a.y-b.y});
+  const mul=(v,s)=>({x:v.x*s,y:v.y*s});
+  const lerp=(a,b,t)=>a+(b-a)*t;
+  const keyState = {};
+  const once = new Set(); // for one-time key presses
+
+  // ===== Canvas & Camera =====
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  function resize(){
+    const w = window.innerWidth, h = window.innerHeight-48;
+    canvas.style.width = w+'px'; canvas.style.height = h+'px';
+    canvas.width = w*DPR; canvas.height = h*DPR; 
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const camera = {x:0,y:0,zoom:1};
+  const screenToWorld = (sx,sy)=>({x: (sx*DPR)/camera.zoom + camera.x, y: (sy*DPR)/camera.zoom + camera.y});
+  const worldToScreen = (wx,wy)=>({x: (wx - camera.x)*camera.zoom, y: (wy - camera.y)*camera.zoom});
+
+  // ===== UI =====
+  const toastEl = document.getElementById('toast');
+  function toast(msg, ms=1400){
+    toastEl.textContent = msg; toastEl.style.opacity=1; 
+    clearTimeout(toastEl._t); toastEl._t = setTimeout(()=>toastEl.style.opacity=0, ms);
+  }
+  const helpEl = document.getElementById('help');
+  const btnPause = document.getElementById('btnPause');
+  const btnHelp = document.getElementById('btnHelp');
+  const btnNew = document.getElementById('btnNew');
+  btnHelp.onclick=()=>toggleHelp();
+  function toggleHelp(){
+    helpEl.style.display = helpEl.style.display==='block' ? 'none':'block';
+  }
+
+  // ===== World Data =====
+  const T = 32; // grid size
+  const WORLD = {w: 240*T, h: 240*T}; // large enough sandbox
+  const HQ_POS = {x: WORLD.w/2, y: WORLD.h/2};
+  const COLORS = {
+    sky:'#0a0e14', ground:'#0e161f', grass:'#112233', water:'#0b1220',
+    wood:'#b08968', stone:'#a1a1aa', food:'#9ae6b4', metal:'#cbd5e1',
+    colonist:'#c7f9cc', enemy:'#ff9aa2', tree:'#6fbf73', rock:'#9aa5b1',
+    ghost:'#6ee7ff', wall:'#9aa5b1', bld:'#93c5fd', turret:'#93c5fd', farm:'#8bd3dd', house:'#e2b714', stock:'#c084fc', tent:'#f59e0b'
+  };
+
+  const RES = {wood:0, stone:0, food:0};
+  let day = 1; // start day
+  let tDay = 0; // [0,1]
+  let dayLength = 180; // seconds per day
+  let fastForward = 1; // speed multiplier
+  let paused = false;
+
+  let colonists = [];
+  let enemies = [];
+  let trees = [];
+  let rocks = [];
+  let buildings = []; // includes HQ + placed buildings
+  let bullets = [];
+  let messages = [];
+
+  const BUILD_TYPES = {
+    house: {name:'House', key:'1', cost:{wood:20, stone:5}, hp:220, size: {w:2, h:2}, build: 100, color: COLORS.house, onComplete:(b)=>{b.popCap=2;}},
+    farm:  {name:'Farm', key:'2', cost:{wood:15}, hp:120, size: {w:2, h:2}, build: 80, color: COLORS.farm, growTime:1, ready:false, growth:0},
+    turret:{name:'Turret', key:'3', cost:{wood:10, stone:20}, hp:160, size: {w:1, h:1}, build: 120, color: COLORS.turret, range: 190, fireRate: 0.6, cooldown:0, dps:30},
+    wall:  {name:'Wall', key:'4', cost:{wood:5, stone:5}, hp:150, size: {w:1, h:1}, build: 40, color: COLORS.wall},
+    stock: {name:'Stockpile', key:'5', cost:{wood:10}, hp:140, size: {w:2, h:2}, build: 60, color: COLORS.stock},
+    tent:  {name:'Recruit Tent', key:'6', cost:{wood:30, food:10}, hp:140, size: {w:2, h:2}, build: 80, color: COLORS.tent}
+  };
+
+  let selectedBuild = 'house';
+  const hotbar = ['house','farm','turret','wall','stock','tent'];
+
+  // ===== Input =====
+  let mouse = {x:0,y:0, wx:0, wy:0, down:false, rdown:false};
+  canvas.addEventListener('mousemove', (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = (e.clientX - rect.left);
+    mouse.y = (e.clientY - rect.top);
+    const wpt = screenToWorld(mouse.x, mouse.y);
+    mouse.wx = wpt.x; mouse.wy = wpt.y;
+  });
+  canvas.addEventListener('mousedown', (e)=>{
+    if(e.button===0){mouse.down=true; placeAtMouse();}
+    if(e.button===2){mouse.rdown=true; cancelOrErase();}
+  });
+  canvas.addEventListener('mouseup', (e)=>{ if(e.button===0) mouse.down=false; if(e.button===2) mouse.rdown=false;});
+  canvas.addEventListener('contextmenu', (e)=>e.preventDefault());
+  window.addEventListener('keydown', (e)=>{
+    keyState[e.key.toLowerCase()] = true;
+    if(!once.has(e.key)) once.add(e.key);
+  });
+  window.addEventListener('keyup', (e)=>{ keyState[e.key.toLowerCase()] = false; });
+
+  btnPause.onclick = ()=>{ paused=!paused; btnPause.textContent = paused? 'Resume' : 'Pause'; };
+  btnNew.onclick = ()=>{ newGame(); toast('New game started'); };
+
+  // ===== Entities =====
+  function spawnColonist(pos){
+    const c = {x:pos.x, y:pos.y, r:8, hp:100, speed: 50, task:null, target:null, carrying:null, hunger:0, alive:true, color:COLORS.colonist, t: rand(0,1)};
+    colonists.push(c); return c;
+  }
+  function spawnEnemy(){
+    // Spawn around edges
+    const edge = randi(0,4);
+    let x,y; 
+    if(edge===0){x=rand(0,WORLD.w); y=-80;} 
+    else if(edge===1){x=rand(0,WORLD.w); y=WORLD.h+80;}
+    else if(edge===2){x=-80; y=rand(0,WORLD.h);} 
+    else {x=WORLD.w+80; y=rand(0,WORLD.h);} 
+    const e = {x,y,r:9,hp:60+day*6,speed:48+day*2, dmg:8+day, target:null, color:COLORS.enemy};
+    enemies.push(e); return e;
+  }
+  function spawnTree(p){ trees.push({x:p.x,y:p.y,r:12,hp:40, type:'tree'}); }
+  function spawnRock(p){ rocks.push({x:p.x,y:p.y,r:12,hp:50, type:'rock'}); }
+
+  function makeBuilding(type, wx, wy){
+    const def = BUILD_TYPES[type];
+    const grid = snapToGrid(wx,wy, def.size);
+    if(!canPlace(def, grid.x, grid.y)) { toast('Can\'t place here'); return; }
+    if(!hasCost(def.cost)) { toast('Not enough resources'); return; }
+    payCost(def.cost);
+    const b = { kind:type, ...def, x:grid.x, y:grid.y, w:def.size.w*T, h:def.size.h*T, hp:def.hp, buildLeft:def.build, done:false, popCap:def.popCap||0, growth:def.growth||0, ready:false, cooldown:0 };
+    buildings.push(b);
+  }
+  function snapToGrid(wx,wy, size){
+    const gx = Math.floor(wx / T) * T; 
+    const gy = Math.floor(wy / T) * T;
+    // center larger buildings into grid cells
+    return {x: gx, y: gy};
+  }
+  function canPlace(def, x, y){
+    const rect = {x, y, w:def.size.w*T, h:def.size.h*T};
+    // within world
+    if(rect.x<0||rect.y<0||rect.x+rect.w>WORLD.w||rect.y+rect.h>WORLD.h) return false;
+    // not overlapping buildings
+    for(const b of buildings){ if(rectOverlap(rect, b)) return false; }
+    // not overlapping dense resources
+    for(const t of trees){ if(circleRectOverlap(t, rect)) return false; }
+    for(const r of rocks){ if(circleRectOverlap(r, rect)) return false; }
+    return true;
+  }
+  function rectOverlap(a,b){ return !(a.x+a.w<=b.x || a.x>=b.x+b.w || a.y+a.h<=b.y || a.y>=b.y+b.h); }
+  function circleRectOverlap(c, r){
+    const cx = clamp(c.x, r.x, r.x+r.w); const cy = clamp(c.y, r.y, r.y+r.h); 
+    const dx = c.x-cx, dy = c.y-cy; return (dx*dx+dy*dy) <= (c.r*c.r);
+  }
+
+  function hasCost(cost){ if(!cost) return true; for(const k in cost){ if((RES[k]||0) < cost[k]) return false; } return true; }
+  function payCost(cost){ for(const k in cost){ RES[k]-=cost[k]; } }
+  function giveRes(kind, amt){ RES[kind] = (RES[kind]||0) + amt; }
+
+  // ===== Game Setup =====
+  function scatter(){
+    // trees
+    for(let i=0;i<220;i++){
+      const p = {x: rand(80, WORLD.w-80), y: rand(80, WORLD.h-80)};
+      if(Math.hypot(p.x-HQ_POS.x,p.y-HQ_POS.y) < 220) continue; // keep HQ area clear
+      spawnTree(p);
+    }
+    for(let i=0;i<140;i++){
+      const p = {x: rand(80, WORLD.w-80), y: rand(80, WORLD.h-80)};
+      if(Math.hypot(p.x-HQ_POS.x,p.y-HQ_POS.y) < 200) continue;
+      spawnRock(p);
+    }
+  }
+
+  function buildHQ(){
+    const def = {w:3*T,h:3*T};
+    const HQ = {kind:'hq', name:'HQ', x:HQ_POS.x-def.w/2, y:HQ_POS.y-def.h/2, w:def.w, h:def.h, hp:600, done:true, color:COLORS.bld};
+    buildings.push(HQ);
+  }
+
+  function newGame(){
+    colonists.length = enemies.length = trees.length = rocks.length = buildings.length = bullets.length = messages.length = 0;
+    RES.wood=50; RES.stone=30; RES.food=20; day=1; tDay=0; fastForward=1; camera.zoom=1; camera.x=HQ_POS.x- canvas.width/(2*camera.zoom); camera.y=HQ_POS.y- canvas.height/(2*camera.zoom);
+    buildHQ();
+    scatter();
+    for(let i=0;i<3;i++) spawnColonist({x:HQ_POS.x+rand(-30,30), y:HQ_POS.y+rand(-30,30)});
+    msg("Welcome! Build farms before night, then turrets.");
+  }
+
+  // ===== Messages =====
+  function msg(text, kind='info'){ messages.push({text, t:4, kind}); toast(text, 1600); }
+
+  // ===== AI =====
+  function pickTask(c){
+    // High priority: build
+    const site = buildings.find(b=>!b.done);
+    if(site){ c.task='build'; c.target=site; return; }
+    // harvest ready farms
+    const readyFarm = buildings.find(b=>b.kind==='farm' && b.done && b.ready);
+    if(readyFarm){ c.task='harvestFarm'; c.target=readyFarm; return; }
+    // maintain food
+    if(RES.food < Math.max(4, colonists.length*2)){
+      // harvest trees for farms if wood low; otherwise foraging berries (simulate via trees)
+      const nearTree = nearestCircle({x:c.x,y:c.y}, trees);
+      if(nearTree){ c.task='chop'; c.target=nearTree; return; }
+    }
+    // balance materials
+    if(RES.wood < RES.stone){
+      const tr = nearestCircle({x:c.x,y:c.y}, trees); if(tr){ c.task='chop'; c.target=tr; return; }
+    } else {
+      const rk = nearestCircle({x:c.x,y:c.y}, rocks); if(rk){ c.task='mine'; c.target=rk; return; }
+    }
+    // idle
+    c.task='idle'; c.target={x: c.x+rand(-80,80), y: c.y+rand(-80,80)};
+  }
+
+  function nearestCircle(p, arr){
+    let best=null, bestD=1e9; for(const o of arr){ const d = dist2(p,o); if(d<bestD){bestD=d; best=o;} } return best;
+  }
+
+  function updateColonist(c, dt){
+    if(!c.alive) return;
+    c.t += dt;
+    if(!c.task || (c.task==='idle' && Math.random()<0.005)) pickTask(c);
+    // flee from enemies if close
+    const danger = enemies.find(e=>dist2(e,c) < 120*120);
+    if(danger){ const dir = norm(sub(c, danger)); c.x += dir.x* (c.speed+30)*dt; c.y += dir.y*(c.speed+30)*dt; return; }
+
+    if(c.task==='idle'){
+      const dst = c.target; moveTowards(c, dst, dt);
+      if(Math.hypot(c.x-dst.x, c.y-dst.y)<8) c.task=null;
+      return;
+    }
+    if(c.task==='build'){
+      const b = c.target; if(!b || b.done){ c.task=null; return; }
+      const pt = {x: b.x + b.w/2, y: b.y + b.h/2};
+      if(moveTowards(c, pt, dt)){
+        b.buildLeft -= 25*dt; if(b.buildLeft<=0){ b.done=true; if(b.kind==='farm'){b.growth=0;b.ready=false;} if(b.onComplete) b.onComplete(b); msg(b.name? b.name+" complete":"Building complete"); }
+      }
+      return;
+    }
+    if(c.task==='harvestFarm'){
+      const f = c.target; if(!f || !f.ready){ c.task=null; return; }
+      const pt = {x:f.x+f.w/2,y:f.y+f.h/2};
+      if(moveTowards(c, pt, dt)){
+        f.ready=false; f.growth=0; giveRes('food', 10); msg('Farm harvested (+10 food)'); c.task=null; }
+      return;
+    }
+    if(c.task==='chop'){
+      const t = c.target; if(!t || t.hp<=0){ c.task=null; return; }
+      if(moveTowards(c, t, dt)){
+        t.hp -= 18*dt; if(t.hp<=0){ giveRes('wood', 6); trees.splice(trees.indexOf(t),1); msg('+6 wood'); c.task=null; }
+      }
+      return;
+    }
+    if(c.task==='mine'){
+      const r = c.target; if(!r || r.hp<=0){ c.task=null; return; }
+      if(moveTowards(c, r, dt)){
+        r.hp -= 16*dt; if(r.hp<=0){ giveRes('stone', 5); rocks.splice(rocks.indexOf(r),1); msg('+5 stone'); c.task=null; }
+      }
+      return;
+    }
+  }
+
+  function moveTowards(c, dst, dt){
+    const target = dst.x!==undefined ? dst : {x:dst.x,y:dst.y};
+    const d = sub(target, c); const L = Math.hypot(d.x,d.y);
+    if(L<14) return true; const dir = {x:d.x/(L||1), y:d.y/(L||1)}; 
+    c.x += dir.x * c.speed * dt; c.y += dir.y * c.speed * dt; 
+    c.x = clamp(c.x, 0, WORLD.w); c.y = clamp(c.y, 0, WORLD.h);
+    return false;
+  }
+
+  // ===== Enemies & Combat =====
+  function updateEnemy(e, dt){
+    // target HQ or nearest colonist if close
+    const HQ = buildings.find(b=>b.kind==='hq');
+    let tgt = HQ; let bestD = dist2(e, centerOf(HQ));
+    for(const c of colonists){ const d=dist2(e,c); if(d<bestD){bestD=d; tgt=c;} }
+    const pt = tgt.x!==undefined && tgt.w? centerOf(tgt): tgt;
+    // move
+    const dir = norm(sub(pt, e)); e.x += dir.x*e.speed*dt; e.y += dir.y*e.speed*dt;
+    // damage if touching
+    if(tgt.w){ // building
+      if(pointInRect(e, tgt)) tgt.hp -= e.dmg*dt;
+      if(tgt.hp<=0){ if(tgt.kind==='hq'){ lose(); } else { buildings.splice(buildings.indexOf(tgt),1); msg(tgt.name||tgt.kind+' destroyed', 'warn'); }
+      }
+    } else { // colonist
+      const d = Math.hypot(e.x-tgt.x,e.y-tgt.y);
+      if(d<e.r+8){ tgt.hp -= e.dmg*dt; if(tgt.hp<=0){ tgt.alive=false; colonists.splice(colonists.indexOf(tgt),1); msg('A colonist has fallen', 'warn'); }}
+    }
+  }
+  function centerOf(b){ return {x:b.x + b.w/2, y:b.y + b.h/2}; }
+  function pointInRect(p, r){ return p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h; }
+
+  function updateTurret(b, dt){
+    b.cooldown -= dt; if(b.cooldown<0) b.cooldown=0;
+    // acquire target
+    let best=null, bestD=1e9;
+    const bc = centerOf(b);
+    for(const e of enemies){ const d=dist2(e, bc); if(d<b.range*b.range && d<bestD){bestD=d; best=e;} }
+    if(best && b.cooldown<=0){
+      // fire
+      best.hp -= b.dps; // single-hit per shot
+      bullets.push({x:bc.x,y:bc.y, tx:best.x, ty:best.y, t:.12});
+      b.cooldown = b.fireRate;
+    }
+  }
+
+  // ===== Day/Night & Waves =====
+  let nightSpan = {start:.72, end:.07}; // wrap-around
+  function isNight(){ return (tDay>=nightSpan.start || tDay<=nightSpan.end); }
+  let waveTimer = 0; let waveSpawnedForDay = false;
+
+  function dayTick(dt){
+    tDay += (dt * fastForward) / dayLength; if(tDay>=1){ tDay-=1; nextDay(); }
+    if(isNight()){
+      if(!waveSpawnedForDay){ spawnWave(); waveSpawnedForDay=true; }
+    }
+  }
+  function spawnWave(){
+    const n = 4 + Math.floor(day*1.3);
+    for(let i=0;i<n;i++) spawnEnemy();
+    msg(`Night ${day}: Enemies incoming!`, 'warn');
+  }
+  function nextDay(){
+    day++;
+    waveSpawnedForDay=false;
+    // hunger
+    let dead=0; for(let i=0;i<colonists.length;i++){
+      if(RES.food>0){ RES.food-=1; } else { dead++; if(colonists[i]){colonists[i].alive=false;} }
+    }
+    if(dead>0){ colonists = colonists.filter(c=>c.alive); msg(`${dead} colonist(s) starved`, 'bad'); }
+    // farms grow
+    for(const b of buildings){ if(b.kind==='farm' && b.done){ b.growth += 1; if(b.growth>=b.growTime){ b.ready=true; }} }
+    // recruitment
+    const tent = buildings.find(b=>b.kind==='tent' && b.done);
+    const cap = (buildings.find(b=>b.kind==='hq')?3:0) + buildings.filter(b=>b.kind==='house' && b.done).reduce((a,b)=>a+(b.popCap||0),0);
+    if(tent && colonists.length<cap && RES.food>=15){ RES.food-=15; spawnColonist({x:HQ_POS.x+rand(-20,20), y:HQ_POS.y+rand(-20,20)}); msg('A new colonist joined! (-15 food)','info'); }
+
+    // win check
+    if(day>8){ win(); }
+  }
+
+  function win(){ paused=true; msg('You survived! Day 8 reached.','good'); alert('You survived to Day 8 — victory!'); }
+  function lose(){ paused=true; msg('HQ destroyed. Colony fell.','bad'); alert('Your HQ was destroyed. Game over.'); }
+
+  // ===== Placement & Erase =====
+  function placeAtMouse(){
+    if(paused) return;
+    const t = selectedBuild; if(!t) return; const def = BUILD_TYPES[t]; if(!def) return;
+    makeBuilding(t, mouse.wx, mouse.wy);
+  }
+  function cancelOrErase(){
+    // Erase building under cursor (refund half if placed & done?)
+    const pos = {x:mouse.wx,y:mouse.wy};
+    for(let i=buildings.length-1;i>=0;i--){ const b=buildings[i]; if(b.kind==='hq') continue; if(pointInRect(pos,b)){ buildings.splice(i,1); // no refund to keep it simple
+        msg('Building removed'); return; } }
+    selectedBuild=null; toast('Build canceled');
+  }
+
+  // ===== Update Loop =====
+  function update(dt){
+    if(paused){ return; }
+    // input: camera
+    const camSpd = 360 * dt / camera.zoom; 
+    if(keyState['w']) camera.y -= camSpd;
+    if(keyState['s']) camera.y += camSpd;
+    if(keyState['a']) camera.x -= camSpd;
+    if(keyState['d']) camera.x += camSpd;
+    if(keyState['+']||keyState['=']) camera.zoom = clamp(camera.zoom*1.02, 0.6, 2.2);
+    if(keyState['-']||keyState['_']) camera.zoom = clamp(camera.zoom/1.02, 0.6, 2.2);
+    if(keyPressed(' ')){ paused=!paused; btnPause.textContent = paused? 'Resume' : 'Pause'; }
+    if(keyPressed('h')) toggleHelp();
+    if(keyPressed('f')){ fastForward = (fastForward===1? 6:1); toast(fastForward>1?'Fast-forward ON':'Fast-forward OFF'); }
+    for(const [i,key] of hotbar.entries()){ if(keyPressed(String(i+1))){ selectedBuild=key; toast('Selected: '+BUILD_TYPES[key].name); }}
+
+    // day/night
+    dayTick(dt);
+
+    // colonists
+    for(const c of colonists){ updateColonist(c, dt*fastForward); }
+
+    // enemies
+    for(let i=enemies.length-1;i>=0;i--){ const e=enemies[i]; updateEnemy(e, dt*fastForward); if(e.hp<=0){ enemies.splice(i,1); if(Math.random()<.5) giveRes('food',1); }}
+
+    // buildings tick
+    for(const b of buildings){
+      if(b.kind==='turret' && b.done){ updateTurret(b, dt*fastForward); }
+    }
+
+    // bullets visuals
+    for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.t -= dt; if(b.t<=0) bullets.splice(i,1); }
+
+    // messages decay
+    for(let i=messages.length-1;i>=0;i--){ const m=messages[i]; m.t -= dt; if(m.t<=0) messages.splice(i,1); }
+  }
+  function keyPressed(k){ if(once.has(k)){ once.delete(k); return true;} return false; }
+
+  // ===== Draw =====
+  function draw(){
+    // clear sky
+    ctx.save();
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle = COLORS.sky; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    // world transform
+    ctx.translate(-camera.x*camera.zoom, -camera.y*camera.zoom);
+    ctx.scale(camera.zoom, camera.zoom);
+
+    // ground
+    ctx.fillStyle = COLORS.ground; ctx.fillRect(0,0,WORLD.w,WORLD.h);
+    // simple grid
+    ctx.globalAlpha = .08; ctx.strokeStyle='#d6e4ff'; ctx.lineWidth=1;
+    ctx.beginPath();
+    for(let x=0;x<=WORLD.w;x+=T){ ctx.moveTo(x,0); ctx.lineTo(x,WORLD.h);} 
+    for(let y=0;y<=WORLD.h;y+=T){ ctx.moveTo(0,y); ctx.lineTo(WORLD.w,y);} 
+    ctx.stroke(); ctx.globalAlpha=1;
+
+    // resources
+    for(const t of trees){ drawCircle(t.x,t.y,t.r, COLORS.tree); }
+    for(const r of rocks){ drawCircle(r.x,r.y,r.r, COLORS.rock); }
+
+    // buildings
+    for(const b of buildings){ drawBuilding(b); }
+
+    // colonists
+    for(const c of colonists){ drawCircle(c.x,c.y,c.r, COLORS.colonist); }
+
+    // enemies
+    for(const e of enemies){ drawPoly(e.x,e.y,e.r+2, 3, COLORS.enemy, -Math.PI/2); }
+
+    // bullets
+    for(const b of bullets){
+      ctx.globalAlpha = .8; ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b.x,b.y); ctx.lineTo(b.tx,b.ty); ctx.stroke(); ctx.globalAlpha=1;
+    }
+
+    // night overlay
+    if(isNight()){
+      const t = tDay>=nightSpan.start? (tDay-nightSpan.start)/ (1-nightSpan.start) : 1 - (tDay/nightSpan.end);
+      ctx.fillStyle = `rgba(6,10,18, ${lerp(.2,.58,1)})`; ctx.fillRect(0,0,WORLD.w,WORLD.h);
+    }
+
+    // placement ghost
+    if(selectedBuild){
+      const def = BUILD_TYPES[selectedBuild];
+      const grid = snapToGrid(mouse.wx, mouse.wy, def.size);
+      ctx.globalAlpha = .6; ctx.fillStyle = canPlace(def, grid.x, grid.y) && hasCost(def.cost)? COLORS.ghost : '#ff6b6b88';
+      ctx.fillRect(grid.x, grid.y, def.size.w*T, def.size.h*T);
+      ctx.globalAlpha = 1;
+    }
+
+    // UI overlay (screen space)
+    ctx.restore();
+    drawHUD();
+  }
+
+  function drawHUD(){
+    const PAD=10; const BARH=34; const W = canvas.width; 
+    // top bar
+    ctx.fillStyle = '#0b122088'; ctx.fillRect(0,0,W,BARH);
+    ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 1; ctx.strokeRect(0,.5,W,BARH);
+
+    ctx.fillStyle = '#dbeafe'; ctx.font = '600 14px system-ui,Segoe UI,Roboto';
+    // resources
+    let x=PAD; const gap=14;
+    drawPill(x,8, `Wood: ${RES.wood|0}`,'#b08968'); x+=140;
+    drawPill(x,8, `Stone: ${RES.stone|0}`,'#9aa5b1'); x+=150;
+    drawPill(x,8, `Food: ${RES.food|0}`,'#9ae6b4'); x+=140;
+
+    // colonists & day
+    const cap = (buildings.find(b=>b.kind==='hq')?3:0) + buildings.filter(b=>b.kind==='house' && b.done).reduce((a,b)=>a+(b.popCap||0),0);
+    const popText = `Colonists: ${colonists.length}/${cap}`;
+    drawPill(x,8, popText, '#93c5fd'); x+=190;
+
+    const timeText = `Day ${day} — ${(tDay*24)|0}:00 ${isNight()? '🌙':'☀️'}`;
+    drawPill(x,8, timeText, isNight()? '#ffd166':'#6ee7ff');
+
+    // hotbar bottom
+    const hbY = canvas.height-46; const hbItemW = 150; x = PAD;
+    ctx.fillStyle='#0b122088'; ctx.fillRect(0, hbY, canvas.width, 46);
+    ctx.strokeStyle='#1e293b'; ctx.strokeRect(0,hbY+.5,canvas.width,46);
+
+    ctx.font='500 13px system-ui,Segoe UI,Roboto';
+    for(let i=0;i<hotbar.length;i++){
+      const key = hotbar[i]; const d = BUILD_TYPES[key]; const sel = selectedBuild===key;
+      drawHot(x+2,hbY+6, hbItemW-6,34, `${i+1}. ${d.name}`, costText(d.cost||{}), sel);
+      x += hbItemW;
+    }
+
+    // messages (stack right)
+    let my = BARH+6;
+    for(let i=messages.length-1;i>=0;i--){ const m=messages[i]; drawMsg(W-360, my, m.text); my+=22; }
+  }
+  function costText(c){
+    const parts=[]; if(c.wood) parts.push(`${c.wood}w`); if(c.stone) parts.push(`${c.stone}s`); if(c.food) parts.push(`${c.food}f`); return parts.join(' ');
+  }
+  function drawHot(x,y,w,h,label,cost,selected){
+    ctx.fillStyle = selected? '#102034':'#0f172a'; ctx.fillRect(x,y,w,h);
+    ctx.strokeStyle = selected? '#4b9fff':'#1e293b'; ctx.strokeRect(x+.5,y+.5,w-1,h-1);
+    ctx.fillStyle='#dbeafe'; ctx.fillText(label, x+8, y+20);
+    ctx.fillStyle='#9fb3c8'; ctx.fillText(cost, x+w-48, y+20);
+  }
+  function drawMsg(x,y,text){ ctx.fillStyle='#0f172aee'; ctx.fillRect(x,y, 340, 20); ctx.strokeStyle='#1e293b'; ctx.strokeRect(x+.5,y+.5,340-1,20-1); ctx.fillStyle='#dbeafe'; ctx.fillText(text, x+8, y+14); }
+
+  function drawPill(x,y,text,color){
+    const w = ctx.measureText(text).width + 18; const h=20;
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(x,y,w,h); ctx.strokeStyle='#1e293b'; ctx.strokeRect(x+.5,y+.5,w-1,h-1); 
+    ctx.fillStyle = color; ctx.fillRect(x+2,y+2, 6, h-4);
+    ctx.fillStyle = '#dbeafe'; ctx.fillText(text, x+12, y+14);
+  }
+
+  function drawCircle(x,y,r,color){ ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
+  function drawPoly(x,y,r,n,color,rot=0){ ctx.fillStyle=color; ctx.beginPath(); for(let i=0;i<n;i++){ const a=rot+i*2*Math.PI/n; const px=x+Math.cos(a)*r; const py=y+Math.sin(a)*r; if(i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);} ctx.closePath(); ctx.fill(); }
+  function drawBuilding(b){
+    ctx.fillStyle = b.color; ctx.fillRect(b.x,b.y,b.w,b.h);
+    ctx.strokeStyle = '#0b0f14cc'; ctx.strokeRect(b.x+.5,b.y+.5,b.w-1,b.h-1);
+    // progress bar if not done
+    if(!b.done){ ctx.fillStyle='#0b1220'; ctx.fillRect(b.x,b.y-6,b.w,4); ctx.fillStyle='#6ee7ff'; const pct = 1 - (b.buildLeft/b.build); ctx.fillRect(b.x,b.y-6,pct*b.w,4); }
+    // icon
+    ctx.fillStyle='#0b0f14aa'; ctx.font='bold 12px system-ui';
+    const cx = b.x + b.w/2; const cy = b.y + b.h/2;
+    let letter='B'; if(b.kind==='hq') letter='HQ'; else if(b.kind==='house') letter='H'; else if(b.kind==='farm') letter=b.ready? 'F*':'F'; else if(b.kind==='turret') letter='T'; else if(b.kind==='wall') letter='W'; else if(b.kind==='stock') letter='S'; else if(b.kind==='tent') letter='R';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(letter, cx, cy);
+
+    // turret range (subtle)
+    if(b.kind==='turret'){ ctx.globalAlpha=.07; ctx.fillStyle='#e2f3ff'; ctx.beginPath(); ctx.arc(cx,cy,b.range,0,Math.PI*2); ctx.fill(); ctx.globalAlpha=1; }
+  }
+
+  // ===== Main Loop =====
+  let last=performance.now();
+  function frame(now){
+    const dt = Math.min(0.033, (now-last)/1000); last=now;
+    update(dt);
+    draw();
+    requestAnimationFrame(frame);
+  }
+
+  // ===== Start =====
+  newGame();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+export const rand = (a: number, b: number) => Math.random() * (b - a) + a;
+export const randi = (a: number, b: number) => Math.floor(rand(a, b));
+export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
+export type Vec2 = { x: number; y: number };
+export const dist2 = (a: Vec2, b: Vec2) => { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; };
+export const length = (v: Vec2) => Math.hypot(v.x, v.y);
+export const norm = (v: Vec2): Vec2 => { const l = length(v) || 1; return { x: v.x / l, y: v.y / l }; };
+export const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y });
+export const sub = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x - b.x, y: a.y - b.y });
+export const mul = (v: Vec2, s: number): Vec2 => ({ x: v.x * s, y: v.y * s });
+export const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
