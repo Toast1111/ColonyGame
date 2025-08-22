@@ -8,12 +8,18 @@ header{display:flex;gap:.75rem;align-items:center;padding:.5rem .75rem;border-bo
 header h1{font-size:clamp(14px,2.0vw,20px);font-weight:600;margin:0;letter-spacing:.4px;color:var(--muted)}
 header h1 #ver{font-size:.82em;opacity:.9}
 header .spacer{flex:1}
-header button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.5rem .8rem;border-radius:.75rem;cursor:pointer;font-size:clamp(13px,1.8vw,18px);line-height:1;min-height:44px;min-width:44px}
+header button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.5rem .8rem;border-radius:.75rem;cursor:pointer;font-size:clamp(13px,1.8vw,18px);line-height:1;min-height:44px;min-width:44px;outline:none}
 header button:hover{border-color:#2b3d59}
+header button:focus{outline:none;border-color:#2b3d59}
+#btnToggleUI{background:#1a2332;border-color:#2b3d59;color:var(--accent);font-size:20px;transition:all 0.2s ease}
+#btnToggleUI:hover{background:#243041;border-color:#3b4d69;transform:scale(1.05)}
 #game{display:block;width:100%;height:100%}
 #headerDropdown{position:fixed;top:56px;right:12px;background:#0f1621;border:1px solid #1e293b;border-radius:.75rem;box-shadow:0 12px 28px #0008;padding:8px;z-index:20}
 #headerDropdown[hidden]{display:none}
-#headerDropdown button{display:block;width:100%;text-align:left;margin:4px 0}
+#headerDropdown button{display:block;width:100%;text-align:left;margin:4px 0;outline:none}
+#headerDropdown button:focus{outline:none}
+button{outline:none}
+button:focus{outline:none}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:#0f172288;border:1px solid #1f2a3a;color:#dfe9ff;padding:.6rem .9rem;border-radius:.75rem;box-shadow:0 10px 30px #00000066;opacity:0;pointer-events:none;transition:opacity .25s ease;font-size:clamp(13px,1.8vw,18px)}
 #help{position:fixed;inset:auto 12px 12px auto;max-width:min(560px,42vw);background:#0f172aee;border:1px solid #1e293b;color:#dbeafe;padding:14px 16px;border-radius:14px;box-shadow:0 16px 32px #0008;font-size:clamp(14px,1.9vw,18px);line-height:1.4}
 #legend{position:fixed;left:12px;bottom:12px;background:#0f172aee;border:1px solid #1e293b;color:#dbeafe;border-radius:14px;padding:10px 12px;font-size:clamp(12px,1.7vw,17px);line-height:1.35}
@@ -26,7 +32,8 @@ header button:hover{border-color:#2b3d59}
 
 /* Mobile controls overlay */
 #mobileControls{position:fixed;right:12px;bottom:102px;display:flex;flex-direction:column;gap:8px;z-index:10}
-#mobileControls button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.6rem;border-radius:.75rem;cursor:pointer;font-size:18px;min-height:44px;min-width:44px;box-shadow:0 4px 12px #0006}
+#mobileControls button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.6rem;border-radius:.75rem;cursor:pointer;font-size:18px;min-height:44px;min-width:44px;box-shadow:0 4px 12px #0006;outline:none}
+#mobileControls button:focus{outline:none}
 #mobileControls .zoom{display:flex;gap:8px;justify-content:flex-end}
 #mobileControls .zoom button{min-width:44px}
 
@@ -37,6 +44,7 @@ header button:hover{border-color:#2b3d59}
 	header h1 #ver { font-size: .78em; opacity: .85; }
 	header button { padding: .55rem .8rem; min-height: 44px; font-size: clamp(14px, 2.0vw, 17px); }
 	#btnMenu{display:inline-block}
+	#btnToggleUI{display:inline-block} /* Keep toggle button visible on all devices */
 	#btnNew,#btnPause,#btnHelp{display:none}
 
 	#legend { left: 10px; bottom: 10px; border-radius: 16px; padding: 14px 16px; font-size: clamp(15px, 2.6vw, 19px); }

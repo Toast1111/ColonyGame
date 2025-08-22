@@ -278,7 +278,16 @@ export class Game {
       const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
       this.camera.zoom = Math.max(0.6, Math.min(2.2, this.camera.zoom * zoomFactor));
     });
-  window.addEventListener('keydown', (e) => { const k = (e as KeyboardEvent).key.toLowerCase(); this.keyState[k] = true; if (!this.once.has(k)) this.once.add(k); });
+  window.addEventListener('keydown', (e) => { 
+    const k = (e as KeyboardEvent).key.toLowerCase(); 
+    this.keyState[k] = true; 
+    if (!this.once.has(k)) this.once.add(k); 
+    
+    // Prevent default behavior for game shortcuts to avoid browser interference
+    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
+      e.preventDefault();
+    }
+  });
     window.addEventListener('keyup', (e) => { this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; });
   }
 

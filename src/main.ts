@@ -5,6 +5,7 @@ import { ImageAssets } from "./assets/images";
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const btnPause = document.getElementById('btnPause') as HTMLButtonElement;
 const btnHelp = document.getElementById('btnHelp') as HTMLButtonElement;
+const btnToggleUI = document.getElementById('btnToggleUI') as HTMLButtonElement | null;
 const btnMenu = document.getElementById('btnMenu') as HTMLButtonElement | null;
 const headerDropdown = document.getElementById('headerDropdown') as HTMLDivElement | null;
 const hdNew = document.getElementById('hd-new') as HTMLButtonElement | null;
@@ -27,6 +28,7 @@ if (helpEl) {
     <h2>How to play</h2>
     <div><b>Goal:</b> Gather wood & stone, build farms for food, add houses for pop cap; survive nightly raids with turrets/walls.</div>
   <div><b>Controls:</b> 1..9 quick-build, <b>B</b> build menu, LMB place, RMB cancel/erase; WASD pan; Space pause; H toggle help; +/- zoom; F fast-forward.</div>
+  <div><b>UI Modes:</b> 📱 Mobile UI shows touch controls for tap/touch gameplay. 🖥️ Desktop UI is clean with keyboard shortcuts only.</div>
   `;
 }
 
@@ -61,53 +63,93 @@ async function initGame() {
 
   (Object.assign(window as any, { game, BUILD_TYPES }));
 
-  // Show mobile controls if touch device
+  // UI Mode Management - improved user control
   const isTouch = (('ontouchstart' in window) || (navigator as any).maxTouchPoints > 0);
-  if (isTouch && mobileControls) {
-    const setMobileUI = (on: boolean) => {
-      (window as any)._mobileUI = on;
+  
+  // Check for saved preference, otherwise use device detection as default
+  let savedUIMode = localStorage.getItem('colonyUI_mobileMode');
+  let isMobileUI = savedUIMode !== null ? savedUIMode === 'true' : isTouch;
+  
+  const setMobileUI = (on: boolean) => {
+    isMobileUI = on;
+    (window as any)._mobileUI = on;
+    localStorage.setItem('colonyUI_mobileMode', on.toString());
+    
+    // Mobile controls should only show in mobile UI mode
+    if (mobileControls) {
       mobileControls.hidden = !on;
-      if (btnMenu) btnMenu.hidden = !on;
-    };
-    setMobileUI(true);
-    // Show header overflow menu button
-    if (btnMenu) btnMenu.hidden = false;
-    if (btnMenu && headerDropdown) {
-      btnMenu.onclick = () => { headerDropdown.hidden = !headerDropdown.hidden; };
-      hdNew && (hdNew.onclick = () => { headerDropdown.hidden = true; game.newGame(); });
-      hdHelp && (hdHelp.onclick = () => { headerDropdown.hidden = true; if (helpEl) helpEl.hidden = !helpEl.hidden; });
-      hdBuild && (hdBuild.onclick = () => { headerDropdown.hidden = true; game.showBuildMenu = !game.showBuildMenu; });
-      hdToggleMobile && (hdToggleMobile.onclick = () => {
-        headerDropdown.hidden = true;
-        setMobileUI(!(window as any)._mobileUI);
-        game.toast(((window as any)._mobileUI) ? 'Mobile UI: ON' : 'Mobile UI: OFF');
-      });
-      // Close dropdown on outside tap
-      document.addEventListener('click', (ev) => {
-        if (!headerDropdown) return;
-        const t = ev.target as HTMLElement;
-        if (t && !headerDropdown.contains(t) && t !== btnMenu) headerDropdown.hidden = true;
-      });
+      // Ensure they're completely hidden in desktop mode
+      mobileControls.style.display = on ? 'flex' : 'none';
     }
-    // Buttons
-    mcBuild && (mcBuild.onclick = () => { game.showBuildMenu = !game.showBuildMenu; });
-    mcCancel && (mcCancel.onclick = () => { game.selectedBuild = null; game.toast('Build canceled'); });
-    mcErase && (mcErase.onclick = () => { 
-      // Toggle a simple erase-tap mode: tap button to enable; next tap on canvas erases single item
-      (window as any)._eraseOnce = true; game.toast('Erase mode: tap on a building to remove');
-    });
-    mcPause && (mcPause.onclick = () => { game.paused = !game.paused; btnPause.textContent = game.paused ? 'Resume' : 'Pause'; });
-    mcFF && (mcFF.onclick = () => { game.fastForward = (game.fastForward === 1 ? 6 : 1); game.toast(game.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); });
-    mcZoomIn && (mcZoomIn.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom * 1.1)); });
-    mcZoomOut && (mcZoomOut.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom / 1.1)); });
+    if (btnMenu) btnMenu.hidden = !on;
+    
+    // Update toggle button icon and title
+    if (btnToggleUI) {
+      btnToggleUI.textContent = on ? '🖥️' : '📱';
+      btnToggleUI.title = on ? 'Switch to Desktop UI' : 'Switch to Mobile UI';
+    }
+    
+    game.toast(on ? 'Mobile UI: ON' : 'Desktop UI: ON');
+  };
+
+  // Main UI toggle button (always visible)
+  if (btnToggleUI) {
+    btnToggleUI.onclick = () => {
+      setMobileUI(!isMobileUI);
+    };
   }
 
-  // Touch gestures: one-finger pan, two-finger pinch zoom
+  // Initialize UI mode
+  setMobileUI(isMobileUI);
+
+  // Prevent keyboard navigation from interfering with game controls
+  document.addEventListener('keydown', (e) => {
+    const gameKeys = [' ', 'h', 'b', 'f', 'escape', 'w', 'a', 's', 'd', '+', '=', '-', '_'];
+    const isNumberKey = /^[1-9]$/.test(e.key);
+    
+    if (gameKeys.includes(e.key.toLowerCase()) || isNumberKey) {
+      // Remove focus from any focused element to prevent button highlighting
+      if (document.activeElement && document.activeElement !== document.body) {
+        (document.activeElement as HTMLElement).blur();
+      }
+    }
+  });
+
+  // Header dropdown menu (mobile fallback)
+  if (btnMenu && headerDropdown) {
+    btnMenu.onclick = () => { headerDropdown.hidden = !headerDropdown.hidden; };
+    hdNew && (hdNew.onclick = () => { headerDropdown.hidden = true; game.newGame(); });
+    hdHelp && (hdHelp.onclick = () => { headerDropdown.hidden = true; if (helpEl) helpEl.hidden = !helpEl.hidden; });
+    hdBuild && (hdBuild.onclick = () => { headerDropdown.hidden = true; game.showBuildMenu = !game.showBuildMenu; });
+    hdToggleMobile && (hdToggleMobile.onclick = () => {
+      headerDropdown.hidden = true;
+      setMobileUI(!isMobileUI);
+    });
+    // Close dropdown on outside tap
+    document.addEventListener('click', (ev) => {
+      if (!headerDropdown) return;
+      const t = ev.target as HTMLElement;
+      if (t && !headerDropdown.contains(t) && t !== btnMenu) headerDropdown.hidden = true;
+    });
+  }
+
+  // Mobile control buttons
+  mcBuild && (mcBuild.onclick = () => { game.showBuildMenu = !game.showBuildMenu; });
+  mcCancel && (mcCancel.onclick = () => { game.selectedBuild = null; game.toast('Build canceled'); });
+  mcErase && (mcErase.onclick = () => { 
+    // Toggle a simple erase-tap mode: tap button to enable; next tap on canvas erases single item
+    (window as any)._eraseOnce = true; game.toast('Erase mode: tap on a building to remove');
+  });
+  mcPause && (mcPause.onclick = () => { game.paused = !game.paused; btnPause.textContent = game.paused ? 'Resume' : 'Pause'; });
+  mcFF && (mcFF.onclick = () => { game.fastForward = (game.fastForward === 1 ? 6 : 1); game.toast(game.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); });
+  mcZoomIn && (mcZoomIn.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom * 1.1)); });
+  mcZoomOut && (mcZoomOut.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom / 1.1)); });
+
+  // Touch gestures: one-finger pan, two-finger pinch zoom (available for both mobile and desktop with touch)
   let lastTouchDist: number | null = null;
   let lastPan: { x: number; y: number } | null = null;
   canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    if (!isTouch) return;
     if (e.touches.length === 1) {
       lastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     } else if (e.touches.length === 2) {
@@ -118,7 +160,6 @@ async function initGame() {
   }, { passive: false });
   canvas.addEventListener('touchmove', (e) => {
     e.preventDefault();
-    if (!isTouch) return;
     if (e.touches.length === 1 && lastPan) {
       // Pan camera
       const nx = e.touches[0].clientX, ny = e.touches[0].clientY;
@@ -139,7 +180,6 @@ async function initGame() {
   }, { passive: false });
   canvas.addEventListener('touchend', (e) => {
     e.preventDefault();
-    if (!isTouch) return;
     // One-shot erase if enabled
     const eraseOnce = (window as any)._eraseOnce;
     if (eraseOnce && e.changedTouches.length === 1) {
