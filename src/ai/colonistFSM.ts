@@ -248,11 +248,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
   }
 
-  // Add minimum state duration to prevent rapid switching (except for critical states)
+  // Add minimum state duration to prevent rapid switching (except for critical states and work states)
   const minStateDuration = 1.0; // 1 second minimum for most states
   const canChangeState = c.stateSince > minStateDuration || 
                         c.state === 'idle' || 
                         c.state === 'seekTask' ||
+                        c.state === 'chop' ||
+                        c.state === 'mine' ||
+                        c.state === 'build' ||
+                        c.state === 'harvest' ||
                         danger; // Always allow immediate flee from danger
 
   // Critical states that can interrupt anything
@@ -405,7 +409,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             const choices = (game.buildings as Building[]).filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'));
             if (choices.length) {
               const next = choices.sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
-              const nc = game.centerOf(next); game.clearPath(c);
+              const nc = game.centerOf(next);
+              // Don't clear path immediately - let pathfinding handle retargeting
               buildingDest = next; dest = nc; // keep fleeing toward next spot
             } else {
               // Nowhere to hide; fall through and keep running
@@ -426,7 +431,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (!game.isNight() || protectedHouses.length === 0) { c.state = 'seekTask'; c.stateSince = 0; break; }
       let best = protectedHouses[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
       for (let i = 1; i < protectedHouses.length; i++) { const d = dist2(c as any, game.centerOf(protectedHouses[i]) as any); if (d < bestD) { bestD = d; best = protectedHouses[i]; } }
-      const hc = game.centerOf(best);
+      let hc = game.centerOf(best);
       
       // Use direct movement instead of pathfinding
       const dx = hc.x - c.x;
@@ -441,7 +446,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const next = (game.buildings as Building[])
             .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'))
             .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
-          if (next) { const nc = game.centerOf(next); game.clearPath(c); /* keep sleeping and move to next */ }
+          if (next) { const nc = game.centerOf(next); best = next; hc = nc; /* retarget without clearing path */ }
           else { c.state = 'seekTask'; c.stateSince = 0; }
         }
       } else {
@@ -682,10 +687,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Track progress to detect if we're making movement towards the tree
         if (!c.lastDistToNode) c.lastDistToNode = distance;
         
-        // If we've been trying for more than 3 seconds and not getting closer, try clearing path
-        if (c.stateSince > 3.0 && Math.abs(distance - c.lastDistToNode) < 2) {
+        // If we've been trying for more than 5 seconds and not getting closer, try clearing path
+        if (c.stateSince > 5.0 && Math.abs(distance - c.lastDistToNode) < 2) {
           c.jitterScore = (c.jitterScore || 0) + 1;
-          if (c.jitterScore > 30) { // 30 frames of no progress
+          if (c.jitterScore > 120) { // 2 seconds of no progress (at 60fps)
             console.log(`Chop task stuck, clearing path and retrying`);
             game.clearPath(c);
             c.jitterScore = 0;

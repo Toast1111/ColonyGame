@@ -718,7 +718,7 @@ export class Game {
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
     // periodic re-pathing but only if goal changed or timer elapsed
     c.repath = (c.repath || 0) - dt;
-    const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 12);
+    const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24); // Increased from 12 to 24
     if (target && (goalChanged || c.repath == null || c.repath <= 0 || !c.path || c.pathIndex == null)) {
       const p = this.computePath(c.x, c.y, target.x, target.y);
       if (p && p.length) { 
@@ -729,7 +729,7 @@ export class Game {
           console.log(`Failed to compute path from (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) to (${target.x.toFixed(1)}, ${target.y.toFixed(1)})`);
         }
       }
-      c.repath = 2.0; // seconds between recompute
+      c.repath = 5.0; // seconds between recompute (increased from 2.0 to reduce unnecessary re-pathing)
     }
     if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) {
       if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
@@ -738,8 +738,8 @@ export class Game {
     const node = c.path[c.pathIndex];
     const dx = node.x - c.x; const dy = node.y - c.y; let L = Math.hypot(dx, dy);
     // Hysteresis to avoid oscillation around a node
-    const arriveNode = 10; // base arrival radius for nodes
-    const hysteresis = 4; // extra slack once we've been near a node
+    const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
+    const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
     // Movement speed; boost if standing on a path tile
     let speed = c.speed * ((c as any).fatigueSlow || 1);
     {
@@ -769,7 +769,7 @@ export class Game {
       const sign = delta === 0 ? 0 : (delta > 0 ? 1 : -1);
       const prevSign = (c as any).lastDistSign ?? sign;
       // Count as jitter only if the distance trend flips while we're reasonably near the node
-      if (sign !== 0 && prevSign !== 0 && sign !== prevSign && L < arriveNode + 10) {
+      if (sign !== 0 && prevSign !== 0 && sign !== prevSign && L < arriveNode + 15) { // Increased threshold from 10 to 15
         c.jitterScore = (c.jitterScore || 0) + 1;
       } else {
         c.jitterScore = Math.max(0, (c.jitterScore || 0) - 1);
@@ -777,7 +777,7 @@ export class Game {
       (c as any).lastDistSign = sign;
     }
     c.lastDistToNode = L;
-    if ((c.jitterScore || 0) >= 6 || (c.jitterWindow || 0) > 1.5) {
+    if ((c.jitterScore || 0) >= 8 || (c.jitterWindow || 0) > 3.0) { // Increased thresholds to be less aggressive
       // If very close to node, just advance; otherwise, try a light replan once
       if (L < arriveNode + hysteresis) {
         c.pathIndex++;
