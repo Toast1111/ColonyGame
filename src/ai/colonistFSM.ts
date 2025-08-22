@@ -167,9 +167,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   }
   
   // Needs progression
-  // Hunger increases faster when working; slower when resting
+  // Hunger increases faster when working; slower when resting (rebalanced for realistic meal frequency)
   const working = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' || c.state === 'flee' || c.state === 'move';
-  const hungerRate = working ? 1.6 : c.inside ? 0.6 : 1.0; // per second
+  const hungerRate = working ? 0.25 : c.inside ? 0.1 : 0.15; // Much slower hunger accumulation - per second
   c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
   // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
   const fatigueRise = working ? 0.8 : 0.3; // Much slower fatigue accumulation
@@ -207,8 +207,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee') { c.state = 'heal'; c.stateSince = 0; }
   // If very tired (80+ fatigue), seek rest during day
   if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) > 80 && c.state !== 'flee' && c.state !== 'heal' && c.state !== 'goToSleep') { c.state = 'goToSleep'; c.stateSince = 0; }
-  // If hungry and we have food, prioritize eating (lowered threshold from 80 to 65)
-  if (!c.inside && (c.hunger || 0) > 65 && (game.RES.food || 0) > 0 && c.state !== 'flee' && c.state !== 'eat') { c.state = 'eat'; c.stateSince = 0; }
+  // If hungry and we have food, prioritize eating (adjusted threshold for realistic meal frequency)
+  if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0 && c.state !== 'flee' && c.state !== 'eat') { c.state = 'eat'; c.stateSince = 0; }
   if (c.inside && c.state !== 'resting') { c.state = 'resting'; c.stateSince = 0; }
 
   switch (c.state) {
@@ -280,7 +280,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         console.log(`No food buildings found! Available buildings: ${game.buildings.filter((b: any) => b.done).map((b: any) => b.kind).join(', ')}`);
         if (c.stateSince > 1.0) {
           game.RES.food -= 1;
-          c.hunger = Math.max(0, (c.hunger || 0) - 40);
+          c.hunger = Math.max(0, (c.hunger || 0) - 60); // More filling meal
           c.hp = Math.min(100, c.hp + 2.5);
           c.state = 'seekTask'; c.stateSince = 0;
           console.log(`Colonist ate without building! Food remaining: ${game.RES.food}`);
@@ -312,9 +312,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (closestDist <= reachDist) {
           // Close enough to eat
           if (c.stateSince > 0.6) {
-            console.log(`Colonist successfully ate! Food: ${game.RES.food} → ${game.RES.food - 1}, hunger: ${c.hunger} → ${Math.max(0, (c.hunger || 0) - 40)}`);
+            console.log(`Colonist successfully ate! Food: ${game.RES.food} → ${game.RES.food - 1}, hunger: ${c.hunger} → ${Math.max(0, (c.hunger || 0) - 60)}`);
             game.RES.food -= 1;
-            c.hunger = Math.max(0, (c.hunger || 0) - 40);
+            c.hunger = Math.max(0, (c.hunger || 0) - 60); // More filling meal
             c.hp = Math.min(100, c.hp + 2.5);
             c.state = 'seekTask'; c.stateSince = 0;
           }
