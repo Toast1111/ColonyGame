@@ -171,9 +171,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   const working = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' || c.state === 'flee' || c.state === 'move';
   const hungerRate = working ? 1.6 : c.inside ? 0.6 : 1.0; // per second
   c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
-  // Fatigue rises when active, falls when inside/resting
-  const fatigueRise = working ? 5.0 : 2.0;
-  if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 14);
+  // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
+  const fatigueRise = working ? 0.8 : 0.3; // Much slower fatigue accumulation
+  if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
   else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
   // Movement penalty from fatigue
   (c as any).fatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
@@ -257,8 +257,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Find the nearest food source building
       const foodBuildings = game.buildings.filter((b: any) => 
         (b.kind === 'hq' || b.kind === 'warehouse' || b.kind === 'storage') && 
-        b.done && 
-        game.buildingHasSpace(b)
+        b.done
+        // Removed buildingHasSpace check - colonists don't need to enter food buildings
       );
 
       if (foodBuildings.length === 0) {
