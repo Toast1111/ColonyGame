@@ -84,6 +84,9 @@ export class Game {
   eraseDragStart: { x: number; y: number } | null = null;
   menuRects: Array<{ key: keyof typeof BUILD_TYPES; x: number; y: number; w: number; h: number }> = [];
   hotbarRects: Array<{ index: number; x: number; y: number; w: number; h: number }> = [];
+  // Precise placement (touch): pending building location to adjust before confirm
+  pendingPlacement: { key: keyof typeof BUILD_TYPES; x: number; y: number } | null = null;
+  placeUIRects: Array<{ id: 'up'|'down'|'left'|'right'|'ok'|'cancel'; x: number; y: number; w: number; h: number }> = [];
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -242,6 +245,22 @@ export class Game {
     const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
     this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
 
+    // If precise placement UI is active, handle its buttons first
+    if (this.pendingPlacement && this.placeUIRects.length) {
+      const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+      for (const r of this.placeUIRects) {
+        if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+          if (r.id === 'up') this.nudgePending(0, -1);
+          else if (r.id === 'down') this.nudgePending(0, 1);
+          else if (r.id === 'left') this.nudgePending(-1, 0);
+          else if (r.id === 'right') this.nudgePending(1, 0);
+          else if (r.id === 'ok') this.confirmPending();
+          else if (r.id === 'cancel') this.cancelPending();
+          return;
+        }
+      }
+    }
+
     // Hotbar selection
     const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
     for (const r of this.hotbarRects) {
@@ -256,8 +275,11 @@ export class Game {
     if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
 
     // Building/selection logic
-    if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
-    if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); return; }
+  if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
+  if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); return; }
+
+  // Start precise placement on touch if nothing active
+  if (this.isTouch && this.selectedBuild) { this.placeAtMouse(); return; }
 
     const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
     if (col) { this.selColonist = col; this.follow = true; return; }
@@ -349,11 +371,24 @@ export class Game {
   }
   placeAtMouse() {
     if (this.paused) return; const t = this.selectedBuild; if (!t) return; const def = BUILD_TYPES[t]; if (!def) return;
-    const b = makeBuilding(t, this.mouse.wx, this.mouse.wy);
+    // Touch devices: start precise placement mode
+    if (this.isTouch) {
+      // Snap to grid upper-left corner
+      const gx = Math.floor(this.mouse.wx / T) * T;
+      const gy = Math.floor(this.mouse.wy / T) * T;
+      this.pendingPlacement = { key: t, x: gx, y: gy };
+      return;
+    }
+    // Desktop: immediate placement
+    this.tryPlaceNow(t, this.mouse.wx, this.mouse.wy);
+  }
+
+  private tryPlaceNow(t: keyof typeof BUILD_TYPES, wx: number, wy: number) {
+    const def = BUILD_TYPES[t]; if (!def) return;
+    const b = makeBuilding(t, wx, wy);
     if (!this.canPlace(b as any, b.x, b.y)) { this.toast("Can't place here"); return; }
     if (!hasCost(this.RES, def.cost)) { this.toast('Not enough resources'); return; }
     payCost(this.RES, def.cost);
-    // If placing a non-path building, remove paths overlapped by its footprint first
     if (b.kind !== 'path') {
       for (let i = this.buildings.length - 1; i >= 0; i--) {
         const pb = this.buildings[i];
@@ -363,9 +398,28 @@ export class Game {
         }
       }
     }
-    this.buildings.push(b);
-  this.rebuildNavGrid();
+    this.buildings.push(b); this.rebuildNavGrid();
   }
+
+  nudgePending(dx: number, dy: number) {
+    if (!this.pendingPlacement) return;
+    const def = BUILD_TYPES[this.pendingPlacement.key];
+    const nx = this.pendingPlacement.x + dx * T;
+    const ny = this.pendingPlacement.y + dy * T;
+    // Clamp within world
+    const w = def.size.w * T, h = def.size.h * T;
+    this.pendingPlacement.x = clamp(nx, 0, WORLD.w - w);
+    this.pendingPlacement.y = clamp(ny, 0, WORLD.h - h);
+  }
+
+  confirmPending() {
+    if (!this.pendingPlacement) return;
+    const { key, x, y } = this.pendingPlacement;
+    this.pendingPlacement = null;
+    this.tryPlaceNow(key, x + 1, y + 1);
+  }
+
+  cancelPending() { this.pendingPlacement = null; }
 
   paintPathAtMouse(force = false) {
     const gx = Math.floor(this.mouse.wx / T); const gy = Math.floor(this.mouse.wy / T);
@@ -883,9 +937,9 @@ export class Game {
     if (this.isNight()) { ctx.fillStyle = `rgba(6,10,18, 0.58)`; ctx.fillRect(0, 0, WORLD.w, WORLD.h); }
     if (this.selectedBuild) {
       const def = BUILD_TYPES[this.selectedBuild];
-      const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
-      const can = this.canPlace({ ...def, size: def.size } as any, gx, gy) && hasCost(this.RES, def.cost);
-      ctx.globalAlpha = .6; ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88'; ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T); ctx.globalAlpha = 1;
+  const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
+  const can = this.canPlace({ ...def, size: def.size } as any, gx, gy) && hasCost(this.RES, def.cost);
+  ctx.globalAlpha = .6; ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88'; ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T); ctx.globalAlpha = 1;
     }
     // right-drag erase rectangle overlay
     if (this.mouse.rdown && this.eraseDragStart) {
@@ -915,6 +969,7 @@ export class Game {
   }, this);
   if (this.selColonist) this.drawColonistProfile(this.selColonist);
   if (this.showBuildMenu) this.drawBuildMenu();
+  if (this.pendingPlacement) this.drawPlacementUI();
   }
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }
@@ -1254,5 +1309,45 @@ export class Game {
     }
     // click outside: close
     this.showBuildMenu = false;
+  }
+
+  // Precise placement overlay
+  drawPlacementUI() {
+    const p = this.pendingPlacement; if (!p) return;
+    const def = BUILD_TYPES[p.key];
+    const ctx = this.ctx; const w = def.size.w * T; const h = def.size.h * T;
+    // Ghost footprint at pending position
+    ctx.save();
+    ctx.globalAlpha = .6; ctx.fillStyle = COLORS.ghost; ctx.fillRect(p.x, p.y, w, h); ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#4b9fff'; ctx.setLineDash([4,3]); ctx.strokeRect(p.x + .5, p.y + .5, w - 1, h - 1); ctx.setLineDash([]);
+    ctx.restore();
+
+    // On-canvas controls near the ghost
+    const pad = this.scale(10);
+    const btn = this.scale(38);
+    const cx = p.x + w + pad; // control origin to the right of the ghost
+    const cy = p.y; // top align
+    const makeRect = (id: any, x: number, y: number) => ({ id, x, y, w: btn, h: btn });
+    const rects = [
+      makeRect('up', cx + btn, cy),
+      makeRect('left', cx, cy + btn),
+      makeRect('right', cx + btn * 2, cy + btn),
+      makeRect('down', cx + btn, cy + btn * 2),
+      makeRect('cancel', cx, cy + btn * 3 + this.scale(4)),
+      makeRect('ok', cx + btn * 2, cy + btn * 3 + this.scale(4)),
+    ];
+    this.placeUIRects = rects as any;
+    ctx.save();
+    ctx.fillStyle = '#0f172aee'; ctx.strokeStyle = '#1e293b';
+    const drawBtn = (r: any, label: string) => { ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1); ctx.fillStyle = '#dbeafe'; ctx.font = this.getScaledFont(18, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + this.scale(2)); ctx.fillStyle = '#0f172aee'; };
+    for (const r of rects) {
+      if (r.id === 'up') drawBtn(r, '↑');
+      else if (r.id === 'down') drawBtn(r, '↓');
+      else if (r.id === 'left') drawBtn(r, '←');
+      else if (r.id === 'right') drawBtn(r, '→');
+      else if (r.id === 'ok') drawBtn(r, 'OK');
+      else if (r.id === 'cancel') drawBtn(r, 'X');
+    }
+    ctx.restore();
   }
 }
