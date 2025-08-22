@@ -473,8 +473,50 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'build': {
-      const b = c.target as Building; if (!b || b.done) { game.releaseBuildReservation(c); c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; break; }
+      const b = c.target as Building; 
+      if (!b || b.done) { 
+        game.releaseBuildReservation(c); 
+        c.task = null; 
+        c.target = null; 
+        game.clearPath(c); 
+        c.state = 'seekTask'; 
+        break; 
+      }
+      
       const pt = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+      
+      // Build-specific stuck detection and timeout
+      if (c.stateSince > 15) {
+        console.log(`Build task timeout after ${c.stateSince.toFixed(1)}s, abandoning building`);
+        game.releaseBuildReservation(c);
+        c.task = null;
+        c.target = null;
+        game.clearPath(c);
+        c.state = 'seekTask';
+        break;
+      }
+      
+      // Track position for jitter detection
+      const distToTarget = Math.hypot(c.x - pt.x, c.y - pt.y);
+      if (!c.lastDistToNode) c.lastDistToNode = distToTarget;
+      
+      // Check for build jittering (not making progress)
+      if (c.stateSince > 3 && Math.abs(distToTarget - c.lastDistToNode) < 5) {
+        c.jitterScore = (c.jitterScore || 0) + 1;
+        if (c.jitterScore > 30) { // 30 frames of no progress
+          console.log(`Build jittering detected, clearing path and retrying`);
+          game.clearPath(c);
+          c.jitterScore = 0;
+          // Try moving to a slightly different position around the building
+          const offset = (Math.random() - 0.5) * 20;
+          pt.x += offset;
+          pt.y += offset;
+        }
+      } else {
+        c.jitterScore = 0;
+      }
+      c.lastDistToNode = distToTarget;
+      
       if (game.moveAlongPath(c, dt, pt, 12)) {
         b.buildLeft -= 25 * dt;
         if (b.buildLeft <= 0) {
