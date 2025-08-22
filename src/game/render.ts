@@ -1,5 +1,6 @@
 import { COLORS, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Message } from "./types";
+import { ImageAssets } from "../assets/images";
 
 export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -90,27 +91,64 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.strokeStyle = '#0b0f14cc'; ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
     return;
   }
-  ctx.fillStyle = b.color; ctx.fillRect(b.x, b.y, b.w, b.h);
-  ctx.strokeStyle = '#0b0f14cc'; ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+
+  // Special handling for house buildings with image assets
+  if (b.kind === 'house') {
+    const assets = ImageAssets.getInstance();
+    const houseImg = assets.getImage('house');
+    
+    if (houseImg && assets.isLoaded()) {
+      // Draw the house image, scaled to fit the building size
+      ctx.drawImage(houseImg, b.x, b.y, b.w, b.h);
+      
+      // Add border for consistency
+      ctx.strokeStyle = '#0b0f14cc'; 
+      ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+    } else {
+      // Fallback to colored rectangle if image isn't loaded
+      ctx.fillStyle = b.color; 
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = '#0b0f14cc'; 
+      ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+    }
+  } else {
+    // Default building rendering for non-house buildings
+    ctx.fillStyle = b.color; 
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#0b0f14cc'; 
+    ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+  }
+
+  // Build progress bar
   if (!b.done) {
     ctx.fillStyle = '#0b1220'; ctx.fillRect(b.x, b.y - 6, b.w, 4);
     ctx.fillStyle = '#6ee7ff'; const pct = 1 - (b.buildLeft / b.build);
     ctx.fillRect(b.x, b.y - 6, pct * b.w, 4);
   }
-  ctx.fillStyle = '#0b0f14aa'; ctx.font = 'bold 12px system-ui';
-  const cx = b.x + b.w / 2; const cy = b.y + b.h / 2; let letter = 'B';
-  if (b.kind === 'hq') letter = 'HQ';
-  else if (b.kind === 'house') letter = 'H';
-  else if (b.kind === 'farm') letter = b.ready ? 'F*' : 'F';
-  else if (b.kind === 'turret') letter = 'T';
-  else if (b.kind === 'wall') letter = 'W';
-  else if (b.kind === 'stock') letter = 'S';
-  else if (b.kind === 'tent') letter = 'R';
-  else if ((b as any).kind === 'warehouse') letter = 'WH';
-  else if ((b as any).kind === 'well') letter = 'WL';
-  else if ((b as any).kind === 'infirmary') letter = 'I';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(letter, cx, cy);
-  if (b.kind === 'turret' && (b as any).range) { ctx.globalAlpha = .07; ctx.fillStyle = '#e2f3ff'; ctx.beginPath(); ctx.arc(cx, cy, (b as any).range, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; }
+
+  // Building labels (skip for houses since they have the image)
+  if (b.kind !== 'house') {
+    ctx.fillStyle = '#0b0f14aa'; ctx.font = 'bold 12px system-ui';
+    const cx = b.x + b.w / 2; const cy = b.y + b.h / 2; let letter = 'B';
+    if (b.kind === 'hq') letter = 'HQ';
+    else if (b.kind === 'farm') letter = b.ready ? 'F*' : 'F';
+    else if (b.kind === 'turret') letter = 'T';
+    else if (b.kind === 'wall') letter = 'W';
+    else if (b.kind === 'stock') letter = 'S';
+    else if (b.kind === 'tent') letter = 'R';
+    else if ((b as any).kind === 'warehouse') letter = 'WH';
+    else if ((b as any).kind === 'well') letter = 'WL';
+    else if ((b as any).kind === 'infirmary') letter = 'I';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(letter, cx, cy);
+  }
+
+  // Turret range visualization
+  if (b.kind === 'turret' && (b as any).range) { 
+    const cx = b.x + b.w / 2; const cy = b.y + b.h / 2;
+    ctx.globalAlpha = .07; ctx.fillStyle = '#e2f3ff'; 
+    ctx.beginPath(); ctx.arc(cx, cy, (b as any).range, 0, Math.PI * 2); 
+    ctx.fill(); ctx.globalAlpha = 1; 
+  }
 }
 
 export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
