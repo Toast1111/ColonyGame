@@ -1,6 +1,6 @@
 import { dist2, norm, sub } from "../core/utils";
 import { WORLD } from "../game/constants";
-import type { Building, Colonist, Enemy } from "../game/types";
+import type { Building, Colonist, Enemy, ColonistState } from "../game/types";
 
 // Helper function to check if a position would collide with buildings
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -90,19 +90,40 @@ function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: num
 
 // Universal stuck detection and rescue system
 function checkAndRescueStuckColonist(game: any, c: Colonist): boolean {
-  // Initialize stuck timer if it doesn't exist
+  // Initialize stuck timer and position tracking if they don't exist
   if (c.stuckTimer === undefined) {
     c.stuckTimer = 0;
   }
-  
+  if (!(c as any).lastPos) {
+    (c as any).lastPos = { x: c.x, y: c.y };
+  }
+  if (!(c as any).lastMoveCheck) {
+    (c as any).lastMoveCheck = 0;
+  }
+
   // Check if colonist is currently inside a building collision area
-  const isStuck = wouldCollideWithBuildings(game, c.x, c.y, c.r);
+  const isBuildingStuck = wouldCollideWithBuildings(game, c.x, c.y, c.r);
+  
+  // Check if colonist is not making progress (movement-based stuck detection)
+  (c as any).lastMoveCheck += 1/60;
+  let isMovementStuck = false;
+  
+  if ((c as any).lastMoveCheck > 1.0) { // Check every second
+    const moveDistance = Math.hypot(c.x - (c as any).lastPos.x, c.y - (c as any).lastPos.y);
+    if (moveDistance < 5 && (c.state === 'chop' || c.state === 'mine' || c.state === 'build' || c.state === 'harvest')) {
+      isMovementStuck = true;
+    }
+    (c as any).lastPos = { x: c.x, y: c.y };
+    (c as any).lastMoveCheck = 0;
+  }
+  
+  const isStuck = isBuildingStuck || isMovementStuck;
   
   if (isStuck) {
     c.stuckTimer += 1/60; // Assume 60 FPS
     
-    // If stuck for more than 2 seconds, attempt rescue
-    if (c.stuckTimer > 2.0) {
+    // If stuck for more than 3 seconds, attempt rescue (increased from 2s)
+    if (c.stuckTimer > 3.0) {
       const angles = [0, Math.PI/2, Math.PI, 3*Math.PI/2, Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
       let rescued = false;
       
@@ -152,7 +173,7 @@ function checkAndRescueStuckColonist(game: any, c: Colonist): boolean {
 // Finite State Machine update for a single colonist
 export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   if (!c.alive) return; c.t += dt;
-  if (!c.state) c.state = 'seekTask';
+  if (!c.state) changeState('seekTask', 'initial state');
   c.stateSince = (c.stateSince || 0) + dt;
   
   // Universal stuck detection and rescue system (runs every frame)
@@ -161,8 +182,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     c.task = null;
     c.target = null;
     game.clearPath && game.clearPath(c);
-    c.state = 'seekTask';
-    c.stateSince = 0;
+    changeState('seekTask', 'rescued from stuck');
     return; // Skip rest of FSM this frame to let colonist reorient
   }
   
@@ -201,15 +221,50 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   if (c.hp < c.lastHp) { c.hurt = 1.5; }
   c.lastHp = c.hp; c.hurt = Math.max(0, (c.hurt || 0) - dt);
 
-  if (!c.inside && danger && c.state !== 'flee') { c.state = 'flee'; c.stateSince = 0; }
-  if (!c.inside && !danger && game.isNight() && c.state !== 'sleep' && c.state !== 'flee') { c.state = 'sleep'; c.stateSince = 0; }
+  // Helper function to cleanly change state and clear conflicting task data
+  function changeState(newState: ColonistState, reason?: string) {
+    if (c.state !== newState) {
+      // Clear work task/target when changing to non-work states to prevent navigation conflicts
+      if (newState === 'sleep' || newState === 'flee' || newState === 'heal' || newState === 'goToSleep' || newState === 'eat' || newState === 'resting') {
+        if (c.task && (c.task === 'chop' || c.task === 'mine' || c.task === 'build' || c.task === 'harvestFarm' || c.task === 'harvestWell')) {
+          // Release any reservations for work tasks
+          if (c.task === 'build' && c.target) {
+            game.releaseBuildReservation && game.releaseBuildReservation(c);
+          }
+          if (c.target && game.assignedTargets && game.assignedTargets.has(c.target)) {
+            game.assignedTargets.delete(c.target);
+          }
+          c.task = null;
+          c.target = null;
+          // Only clear path if we were doing a work task with pathfinding
+          game.clearPath && game.clearPath(c);
+        }
+      }
+      c.state = newState;
+      c.stateSince = 0;
+      if (reason && Math.random() < 0.1) {
+        console.log(`Colonist state change: ${c.state} → ${newState} (${reason})`);
+      }
+    }
+  }
+
+  // Add minimum state duration to prevent rapid switching (except for critical states)
+  const minStateDuration = 1.0; // 1 second minimum for most states
+  const canChangeState = c.stateSince > minStateDuration || 
+                        c.state === 'idle' || 
+                        c.state === 'seekTask' ||
+                        danger; // Always allow immediate flee from danger
+
+  // Critical states that can interrupt anything
+  if (!c.inside && danger && c.state !== 'flee') { changeState('flee', 'danger detected'); }
+  else if (!c.inside && !danger && game.isNight() && c.state !== 'sleep' && c.state !== 'flee' && canChangeState) { changeState('sleep', 'night time'); }
   // If gravely hurt (< 35 HP), seek infirmary
-  if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee') { c.state = 'heal'; c.stateSince = 0; }
+  else if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee' && canChangeState) { changeState('heal', 'low health'); }
   // If very tired (80+ fatigue), seek rest during day
-  if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) > 80 && c.state !== 'flee' && c.state !== 'heal' && c.state !== 'goToSleep') { c.state = 'goToSleep'; c.stateSince = 0; }
+  else if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) > 80 && c.state !== 'flee' && c.state !== 'heal' && c.state !== 'goToSleep' && canChangeState) { changeState('goToSleep', 'fatigue'); }
   // If hungry and we have food, prioritize eating (adjusted threshold for realistic meal frequency)
-  if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0 && c.state !== 'flee' && c.state !== 'eat') { c.state = 'eat'; c.stateSince = 0; }
-  if (c.inside && c.state !== 'resting') { c.state = 'resting'; c.stateSince = 0; }
+  else if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0 && c.state !== 'flee' && c.state !== 'eat' && canChangeState) { changeState('eat', 'hunger'); }
+  else if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
 
   switch (c.state) {
     case 'resting': {
@@ -238,8 +293,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Wait and heal in aura; leave when healthy enough
         if (c.hp >= 80) { c.state = 'seekTask'; c.stateSince = 0; }
       } else {
-        // Move toward infirmary center (direct movement avoids path complexity here)
-        moveTowardsSafely(game, c, ic.x, ic.y, dt, 1.0);
+        // Move toward infirmary center using pathfinding
+        game.moveAlongPath(c, dt, ic, range * 0.9);
       }
       break;
     }
@@ -316,11 +371,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             game.RES.food -= 1;
             c.hunger = Math.max(0, (c.hunger || 0) - 60); // More filling meal
             c.hp = Math.min(100, c.hp + 2.5);
-            c.state = 'seekTask'; c.stateSince = 0;
+            changeState('seekTask', 'finished eating');
           }
         } else {
-          // Move toward the food building
-          moveTowardsSafely(game, c, center.x, center.y, dt, 1.2); // Slightly faster when hungry
+          // Move toward the food building using pathfinding
+          game.moveAlongPath(c, dt, center, reachDist);
         }
       }
       break;
@@ -357,8 +412,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             }
           }
         } else {
-          // Move toward the destination
-          moveTowardsSafely(game, c, dest.x, dest.y, dt, 1.8); // Boost speed when fleeing
+          // Move toward the destination using pathfinding (faster when fleeing)
+          game.moveAlongPath(c, dt, dest, 20);
         }
       } else {
         const d = norm(sub(c as any, danger as any) as any); c.x += d.x * (c.speed + 90) * dt; c.y += d.y * (c.speed + 90) * dt;
@@ -390,8 +445,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           else { c.state = 'seekTask'; c.stateSince = 0; }
         }
       } else {
-        // Move toward the house
-        moveTowardsSafely(game, c, hc.x, hc.y, dt);
+        // Move toward the house using pathfinding
+        game.moveAlongPath(c, dt, hc, 20);
       }
       break;
     }
@@ -443,13 +498,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
         }
       } else {
-        // Move toward the rest building
-        moveTowardsSafely(game, c, bc.x, bc.y, dt, 1.1); // Slightly faster when seeking rest
+        // Move toward the rest building using pathfinding
+        game.moveAlongPath(c, dt, bc, 20);
       }
       break;
     }
     case 'seekTask': {
-      if (game.isNight()) { c.state = 'sleep'; c.stateSince = 0; break; }
+      if (game.isNight()) { changeState('sleep', 'night time'); break; }
       if (!c.task || (c.task === 'idle' && Math.random() < 0.005)) {
         const oldTask = c.task;
         game.pickTask(c);
@@ -458,18 +513,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
       }
       switch (c.task) {
-        case 'build': c.state = 'build'; break;
-        case 'harvestFarm': c.state = 'harvest'; break;
-        case 'harvestWell': c.state = 'harvest'; break;
-        case 'chop': c.state = 'chop'; break;
-        case 'mine': c.state = 'mine'; break;
-        case 'idle': default: c.state = 'idle'; break;
+        case 'build': changeState('build', 'assigned build task'); break;
+        case 'harvestFarm': changeState('harvest', 'assigned farm task'); break;
+        case 'harvestWell': changeState('harvest', 'assigned well task'); break;
+        case 'chop': changeState('chop', 'assigned chop task'); break;
+        case 'mine': changeState('mine', 'assigned mine task'); break;
+        case 'idle': default: changeState('idle', 'no tasks available'); break;
       }
-      c.stateSince = 0; break;
+      break;
     }
     case 'idle': {
-      const dst = c.target; if (!dst) { c.state = 'seekTask'; break; }
-  if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; c.stateSince = 0; }
+      const dst = c.target; if (!dst) { changeState('seekTask', 'no target'); break; }
+  if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'reached target'); }
       break;
     }
     case 'build': {
@@ -479,7 +534,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.task = null; 
         c.target = null; 
         game.clearPath(c); 
-        c.state = 'seekTask'; 
+        changeState('seekTask', 'building complete'); 
         break; 
       }
       
@@ -492,7 +547,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.task = null;
         c.target = null;
         game.clearPath(c);
-        c.state = 'seekTask';
+        changeState('seekTask', 'build timeout');
         break;
       }
       
@@ -621,12 +676,29 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
         break;
       } else {
-        // Move toward the tree
-        moveTowardsSafely(game, c, t.x, t.y, dt);
+        // Move toward the tree using pathfinding
+        game.moveAlongPath(c, dt, t, interact + slack);
+        
+        // Track progress to detect if we're making movement towards the tree
+        if (!c.lastDistToNode) c.lastDistToNode = distance;
+        
+        // If we've been trying for more than 3 seconds and not getting closer, try clearing path
+        if (c.stateSince > 3.0 && Math.abs(distance - c.lastDistToNode) < 2) {
+          c.jitterScore = (c.jitterScore || 0) + 1;
+          if (c.jitterScore > 30) { // 30 frames of no progress
+            console.log(`Chop task stuck, clearing path and retrying`);
+            game.clearPath(c);
+            c.jitterScore = 0;
+          }
+        } else {
+          c.jitterScore = 0;
+        }
+        c.lastDistToNode = distance;
       }
       
-      // If stuck too long, abandon
-      if (c.stateSince && c.stateSince > 15) {
+      // If stuck too long, abandon (reduced from 15 to 10 seconds)
+      if (c.stateSince && c.stateSince > 10) {
+        console.log(`Chop task timeout after ${c.stateSince.toFixed(1)}s, abandoning tree`);
         if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
         c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
       }
@@ -665,8 +737,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
         break;
       } else {
-        // Move toward the rock
-        moveTowardsSafely(game, c, r.x, r.y, dt);
+        // Move toward the rock using pathfinding
+        game.moveAlongPath(c, dt, r, interact + slack);
         
         // Debug movement
         if (Math.random() < 0.01) {
