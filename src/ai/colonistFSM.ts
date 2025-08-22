@@ -177,8 +177,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
   // Movement penalty from fatigue
   (c as any).fatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
-  // Starvation damage if very hungry
-  if ((c.hunger || 0) >= 95) { c.hp = Math.max(0, c.hp - 4 * dt); }
+  // Starvation damage if very hungry (reduced from 4 to 2 damage per second)
+  if ((c.hunger || 0) >= 95) { 
+    const damage = 2 * dt;
+    c.hp = Math.max(0, c.hp - damage); 
+    // Debug logging for starvation
+    if (Math.random() < 0.05) { // Log occasionally to avoid spam
+      console.log(`Colonist starving: hunger=${(c.hunger || 0).toFixed(1)}, hp=${c.hp.toFixed(1)}, damage=${damage.toFixed(2)}/frame`);
+    }
+  }
   // Passive very-slow heal if not hungry and not working
   if ((c.hunger || 0) < 30 && !working && !c.inside) { c.hp = Math.min(100, c.hp + 0.8 * dt); }
   // Infirmary healing aura
@@ -198,8 +205,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   if (!c.inside && !danger && game.isNight() && c.state !== 'sleep' && c.state !== 'flee') { c.state = 'sleep'; c.stateSince = 0; }
   // If gravely hurt (< 35 HP), seek infirmary
   if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee') { c.state = 'heal'; c.stateSince = 0; }
-  // If extremely hungry and we have food, prioritize eating
-  if (!c.inside && (c.hunger || 0) > 80 && (game.RES.food || 0) > 0 && c.state !== 'flee') { c.state = 'eat'; c.stateSince = 0; }
+  // If hungry and we have food, prioritize eating (lowered threshold from 80 to 65)
+  if (!c.inside && (c.hunger || 0) > 65 && (game.RES.food || 0) > 0 && c.state !== 'flee') { c.state = 'eat'; c.stateSince = 0; }
   if (c.inside && c.state !== 'resting') { c.state = 'resting'; c.stateSince = 0; }
 
   switch (c.state) {

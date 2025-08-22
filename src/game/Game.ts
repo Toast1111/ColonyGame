@@ -856,8 +856,7 @@ export class Game {
     // Daily-time continuous effects for colonists
     for (const c of this.colonists) {
       if (!c.alive) continue;
-      // If starving and already hurt, apply a little extra damage
-      if ((c.hunger || 0) > 90 && c.hp < 100) { c.hp = Math.max(0, c.hp - 0.6 * dt); }
+      // Starvation damage is handled in colonistFSM.ts - no additional damage here
       // If extremely fatigued, reduce work effectiveness slightly (handled via movement slow); no direct hp damage
       if (c.hp <= 0) { c.alive = false; }
     }
