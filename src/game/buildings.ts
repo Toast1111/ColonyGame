@@ -106,9 +106,10 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     hp: 200, 
     size: { w: 2, h: 2 }, 
     build: 140, 
-    color: COLORS.bld, 
+  color: COLORS.bld, 
     healRate: 3, 
-    healRange: 140 
+  healRange: 140,
+  popCap: 2 // allow up to 2 patients inside for direct healing
   },
   path: { 
     category:'Utility', 

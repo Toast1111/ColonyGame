@@ -42,7 +42,7 @@ export type Building = BuildingDef & {
   growth?: number; ready?: boolean; cooldown?: number;
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal';
 
 export type Colonist = { x: number; y: number; r: number; hp: number; speed: number; task: string | null; target: any; carrying: any; hunger: number; alive: boolean; color: string; t: number; fatigue?: number; state?: ColonistState; stateSince?: number; path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; lastHp?: number; hurt?: number; inside?: import('./types').Building | null; hideTimer?: number; safeTarget?: import('./types').Building | null; safeTimer?: number; reservedBuildFor?: import('./types').Building | null; stuckTimer?: number; lastDistToNode?: number; jitterScore?: number; jitterWindow?: number };
 

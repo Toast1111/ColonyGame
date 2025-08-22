@@ -759,7 +759,7 @@ export class Game {
       if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false;
     }
     // Movement speed; boost if standing on a path tile
-    let speed = c.speed;
+  let speed = c.speed * ((c as any).fatigueSlow || 1);
     {
       const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);
       const inBounds = gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows;
@@ -846,6 +846,15 @@ export class Game {
     const nowNight = this.isNight();
     if (!wasNight && nowNight) { this.spawnWave(); }
     this.prevIsNight = nowNight;
+
+    // Daily-time continuous effects for colonists
+    for (const c of this.colonists) {
+      if (!c.alive) continue;
+      // If starving and already hurt, apply a little extra damage
+      if ((c.hunger || 0) > 90 && c.hp < 100) { c.hp = Math.max(0, c.hp - 0.6 * dt); }
+      // If extremely fatigued, reduce work effectiveness slightly (handled via movement slow); no direct hp damage
+      if (c.hp <= 0) { c.alive = false; }
+    }
   }
   keyPressed(k: string) { if (this.once.has(k)) { this.once.delete(k); return true; } return false; }
   update(dt: number) {

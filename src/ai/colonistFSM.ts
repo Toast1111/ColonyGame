@@ -166,10 +166,28 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     return; // Skip rest of FSM this frame to let colonist reorient
   }
   
-  // simple needs
-  c.hunger = Math.min(100, (c.hunger || 0) + dt * 1.2);
-  if (c.inside) c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 12);
-  else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * 4);
+  // Needs progression
+  // Hunger increases faster when working; slower when resting
+  const working = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' || c.state === 'flee' || c.state === 'move';
+  const hungerRate = working ? 1.6 : c.inside ? 0.6 : 1.0; // per second
+  c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
+  // Fatigue rises when active, falls when inside/resting
+  const fatigueRise = working ? 5.0 : 2.0;
+  if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 14);
+  else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
+  // Movement penalty from fatigue
+  (c as any).fatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
+  // Starvation damage if very hungry
+  if ((c.hunger || 0) >= 95) { c.hp = Math.max(0, c.hp - 4 * dt); }
+  // Passive very-slow heal if not hungry and not working
+  if ((c.hunger || 0) < 30 && !working && !c.inside) { c.hp = Math.min(100, c.hp + 0.8 * dt); }
+  // Infirmary healing aura
+  const inf = (game.buildings as Building[]).find(b => b.kind === 'infirmary' && b.done);
+  if (inf) {
+    const range = (inf as any).healRange || 140; const rate = (inf as any).healRate || 3;
+    const d2 = (c.x - (inf.x + inf.w/2)) ** 2 + (c.y - (inf.y + inf.h/2)) ** 2;
+    if (d2 <= range * range) { c.hp = Math.min(100, c.hp + rate * dt); }
+  }
 
   const danger = (game.enemies as Enemy[]).find(e => dist2(e as any, c as any) < 140 * 140);
   c.lastHp = c.lastHp ?? c.hp;
@@ -178,14 +196,57 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
 
   if (!c.inside && danger && c.state !== 'flee') { c.state = 'flee'; c.stateSince = 0; }
   if (!c.inside && !danger && game.isNight() && c.state !== 'sleep' && c.state !== 'flee') { c.state = 'sleep'; c.stateSince = 0; }
+  // If gravely hurt (< 35 HP), seek infirmary
+  if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee') { c.state = 'heal'; c.stateSince = 0; }
+  // If extremely hungry and we have food, prioritize eating
+  if (!c.inside && (c.hunger || 0) > 80 && (game.RES.food || 0) > 0 && c.state !== 'flee') { c.state = 'eat'; c.stateSince = 0; }
   if (c.inside && c.state !== 'resting') { c.state = 'resting'; c.stateSince = 0; }
 
   switch (c.state) {
     case 'resting': {
       c.hideTimer = Math.max(0, (c.hideTimer || 0) - dt);
-      c.hp = Math.min(100, c.hp + 4 * dt);
+      // Rest recovers fatigue quickly and heals slowly
+      c.hp = Math.min(100, c.hp + 1.2 * dt);
       const leave = (!game.isNight()) && (!danger && (c.hurt || 0) <= 0 && (c.hideTimer || 0) <= 0);
       if (leave) { game.leaveBuilding(c); c.safeTarget = null; c.safeTimer = 0; c.state = 'seekTask'; c.stateSince = 0; }
+      break;
+    }
+    case 'heal': {
+      // Find nearest infirmary
+      const infirmaries = (game.buildings as Building[]).filter(b => b.kind === 'infirmary' && b.done);
+      if (!infirmaries.length) { c.state = 'seekTask'; c.stateSince = 0; break; }
+      let best = infirmaries[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
+      for (let i = 1; i < infirmaries.length; i++) { const d = dist2(c as any, game.centerOf(infirmaries[i]) as any); if (d < bestD) { bestD = d; best = infirmaries[i]; } }
+      const ic = game.centerOf(best);
+      const range = (best as any).healRange || 140;
+      const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
+      const dist = Math.hypot(c.x - ic.x, c.y - ic.y);
+      // If close enough, try to enter (uses building capacity via popCap); else stand in heal radius
+      if (nearRect && game.tryEnterBuilding(c as any, best as any)) {
+        c.state = 'resting'; c.stateSince = 0; break;
+      }
+      if (dist <= range * 0.9) {
+        // Wait and heal in aura; leave when healthy enough
+        if (c.hp >= 80) { c.state = 'seekTask'; c.stateSince = 0; }
+      } else {
+        // Move toward infirmary center (direct movement avoids path complexity here)
+        moveTowardsSafely(game, c, ic.x, ic.y, dt, 1.0);
+      }
+      break;
+    }
+    case 'eat': {
+      // Go to HQ or any house to eat if close; otherwise just consume on the spot.
+      // Eating converts 1 food into hunger reduction and a small heal.
+      const canEat = (game.RES.food || 0) > 0;
+      if (canEat && c.stateSince > 0.6) {
+        game.RES.food -= 1; // one unit
+        c.hunger = Math.max(0, (c.hunger || 0) - 40);
+        c.hp = Math.min(100, c.hp + 2.5);
+        c.state = 'seekTask'; c.stateSince = 0;
+      } else if (!canEat) {
+        // No food available; if night, try to sleep, else continue tasks
+        c.state = game.isNight() ? 'sleep' : 'seekTask'; c.stateSince = 0;
+      }
       break;
     }
     case 'flee': {
@@ -279,7 +340,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     case 'idle': {
       const dst = c.target; if (!dst) { c.state = 'seekTask'; break; }
-      if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; c.stateSince = 0; }
+  if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; c.stateSince = 0; }
       break;
     }
     case 'build': {
@@ -421,7 +482,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (distance <= interact + slack + 0.1) {
         // Close enough to mine
-        r.hp -= 16 * dt;
+  r.hp -= 16 * dt;
         if (r.hp <= 0) {
           const collected = game.addResource('stone', 5);
           (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
