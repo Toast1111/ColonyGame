@@ -723,6 +723,20 @@ export class Game {
       const p = this.computePath(c.x, c.y, target.x, target.y);
       if (p && p.length) { 
         c.path = p; c.pathIndex = 0; c.pathGoal = { x: target.x, y: target.y }; 
+        // Debug: Log if path goes through low-cost areas
+        if (Math.random() < 0.1) {
+          let pathTiles = 0;
+          for (const node of p) {
+            const gx = Math.floor(node.x / T), gy = Math.floor(node.y / T);
+            if (gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows) {
+              const idx = gy * this.grid.cols + gx;
+              if (this.grid.cost[idx] <= 0.7) pathTiles++;
+            }
+          }
+          if (pathTiles > 0) {
+            console.log(`Computed path with ${pathTiles}/${p.length} low-cost tiles`);
+          }
+        }
       } else {
         // Failed to compute path - log this issue
         if (Math.random() < 0.05) {
@@ -742,13 +756,20 @@ export class Game {
     const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
     // Movement speed; boost if standing on a path tile
     let speed = c.speed * ((c as any).fatigueSlow || 1);
+    let onPath = false;
     {
       const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);
       const inBounds = gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows;
       if (inBounds) {
         const idx = gy * this.grid.cols + gx;
-        // If cost lowered significantly (<=0.7), treat as path tile and boost speed ~12.5%
-        if (this.grid.cost[idx] <= 0.7) speed *= 1.125;
+        // If cost lowered significantly (<=0.7), treat as path tile and add +25 speed bonus
+        if (this.grid.cost[idx] <= 0.7) {
+          speed += 25;
+          onPath = true;
+          if (Math.random() < 0.01) { // 1% chance to log
+            console.log(`Colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) on path tile - cost: ${this.grid.cost[idx]}, speed: ${speed}`);
+          }
+        }
       }
     }
     // Prevent overshoot that causes ping-pong around node: snap to node if close or step would overshoot
@@ -1111,7 +1132,19 @@ export class Game {
           `Task: ${c.task || 'none'}`,
           `HP: ${Math.floor(c.hp || 0)}`,
           `Pos: ${Math.floor(c.x)},${Math.floor(c.y)}`,
-          `Speed: ${c.speed || 0}`,
+          `Speed: ${(() => {
+            let speed = c.speed || 0;
+            // Apply fatigue multiplier
+            if (c.fatigueSlow) speed *= c.fatigueSlow;
+            // Apply path speed bonus
+            const gx = Math.floor(c.x / T);
+            const gy = Math.floor(c.y / T);
+            if (gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows) {
+              const idx = gy * this.grid.cols + gx;
+              if (this.grid.cost[idx] <= 0.7) speed += 25;
+            }
+            return speed.toFixed(1);
+          })()}`,
           `Stuck: ${(c as any).stuckTimer ? (c as any).stuckTimer.toFixed(1) + 's' : 'no'}`,
           `Since: ${(c as any).stateSince ? (c as any).stateSince.toFixed(1) + 's' : '0s'}`,
           `PathIdx: ${c.pathIndex ?? 'none'}/${c.path?.length ?? 0}`,
@@ -1244,7 +1277,9 @@ export class Game {
   // Block buildings except HQ, paths, and houses (houses are walkable for entry/exit)
   if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house') markRectSolid(this.grid, b.x, b.y, b.w, b.h);
   // Path tiles reduce traversal cost
-  if (b.kind === 'path') markRectCost(this.grid, b.x, b.y, b.w, b.h, 0.6);
+  if (b.kind === 'path') {
+    markRectCost(this.grid, b.x, b.y, b.w, b.h, 0.6);
+  }
     }
   }
   computePath(sx: number, sy: number, tx: number, ty: number) {

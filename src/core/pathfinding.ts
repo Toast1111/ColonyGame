@@ -92,8 +92,18 @@ export function aStar(g: Grid, sx: number, sy: number, tx: number, ty: number): 
     for (const [dx, dy] of neigh) {
       const nx = cx + dx, ny = cy + dy; if (!passable(nx, ny)) continue;
       const ni = idx(nx, ny);
-      const stepCost = g.cost[ni] || 1;
-      const tentative = gScore[cur] + stepCost;
+      
+      // Calculate actual traversal time based on movement speed on this tile
+      const tileCost = g.cost[ni] || 1;
+      let traversalTime = 1; // base time to cross one tile
+      
+      // If this is a fast tile (path), reduce traversal time
+      if (tileCost <= 0.7) {
+        // Path tiles give +25 speed bonus (50 base -> 75 total = 1.5x speed = 0.67x time)
+        traversalTime = 1 / 1.5; // ~0.67
+      }
+      
+      const tentative = gScore[cur] + traversalTime;
       if (tentative < gScore[ni]) {
         came[ni] = cur; gScore[ni] = tentative; fScore[ni] = tentative + h(nx, ny, goal.x, goal.y);
         if (!open.includes(ni)) open.push(ni);
