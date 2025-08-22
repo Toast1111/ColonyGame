@@ -87,6 +87,9 @@ export class Game {
   // Precise placement (touch): pending building location to adjust before confirm
   pendingPlacement: { key: keyof typeof BUILD_TYPES; x: number; y: number } | null = null;
   placeUIRects: Array<{ id: 'up'|'down'|'left'|'right'|'ok'|'cancel'; x: number; y: number; w: number; h: number }> = [];
+  // UI hit regions for colonist panel
+  colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
+  colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -185,6 +188,22 @@ export class Game {
       e.preventDefault();
       if ((e as MouseEvent).button === 0) {
         this.mouse.down = true;
+        // Desktop: close colonist panel via X or clicking outside panel
+        if (this.selColonist) {
+          const mx0 = this.mouse.x * this.DPR; const my0 = this.mouse.y * this.DPR;
+          if (this.colonistPanelCloseRect) {
+            const r = this.colonistPanelCloseRect;
+            if (mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h) {
+              this.selColonist = null; this.follow = false; return;
+            }
+          }
+          if (this.colonistPanelRect) {
+            const r = this.colonistPanelRect;
+            const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
+            // On desktop, only close when clicking outside if not over the panel
+            if (!inside) { this.selColonist = null; this.follow = false; return; }
+          }
+        }
         // If precise placement UI active, handle mouse clicks like taps
         if (this.pendingPlacement) {
           const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
@@ -302,6 +321,22 @@ export class Game {
       const w = def.size.w * T, h = def.size.h * T;
       p.x = clamp(gx, 0, WORLD.w - w); p.y = clamp(gy, 0, WORLD.h - h);
       return;
+    }
+
+    // If colonist panel shown, allow closing via X button or tapping outside (mobile UX)
+    if (this.selColonist) {
+      const mx0 = this.mouse.x * this.DPR; const my0 = this.mouse.y * this.DPR;
+      if (this.colonistPanelCloseRect) {
+        const r = this.colonistPanelCloseRect;
+        if (mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h) {
+          this.selColonist = null; this.follow = false; return;
+        }
+      }
+      if (this.isTouch && this.colonistPanelRect) {
+        const r = this.colonistPanelRect;
+        const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
+        if (!inside) { this.selColonist = null; this.follow = false; return; }
+      }
     }
 
     // Hotbar selection
@@ -692,8 +727,37 @@ export class Game {
       return false;
     }
     const node = c.path[c.pathIndex];
-    const dx = node.x - c.x; const dy = node.y - c.y; const L = Math.hypot(dx, dy);
-    if (L < 10) { c.pathIndex++; if (c.pathIndex >= c.path.length) { c.path = undefined; c.pathIndex = undefined; if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive; return true; } return false; }
+    const dx = node.x - c.x; const dy = node.y - c.y; let L = Math.hypot(dx, dy);
+    // Hysteresis to avoid oscillation around a node
+    const arriveNode = 10; // base arrival radius for nodes
+    const hysteresis = 4; // extra slack once we've been near a node
+    const arrived = L < arriveNode;
+    if (arrived) {
+      c.pathIndex++;
+      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined;
+      if (c.pathIndex >= c.path.length) { c.path = undefined; c.pathIndex = undefined; if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive; return true; }
+      return false;
+    }
+    // Jitter detection: if distance to node keeps increasing/decreasing rapidly, skip node or replan
+    c.jitterWindow = (c.jitterWindow || 0) + dt;
+    if (c.lastDistToNode != null) {
+      const delta = L - c.lastDistToNode;
+      // Crossing back and forth near threshold increases score
+      if (Math.abs(delta) < 6) { c.jitterScore = (c.jitterScore || 0) + 1; }
+      else { c.jitterScore = Math.max(0, (c.jitterScore || 0) - 1); }
+    }
+    c.lastDistToNode = L;
+    if ((c.jitterScore || 0) >= 8 || (c.jitterWindow || 0) > 1.5) {
+      // If very close to node, just advance; otherwise recompute a slight detour to target
+      if (L < arriveNode + hysteresis) {
+        c.pathIndex++;
+      } else if (target) {
+        const p = this.computePath(c.x, c.y, target.x, target.y);
+        if (p && p.length) { c.path = p; c.pathIndex = 0; }
+      }
+      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined;
+      if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false;
+    }
     // Movement speed; boost if standing on a path tile
     let speed = c.speed;
     {
@@ -705,7 +769,13 @@ export class Game {
         if (this.grid.cost[idx] <= 0.7) speed *= 1.125;
       }
     }
-    c.x += (dx / (L || 1)) * speed * dt; c.y += (dy / (L || 1)) * speed * dt;
+    // Prevent overshoot that causes ping-pong around node
+    const step = speed * dt;
+    if (step >= L) {
+      c.x = node.x; c.y = node.y;
+    } else {
+      c.x += (dx / (L || 1)) * step; c.y += (dy / (L || 1)) * step;
+    }
     c.x = Math.max(0, Math.min(c.x, WORLD.w)); c.y = Math.max(0, Math.min(c.y, WORLD.h));
     return false;
   }
@@ -1011,6 +1081,7 @@ export class Game {
     storage: { used: storageUsed, max: storageMax }
   }, this);
   if (this.selColonist) this.drawColonistProfile(this.selColonist);
+  else { this.colonistPanelRect = this.colonistPanelCloseRect = null; }
   if (this.showBuildMenu) this.drawBuildMenu();
   if (this.pendingPlacement) this.drawPlacementUI();
   }
@@ -1113,11 +1184,25 @@ export class Game {
     // Ensure panel doesn't go off screen
     const finalY = Math.min(Y, ch - H - PAD);
     
-    ctx.save();
+  ctx.save();
     ctx.fillStyle = '#0b1220cc'; 
     ctx.fillRect(X, finalY, W, H);
     ctx.strokeStyle = '#1e293b'; 
     ctx.strokeRect(X + .5, finalY + .5, W - 1, H - 1);
+
+  // Close button (top-right of panel)
+  const closeSize = this.scale(26);
+  const closePad = this.scale(8);
+  const closeX = X + W - closePad - closeSize;
+  const closeY = finalY + closePad;
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(closeX, closeY, closeSize, closeSize);
+  ctx.strokeStyle = '#1e293b';
+  ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
+  ctx.fillStyle = '#dbeafe';
+  ctx.font = this.getScaledFont(16, '700');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + this.scale(1));
     
     // avatar box
     const avatarSize = this.scale(64);
@@ -1158,7 +1243,10 @@ export class Game {
     ctx.fillText(`Task: ${task}`, barX, barY + this.scale(12)); barY += this.scale(18);
     ctx.fillText(`Pos: ${c.x | 0}, ${c.y | 0}`, barX, barY); barY += this.scale(18);
     ctx.fillText(this.follow ? 'Camera: Following (Esc to stop)' : 'Camera: Click colonist to follow', barX, Math.min(barY, finalY + H - this.scale(8)));
-    ctx.restore();
+  // Record panel rects for hit-testing (already in device pixels)
+  this.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
+  this.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
+  ctx.restore();
   }
 
   barRow(x: number, y: number, label: string, val: number, color: string) {
