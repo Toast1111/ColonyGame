@@ -1,3 +1,4 @@
+/// <reference types="node" />
 import { defineConfig } from 'vite';
 
 // If deploying to GitHub Pages, set BASE_PATH to the repo name
