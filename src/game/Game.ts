@@ -928,7 +928,14 @@ export class Game {
         b.cooldown = (b.cooldown || 0) - dt * this.fastForward;
         if (b.cooldown <= 0 && this.RES.food >= 15) {
           const cap = this.getPopulationCap();
-          if (this.colonists.length < cap) {
+          
+          // Smart recruitment: ensure we have enough food reserves for existing + new colonist
+          const currentColonists = this.colonists.filter(c => c.alive).length;
+          const foodReserveNeeded = Math.max(25, currentColonists * 8); // Reserve 8 food per existing colonist, minimum 25
+          const recruitmentCost = 15;
+          const totalFoodNeeded = foodReserveNeeded + recruitmentCost;
+          
+          if (this.colonists.length < cap && this.RES.food >= totalFoodNeeded) {
             this.RES.food -= 15;
             const spawnPos = this.centerOf(b);
             this.spawnColonist({ 
@@ -937,6 +944,11 @@ export class Game {
             });
             this.msg('Recruit tent attracted a new colonist! (-15 food)', 'good');
             b.cooldown = 60; // 60 second cooldown
+          } else if (this.RES.food < totalFoodNeeded && this.RES.food >= 15) {
+            // Show message when recruitment is blocked due to low food reserves
+            if (Math.random() < 0.02) { // Occasional message to avoid spam
+              this.msg(`Recruitment halted: need ${totalFoodNeeded} food (${foodReserveNeeded} reserves + ${recruitmentCost} cost), have ${this.RES.food}`, 'warn');
+            }
           }
         }
       }
