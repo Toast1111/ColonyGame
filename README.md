@@ -18,6 +18,23 @@ npm run build
 npm run preview
 ```
 
+## Deploy to GitHub Pages
+
+This repo includes a GitHub Actions workflow that builds and deploys to GitHub Pages.
+
+1) In GitHub → Settings → Pages:
+	- Set Source to “GitHub Actions”.
+
+2) Push to `main` to trigger the workflow.
+
+The workflow uses Vite’s `base` set from `BASE_PATH` so assets work under the repo subpath. No changes are needed locally. The site will be available at:
+
+```
+https://<your-username>.github.io/ColonyGame/
+```
+
+If you fork and rename the repo, the workflow will still set the base path correctly using the repository name.
+
 ## Structure
 
 - `src/core/*`: utilities
