@@ -242,21 +242,64 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'eat': {
-      // Go to HQ or any house to eat if close; otherwise just consume on the spot.
-      // Eating converts 1 food into hunger reduction and a small heal.
+      // Go to HQ, warehouse, or storage to eat
       const canEat = (game.RES.food || 0) > 0;
-      if (canEat && c.stateSince > 0.6) {
-        game.RES.food -= 1; // one unit
-        c.hunger = Math.max(0, (c.hunger || 0) - 40);
-        c.hp = Math.min(100, c.hp + 2.5);
-        c.state = 'seekTask'; c.stateSince = 0;
-      } else if (!canEat) {
+      if (!canEat) {
         // No food available; if night, try to sleep, else continue tasks
         // Add hunger damage over time when stuck in eat state without food
         if (c.stateSince > 1.0) {
           c.hp = Math.max(0, c.hp - 2.5 * dt); // Slow starvation damage
         }
         c.state = game.isNight() ? 'sleep' : 'seekTask'; c.stateSince = 0;
+        break;
+      }
+
+      // Find the nearest food source building
+      const foodBuildings = game.buildings.filter((b: any) => 
+        (b.kind === 'hq' || b.kind === 'warehouse' || b.kind === 'storage') && 
+        b.done && 
+        game.buildingHasSpace(b)
+      );
+
+      if (foodBuildings.length === 0) {
+        // No accessible food buildings, just eat on the spot if we've been waiting
+        if (c.stateSince > 1.0) {
+          game.RES.food -= 1;
+          c.hunger = Math.max(0, (c.hunger || 0) - 40);
+          c.hp = Math.min(100, c.hp + 2.5);
+          c.state = 'seekTask'; c.stateSince = 0;
+        }
+        break;
+      }
+
+      // Find closest food building
+      let closestBuilding = null;
+      let closestDist = Infinity;
+      for (const b of foodBuildings) {
+        const center = game.centerOf(b);
+        const dist = Math.hypot(c.x - center.x, c.y - center.y);
+        if (dist < closestDist) {
+          closestDist = dist;
+          closestBuilding = b;
+        }
+      }
+
+      if (closestBuilding) {
+        const center = game.centerOf(closestBuilding);
+        const reachDist = Math.max(closestBuilding.w, closestBuilding.h) / 2 + c.r + 10;
+        
+        if (closestDist <= reachDist) {
+          // Close enough to eat
+          if (c.stateSince > 0.6) {
+            game.RES.food -= 1;
+            c.hunger = Math.max(0, (c.hunger || 0) - 40);
+            c.hp = Math.min(100, c.hp + 2.5);
+            c.state = 'seekTask'; c.stateSince = 0;
+          }
+        } else {
+          // Move toward the food building
+          moveTowardsSafely(game, c, center.x, center.y, dt, 1.2); // Slightly faster when hungry
+        }
       }
       break;
     }
