@@ -252,6 +252,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.state = 'seekTask'; c.stateSince = 0;
       } else if (!canEat) {
         // No food available; if night, try to sleep, else continue tasks
+        // Add hunger damage over time when stuck in eat state without food
+        if (c.stateSince > 1.0) {
+          c.hp = Math.max(0, c.hp - 2.5 * dt); // Slow starvation damage
+        }
         c.state = game.isNight() ? 'sleep' : 'seekTask'; c.stateSince = 0;
       }
       break;

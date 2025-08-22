@@ -72,7 +72,7 @@ export class Game {
   selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
   hotbar: Array<keyof typeof BUILD_TYPES> = ['house', 'farm', 'turret', 'wall', 'stock', 'tent', 'warehouse', 'well', 'infirmary'];
   showBuildMenu = false;
-  debug = { nav: false, paths: true };
+  debug = { nav: false, paths: true, colonists: false };
   // selection & camera follow
   selColonist: Colonist | null = null;
   follow = false;
@@ -284,7 +284,7 @@ export class Game {
     if (!this.once.has(k)) this.once.add(k); 
     
     // Prevent default behavior for game shortcuts to avoid browser interference
-    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
+    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'g' || k === 'j' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
       e.preventDefault();
     }
   });
@@ -863,11 +863,19 @@ export class Game {
     this.prevIsNight = nowNight;
 
     // Daily-time continuous effects for colonists
-    for (const c of this.colonists) {
-      if (!c.alive) continue;
+    for (let i = this.colonists.length - 1; i >= 0; i--) {
+      const c = this.colonists[i];
+      if (!c.alive) {
+        // Remove dead colonists from the array
+        this.colonists.splice(i, 1);
+        continue;
+      }
       // Starvation damage is handled in colonistFSM.ts - no additional damage here
       // If extremely fatigued, reduce work effectiveness slightly (handled via movement slow); no direct hp damage
-      if (c.hp <= 0) { c.alive = false; }
+      if (c.hp <= 0) { 
+        c.alive = false; 
+        // Will be removed on next update cycle
+      }
     }
   }
   keyPressed(k: string) { if (this.once.has(k)) { this.once.delete(k); return true; } return false; }
@@ -877,6 +885,7 @@ export class Game {
     if (this.keyPressed('h')) { const help = document.getElementById('help'); if (help) help.hidden = !help.hidden; }
   if (this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
     if (this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
+    if (this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
   if (this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
     if (this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
     
@@ -898,7 +907,7 @@ export class Game {
       this.camera.y = clamp(c.y - vh / 2, 0, Math.max(0, WORLD.h - vh));
     }
     this.dayTick(dt);
-  for (const c of this.colonists) updateColonistFSM(this, c, dt * this.fastForward);
+  for (const c of this.colonists) { if (c.alive) updateColonistFSM(this, c, dt * this.fastForward); }
   for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; updateEnemyFSM(this, e, dt * this.fastForward); if (e.hp <= 0) { this.enemies.splice(i, 1); if (Math.random() < .5) this.RES.food += 1; } }
     for (const b of this.buildings) {
       if (b.kind === 'turret' && b.done) this.updateTurret(b, dt * this.fastForward);
@@ -908,6 +917,7 @@ export class Game {
         const hr = (b as any).healRate as number; const rng = (b as any).healRange || 120;
         const c = this.centerOf(b);
         for (const col of this.colonists) {
+          if (!col.alive) continue;
           const d2 = (col.x-c.x)*(col.x-c.x)+(col.y-c.y)*(col.y-c.y);
           if (d2 < rng*rng) col.hp = Math.min(100, col.hp + hr * dt * this.fastForward);
         }
@@ -954,7 +964,7 @@ export class Game {
     // Draw person icons under buildings that have hidden colonists inside
     {
       const counts = new Map<Building, number>();
-      for (const c of this.colonists) { if (c.inside) counts.set(c.inside, (counts.get(c.inside) || 0) + 1); }
+      for (const c of this.colonists) { if (c.inside && c.alive) counts.set(c.inside, (counts.get(c.inside) || 0) + 1); }
       ctx.save();
       for (const [b, n] of counts) {
         if (!n) continue; const maxIcons = 8;
@@ -977,7 +987,7 @@ export class Game {
       }
       ctx.restore();
     }
-  for (const c of this.colonists) { if (!c.inside) drawCircle(ctx, c.x, c.y, c.r, (this.selColonist === c ? '#93c5fd' : COLORS.colonist)); }
+  for (const c of this.colonists) { if (!c.inside && c.alive) drawCircle(ctx, c.x, c.y, c.r, (this.selColonist === c ? '#93c5fd' : COLORS.colonist)); }
     if (this.debug.nav) {
       // draw nav solids
       ctx.save();
@@ -1015,7 +1025,7 @@ export class Game {
       ctx.save();
       ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 2;
       for (const c of this.colonists) {
-        if (!c.path || !c.path.length) continue;
+        if (!c.alive || !c.path || !c.path.length) continue;
         ctx.beginPath();
         ctx.moveTo(c.x, c.y);
         for (let i = c.pathIndex ?? 0; i < c.path.length; i++) {
@@ -1044,7 +1054,7 @@ export class Game {
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 2;
       for (const c of this.colonists) {
-        if (c.inside) continue;
+        if (c.inside || !c.alive) continue;
         const stateText = `${c.task || c.state || 'idle'}`;
         const x = c.x - 20;
         const y = c.y - c.r - 8;
@@ -1068,6 +1078,98 @@ export class Game {
       }
       ctx.restore();
     }
+
+    // Detailed colonist debug information
+    if (this.debug.colonists) {
+      ctx.save();
+      ctx.font = '10px monospace';
+      ctx.lineWidth = 1;
+      
+      for (const c of this.colonists) {
+        if (c.inside || !c.alive) continue;
+        
+        // Enhanced colonist state display
+        const x = c.x - 35;
+        let y = c.y - c.r - 45;
+        const lineHeight = 12;
+        
+        // Background for text
+        const textLines = [
+          `State: ${(c as any).state || 'unknown'}`,
+          `Task: ${c.task || 'none'}`,
+          `HP: ${Math.floor(c.hp || 0)}`,
+          `Pos: ${Math.floor(c.x)},${Math.floor(c.y)}`,
+          `Speed: ${c.speed || 0}`,
+          `Stuck: ${(c as any).stuckTimer ? (c as any).stuckTimer.toFixed(1) + 's' : 'no'}`,
+          `Since: ${(c as any).stateSince ? (c as any).stateSince.toFixed(1) + 's' : '0s'}`,
+          `PathIdx: ${c.pathIndex ?? 'none'}/${c.path?.length ?? 0}`,
+          `Jitter: ${(c as any).jitterScore ?? 0}`,
+          `Repath: ${(c as any).repath ? (c as any).repath.toFixed(1) + 's' : 'none'}`
+        ];
+        
+        if (c.target) {
+          const target = c.target as any;
+          if (target.x != null) {
+            textLines.push(`Target: ${Math.floor(target.x)},${Math.floor(target.y)}`);
+            if (target.type) textLines.push(`Type: ${target.type}`);
+            if (target.hp != null) textLines.push(`T.HP: ${Math.floor(target.hp)}`);
+          }
+        }
+        
+        // Draw background
+        const bgWidth = 140;
+        const bgHeight = textLines.length * lineHeight + 4;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.fillRect(x - 2, y - lineHeight + 2, bgWidth, bgHeight);
+        ctx.strokeStyle = '#444';
+        ctx.strokeRect(x - 2, y - lineHeight + 2, bgWidth, bgHeight);
+        
+        // Draw text lines
+        for (let i = 0; i < textLines.length; i++) {
+          const line = textLines[i];
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2;
+          ctx.strokeText(line, x, y + i * lineHeight);
+          ctx.fillText(line, x, y + i * lineHeight);
+        }
+        
+        // Draw collision radius
+        ctx.strokeStyle = '#ff6b6b';
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.3;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        
+        // Show interaction range for current task
+        if (c.target && c.task && (c.task === 'chop' || c.task === 'mine')) {
+          const target = c.target as any;
+          if (target.x != null && target.r != null) {
+            const interactRange = target.r + c.r + 4 + 2.5; // Same as FSM logic
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.4;
+            ctx.beginPath();
+            ctx.arc(target.x, target.y, interactRange, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            
+            // Distance to target
+            const dist = Math.hypot(c.x - target.x, c.y - target.y);
+            ctx.fillStyle = dist <= interactRange ? '#22c55e' : '#ff6b6b';
+            ctx.font = '12px monospace';
+            const midX = (c.x + target.x) / 2;
+            const midY = (c.y + target.y) / 2;
+            ctx.strokeText(`${dist.toFixed(1)}`, midX - 15, midY);
+            ctx.fillText(`${dist.toFixed(1)}`, midX - 15, midY);
+          }
+        }
+      }
+      ctx.restore();
+    }
+
     for (const e of this.enemies) drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
     drawBullets(ctx, this.bullets);
     if (this.isNight()) { ctx.fillStyle = `rgba(6,10,18, 0.58)`; ctx.fillRect(0, 0, WORLD.w, WORLD.h); }
@@ -1093,7 +1195,7 @@ export class Game {
   const hotbar = this.hotbar.map(k => ({ key: String(k), name: BUILD_TYPES[k].name, cost: this.costText(BUILD_TYPES[k].cost || {}), selected: this.selectedBuild === k }));
   drawHUD(this.ctx, this.canvas, { 
     res: this.RES, 
-    colonists: this.colonists.length, 
+    colonists: this.colonists.filter(c => c.alive).length, 
     cap, 
     hiding, 
     day: this.day, 

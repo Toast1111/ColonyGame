@@ -104,7 +104,7 @@ async function initGame() {
 
   // Prevent keyboard navigation from interfering with game controls
   document.addEventListener('keydown', (e) => {
-    const gameKeys = [' ', 'h', 'b', 'f', 'escape', 'w', 'a', 's', 'd', '+', '=', '-', '_'];
+    const gameKeys = [' ', 'h', 'b', 'f', 'g', 'j', 'escape', 'w', 'a', 's', 'd', '+', '=', '-', '_'];
     const isNumberKey = /^[1-9]$/.test(e.key);
     
     if (gameKeys.includes(e.key.toLowerCase()) || isNumberKey) {
