@@ -810,9 +810,54 @@ export class Game {
       if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false;
     }
 
-    // Take a step toward the node
-    c.x += (dx / (L || 1)) * step; c.y += (dy / (L || 1)) * step;
-    c.x = Math.max(0, Math.min(c.x, WORLD.w)); c.y = Math.max(0, Math.min(c.y, WORLD.h));
+    // Take a step toward the node with path-aware movement
+    const baseX = c.x + (dx / (L || 1)) * step;
+    const baseY = c.y + (dy / (L || 1)) * step;
+    
+    // Check if the direct path would take us off a path tile
+    const currentGx = Math.floor(c.x / T), currentGy = Math.floor(c.y / T);
+    const currentIdx = currentGy * this.grid.cols + currentGx;
+    const currentOnPath = currentGx >= 0 && currentGy >= 0 && currentGx < this.grid.cols && currentGy < this.grid.rows && this.grid.cost[currentIdx] <= 0.7;
+    
+    const targetGx = Math.floor(baseX / T), targetGy = Math.floor(baseY / T);
+    const targetIdx = targetGy * this.grid.cols + targetGx;
+    const targetOnPath = targetGx >= 0 && targetGy >= 0 && targetGx < this.grid.cols && targetGy < this.grid.rows && this.grid.cost[targetIdx] <= 0.7;
+    
+    // If we're currently on a path and the direct movement would take us off it, try to find a path-preserving route
+    if (currentOnPath && !targetOnPath) {
+      // Try moving along the grid in a way that stays on path tiles
+      const directions = [
+        { dx: 1, dy: 0 }, { dx: -1, dy: 0 }, { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+        { dx: 1, dy: 1 }, { dx: -1, dy: -1 }, { dx: 1, dy: -1 }, { dx: -1, dy: 1 }
+      ];
+      
+      let bestMove = { x: baseX, y: baseY };
+      let bestScore = Infinity;
+      
+      for (const dir of directions) {
+        const testX = c.x + dir.dx * step * 0.8; // Slightly smaller step
+        const testY = c.y + dir.dy * step * 0.8;
+        const testGx = Math.floor(testX / T), testGy = Math.floor(testY / T);
+        const testIdx = testGy * this.grid.cols + testGx;
+        const testOnPath = testGx >= 0 && testGy >= 0 && testGx < this.grid.cols && testGy < this.grid.rows && this.grid.cost[testIdx] <= 0.7;
+        
+        if (testOnPath) {
+          // Calculate how much this move gets us toward our goal
+          const distToTarget = Math.hypot(testX - node.x, testY - node.y);
+          if (distToTarget < bestScore) {
+            bestScore = distToTarget;
+            bestMove = { x: testX, y: testY };
+          }
+        }
+      }
+      
+      c.x = Math.max(0, Math.min(bestMove.x, WORLD.w));
+      c.y = Math.max(0, Math.min(bestMove.y, WORLD.h));
+    } else {
+      // Normal direct movement
+      c.x = Math.max(0, Math.min(baseX, WORLD.w));
+      c.y = Math.max(0, Math.min(baseY, WORLD.h));
+    }
     return false;
   }
 
