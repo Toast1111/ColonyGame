@@ -116,7 +116,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     name: 'Path', 
     description: 'Improves colonist movement speed by 50%. Cheap way to optimize traffic flow.',
     key:'0', 
-    cost: { wood: 1 }, 
+    cost: { wood: 0}, 
     hp: 1, 
     size: { w: 1, h: 1 }, 
     build: 5, 

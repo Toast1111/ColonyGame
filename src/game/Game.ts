@@ -731,35 +731,8 @@ export class Game {
     // Hysteresis to avoid oscillation around a node
     const arriveNode = 10; // base arrival radius for nodes
     const hysteresis = 4; // extra slack once we've been near a node
-    const arrived = L < arriveNode;
-    if (arrived) {
-      c.pathIndex++;
-      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined;
-      if (c.pathIndex >= c.path.length) { c.path = undefined; c.pathIndex = undefined; if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive; return true; }
-      return false;
-    }
-    // Jitter detection: if distance to node keeps increasing/decreasing rapidly, skip node or replan
-    c.jitterWindow = (c.jitterWindow || 0) + dt;
-    if (c.lastDistToNode != null) {
-      const delta = L - c.lastDistToNode;
-      // Crossing back and forth near threshold increases score
-      if (Math.abs(delta) < 6) { c.jitterScore = (c.jitterScore || 0) + 1; }
-      else { c.jitterScore = Math.max(0, (c.jitterScore || 0) - 1); }
-    }
-    c.lastDistToNode = L;
-    if ((c.jitterScore || 0) >= 8 || (c.jitterWindow || 0) > 1.5) {
-      // If very close to node, just advance; otherwise recompute a slight detour to target
-      if (L < arriveNode + hysteresis) {
-        c.pathIndex++;
-      } else if (target) {
-        const p = this.computePath(c.x, c.y, target.x, target.y);
-        if (p && p.length) { c.path = p; c.pathIndex = 0; }
-      }
-      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined;
-      if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false;
-    }
     // Movement speed; boost if standing on a path tile
-  let speed = c.speed * ((c as any).fatigueSlow || 1);
+    let speed = c.speed * ((c as any).fatigueSlow || 1);
     {
       const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);
       const inBounds = gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows;
@@ -769,13 +742,46 @@ export class Game {
         if (this.grid.cost[idx] <= 0.7) speed *= 1.125;
       }
     }
-    // Prevent overshoot that causes ping-pong around node
+    // Prevent overshoot that causes ping-pong around node: snap to node if close or step would overshoot
     const step = speed * dt;
-    if (step >= L) {
+    if (L <= Math.max(arriveNode, step)) {
+      // Snap to node and advance
       c.x = node.x; c.y = node.y;
-    } else {
-      c.x += (dx / (L || 1)) * step; c.y += (dy / (L || 1)) * step;
+      c.pathIndex++;
+      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
+      if (c.pathIndex >= c.path.length) { c.path = undefined; c.pathIndex = undefined; if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive; return true; }
+      return false;
     }
+
+    // Jitter detection: only react to true oscillation (distance trend sign flip) when near the node
+    c.jitterWindow = (c.jitterWindow || 0) + dt;
+    if (c.lastDistToNode != null) {
+      const delta = L - c.lastDistToNode;
+      const sign = delta === 0 ? 0 : (delta > 0 ? 1 : -1);
+      const prevSign = (c as any).lastDistSign ?? sign;
+      // Count as jitter only if the distance trend flips while we're reasonably near the node
+      if (sign !== 0 && prevSign !== 0 && sign !== prevSign && L < arriveNode + 10) {
+        c.jitterScore = (c.jitterScore || 0) + 1;
+      } else {
+        c.jitterScore = Math.max(0, (c.jitterScore || 0) - 1);
+      }
+      (c as any).lastDistSign = sign;
+    }
+    c.lastDistToNode = L;
+    if ((c.jitterScore || 0) >= 6 || (c.jitterWindow || 0) > 1.5) {
+      // If very close to node, just advance; otherwise, try a light replan once
+      if (L < arriveNode + hysteresis) {
+        c.pathIndex++;
+      } else if (target) {
+        const p = this.computePath(c.x, c.y, target.x, target.y);
+        if (p && p.length) { c.path = p; c.pathIndex = 0; }
+      }
+      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
+      if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false;
+    }
+
+    // Take a step toward the node
+    c.x += (dx / (L || 1)) * step; c.y += (dy / (L || 1)) * step;
     c.x = Math.max(0, Math.min(c.x, WORLD.w)); c.y = Math.max(0, Math.min(c.y, WORLD.h));
     return false;
   }
