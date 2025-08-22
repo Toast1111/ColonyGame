@@ -246,12 +246,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'eat': {
       // Go to HQ, warehouse, or storage to eat
       const canEat = (game.RES.food || 0) > 0;
+      
+      // Debug: Always log when colonist is in eat state
+      if (Math.random() < 0.1) {
+        console.log(`COLONIST IN EAT STATE: food=${game.RES.food}, hunger=${c.hunger}, stateSince=${c.stateSince.toFixed(1)}, position=(${c.x.toFixed(1)}, ${c.y.toFixed(1)})`);
+      }
+      
       if (!canEat) {
         // No food available; if night, try to sleep, else continue tasks
         // Add hunger damage over time when stuck in eat state without food
         if (c.stateSince > 1.0) {
           c.hp = Math.max(0, c.hp - 2.5 * dt); // Slow starvation damage
         }
+        console.log(`NO FOOD AVAILABLE! Colonist will continue tasks or sleep.`);
         c.state = game.isNight() ? 'sleep' : 'seekTask'; c.stateSince = 0;
         break;
       }
@@ -262,6 +269,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         b.done
         // Removed buildingHasSpace check - colonists don't need to enter food buildings
       );
+
+      // Debug: Log available buildings
+      console.log(`FOOD BUILDING SEARCH: Found ${foodBuildings.length} food buildings:`, foodBuildings.map((b: any) => `${b.kind} at (${(b.x + b.w/2).toFixed(1)}, ${(b.y + b.h/2).toFixed(1)})`));
+      console.log(`ALL BUILDINGS:`, game.buildings.filter((b: any) => b.done).map((b: any) => `${b.kind}(done=${b.done})`));
 
       if (foodBuildings.length === 0) {
         // No accessible food buildings, just eat on the spot if we've been waiting
@@ -293,20 +304,21 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const reachDist = Math.max(closestBuilding.w, closestBuilding.h) / 2 + c.r + 15; // Increased from 10 to 15
         
         // Debug logging for eating issues
-        if (Math.random() < 0.02) { // Log occasionally
-          console.log(`Eating: colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}), building at (${center.x.toFixed(1)}, ${center.y.toFixed(1)}), distance=${closestDist.toFixed(1)}, reachDist=${reachDist.toFixed(1)}, food=${game.RES.food}, stateSince=${c.stateSince.toFixed(1)}`);
-        }
+        console.log(`EATING ATTEMPT: colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}), building at (${center.x.toFixed(1)}, ${center.y.toFixed(1)}), distance=${closestDist.toFixed(1)}, reachDist=${reachDist.toFixed(1)}, food=${game.RES.food}, stateSince=${c.stateSince.toFixed(1)}`);
         
         if (closestDist <= reachDist) {
+          console.log(`CLOSE ENOUGH TO EAT! Waiting for stateSince > 0.6...`);
           // Close enough to eat
           if (c.stateSince > 0.6) {
+            console.log(`EATING NOW! Before: food=${game.RES.food}, hunger=${c.hunger}`);
             game.RES.food -= 1;
             c.hunger = Math.max(0, (c.hunger || 0) - 40);
             c.hp = Math.min(100, c.hp + 2.5);
             c.state = 'seekTask'; c.stateSince = 0;
-            console.log(`Colonist successfully ate! Food remaining: ${game.RES.food}, hunger reduced to ${c.hunger}`);
+            console.log(`EATEN! After: food=${game.RES.food}, hunger=${c.hunger}`);
           }
         } else {
+          console.log(`TOO FAR FROM BUILDING, MOVING CLOSER...`);
           // Move toward the food building
           moveTowardsSafely(game, c, center.x, center.y, dt, 1.2); // Slightly faster when hungry
         }
