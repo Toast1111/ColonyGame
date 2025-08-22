@@ -185,6 +185,34 @@ export class Game {
       e.preventDefault();
       if ((e as MouseEvent).button === 0) {
         this.mouse.down = true;
+        // If precise placement UI active, handle mouse clicks like taps
+        if (this.pendingPlacement) {
+          const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+          // Buttons first
+          if (this.placeUIRects.length) {
+            for (const r of this.placeUIRects) {
+              if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+                if (r.id === 'up') this.nudgePending(0, -1);
+                else if (r.id === 'down') this.nudgePending(0, 1);
+                else if (r.id === 'left') this.nudgePending(-1, 0);
+                else if (r.id === 'right') this.nudgePending(1, 0);
+                else if (r.id === 'ok') this.confirmPending();
+                else if (r.id === 'cancel') this.cancelPending();
+                return;
+              }
+            }
+          }
+          // Ghost hit = confirm; else move ghost to clicked tile
+          const p = this.pendingPlacement; const def = BUILD_TYPES[p.key];
+          const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
+          const g = toScreen(p.x, p.y);
+          const gw = def.size.w * T * this.camera.zoom; const gh = def.size.h * T * this.camera.zoom;
+          if (mx >= g.x && mx <= g.x + gw && my >= g.y && my <= g.y + gh) { this.confirmPending(); return; }
+          const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
+          const w = def.size.w * T, h = def.size.h * T;
+          p.x = clamp(gx, 0, WORLD.w - w); p.y = clamp(gy, 0, WORLD.h - h);
+          return;
+        }
         // Detect hotbar click before anything else
         const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
         for (const r of this.hotbarRects) {
@@ -245,20 +273,35 @@ export class Game {
     const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
     this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
 
-    // If precise placement UI is active, handle its buttons first
-    if (this.pendingPlacement && this.placeUIRects.length) {
+    // If precise placement UI is active, handle its buttons or move/confirm by tapping
+    if (this.pendingPlacement) {
       const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-      for (const r of this.placeUIRects) {
-        if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-          if (r.id === 'up') this.nudgePending(0, -1);
-          else if (r.id === 'down') this.nudgePending(0, 1);
-          else if (r.id === 'left') this.nudgePending(-1, 0);
-          else if (r.id === 'right') this.nudgePending(1, 0);
-          else if (r.id === 'ok') this.confirmPending();
-          else if (r.id === 'cancel') this.cancelPending();
-          return;
+      // 1) Button hits (screen-space)
+      if (this.placeUIRects.length) {
+        for (const r of this.placeUIRects) {
+          if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+            if (r.id === 'up') this.nudgePending(0, -1);
+            else if (r.id === 'down') this.nudgePending(0, 1);
+            else if (r.id === 'left') this.nudgePending(-1, 0);
+            else if (r.id === 'right') this.nudgePending(1, 0);
+            else if (r.id === 'ok') this.confirmPending();
+            else if (r.id === 'cancel') this.cancelPending();
+            return;
+          }
         }
       }
+      // 2) Tap on ghost = confirm, tap elsewhere = move ghost to tapped tile
+      const p = this.pendingPlacement; const def = BUILD_TYPES[p.key];
+      // Compute ghost screen rect
+      const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
+      const g = toScreen(p.x, p.y);
+      const gw = def.size.w * T * this.camera.zoom; const gh = def.size.h * T * this.camera.zoom;
+      if (mx >= g.x && mx <= g.x + gw && my >= g.y && my <= g.y + gh) { this.confirmPending(); return; }
+      // Move pending to tapped world position (snap to grid)
+      const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
+      const w = def.size.w * T, h = def.size.h * T;
+      p.x = clamp(gx, 0, WORLD.w - w); p.y = clamp(gy, 0, WORLD.h - h);
+      return;
     }
 
     // Hotbar selection
@@ -935,7 +978,7 @@ export class Game {
     for (const e of this.enemies) drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
     drawBullets(ctx, this.bullets);
     if (this.isNight()) { ctx.fillStyle = `rgba(6,10,18, 0.58)`; ctx.fillRect(0, 0, WORLD.w, WORLD.h); }
-    if (this.selectedBuild) {
+  if (this.selectedBuild && !this.pendingPlacement) {
       const def = BUILD_TYPES[this.selectedBuild];
   const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
   const can = this.canPlace({ ...def, size: def.size } as any, gx, gy) && hasCost(this.RES, def.cost);
@@ -1316,17 +1359,27 @@ export class Game {
     const p = this.pendingPlacement; if (!p) return;
     const def = BUILD_TYPES[p.key];
     const ctx = this.ctx; const w = def.size.w * T; const h = def.size.h * T;
-    // Ghost footprint at pending position
+    // Convert world to screen coords (device pixels)
+    const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
+    const scr = toScreen(p.x, p.y);
+    const sw = w * this.camera.zoom;
+    const sh = h * this.camera.zoom;
+
+    // Ghost at pending position (overlay)
     ctx.save();
-    ctx.globalAlpha = .6; ctx.fillStyle = COLORS.ghost; ctx.fillRect(p.x, p.y, w, h); ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#4b9fff'; ctx.setLineDash([4,3]); ctx.strokeRect(p.x + .5, p.y + .5, w - 1, h - 1); ctx.setLineDash([]);
+    ctx.globalAlpha = .6; ctx.fillStyle = COLORS.ghost; ctx.fillRect(scr.x, scr.y, sw, sh); ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#4b9fff'; ctx.setLineDash([4,3]); ctx.strokeRect(scr.x + .5, scr.y + .5, sw - 1, sh - 1); ctx.setLineDash([]);
     ctx.restore();
 
-    // On-canvas controls near the ghost
+    // Controls near the ghost, in screen space
     const pad = this.scale(10);
     const btn = this.scale(38);
-    const cx = p.x + w + pad; // control origin to the right of the ghost
-    const cy = p.y; // top align
+    let cx = scr.x + sw + pad; // default to right of ghost
+    let cy = scr.y;
+    // If off right edge, place to the left
+    const maxW = this.canvas.width;
+    if (cx + btn * 3 > maxW - this.scale(6)) cx = Math.max(this.scale(6), scr.x - pad - btn * 3);
+
     const makeRect = (id: any, x: number, y: number) => ({ id, x, y, w: btn, h: btn });
     const rects = [
       makeRect('up', cx + btn, cy),
@@ -1336,7 +1389,7 @@ export class Game {
       makeRect('cancel', cx, cy + btn * 3 + this.scale(4)),
       makeRect('ok', cx + btn * 2, cy + btn * 3 + this.scale(4)),
     ];
-    this.placeUIRects = rects as any;
+    this.placeUIRects = rects as any; // store screen-space rects for hit testing
     ctx.save();
     ctx.fillStyle = '#0f172aee'; ctx.strokeStyle = '#1e293b';
     const drawBtn = (r: any, label: string) => { ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1); ctx.fillStyle = '#dbeafe'; ctx.font = this.getScaledFont(18, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + this.scale(2)); ctx.fillStyle = '#0f172aee'; };
