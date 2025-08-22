@@ -159,8 +159,8 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
 
 export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, parts: { res: { wood: number; stone: number; food: number }, colonists: number, cap: number, hiding: number, day: number, tDay: number, isNight: boolean, hotbar: Array<{ key: string; name: string; cost: string; selected: boolean }>, messages: Message[], storage?: { used: number; max: number } }, game: any) {
   const scale = game.uiScale;
-  const PAD = game.scale(10);
-  const BARH = game.scale(34);
+  const PAD = game.scale(game.isTouch ? 14 : 10);
+  const BARH = game.scale(game.isTouch ? 56 : 44);
   const W = canvas.width;
   
   // Top bar background
@@ -172,67 +172,75 @@ export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement
   
   // Resource bars
   ctx.fillStyle = '#dbeafe'; 
-  ctx.font = game.getScaledFont(14, '600');
+  ctx.font = game.getScaledFont(game.isTouch ? 18 : 16, '600');
   let x = PAD;
   
-  const resourceSpacing = game.scale(140);
-  pill(ctx, x, game.scale(8), `Wood: ${Math.floor(parts.res.wood)}`, '#b08968', game); x += resourceSpacing;
-  pill(ctx, x, game.scale(8), `Stone: ${Math.floor(parts.res.stone)}`, '#9aa5b1', game); x += Math.max(resourceSpacing, game.scale(150));
-  pill(ctx, x, game.scale(8), `Food: ${Math.floor(parts.res.food)}`, '#9ae6b4', game); x += resourceSpacing;
+  const dynamicSpace = Math.max(game.scale(game.isTouch ? 170 : 130), Math.min(game.scale(game.isTouch ? 260 : 220), Math.round(canvas.width * 0.14)));
+  pill(ctx, x, game.scale(12), `Wood: ${Math.floor(parts.res.wood)}`, '#b08968', game); x += dynamicSpace;
+  pill(ctx, x, game.scale(12), `Stone: ${Math.floor(parts.res.stone)}`, '#9aa5b1', game); x += Math.max(dynamicSpace, game.scale(game.isTouch ? 220 : 180));
+  pill(ctx, x, game.scale(12), `Food: ${Math.floor(parts.res.food)}`, '#9ae6b4', game); x += dynamicSpace;
   
   // Storage capacity display
   if (parts.storage) {
     const storagePercent = Math.floor(parts.storage.used / parts.storage.max * 100);
     const storageColor = storagePercent > 90 ? '#ef4444' : storagePercent > 70 ? '#eab308' : '#22c55e';
-    pill(ctx, x, game.scale(8), `Storage: ${Math.floor(parts.storage.used)}/${parts.storage.max} (${storagePercent}%)`, storageColor, game); 
-    x += game.scale(180);
+    pill(ctx, x, game.scale(12), `Storage: ${Math.floor(parts.storage.used)}/${parts.storage.max} (${storagePercent}%)`, storageColor, game); 
+    x += Math.max(dynamicSpace, game.scale(game.isTouch ? 260 : 200));
   }
   
   const popText = `Colonists: ${parts.colonists}/${parts.cap}`; 
-  pill(ctx, x, game.scale(8), popText, '#93c5fd', game); x += Math.max(resourceSpacing, game.scale(190));
+  pill(ctx, x, game.scale(12), popText, '#93c5fd', game); x += Math.max(dynamicSpace, game.scale(game.isTouch ? 260 : 210));
   const hidText = `Hiding: ${parts.hiding}`; 
-  pill(ctx, x, game.scale(8), hidText, '#60a5fa', game); x += game.scale(120);
-  const timeText = `Day ${parts.day} — ${(parts.tDay * 24) | 0}:00 ${parts.isNight ? '🌙' : '☀️'}`; 
-  pill(ctx, x, game.scale(8), timeText, parts.isNight ? '#ffd166' : '#6ee7ff', game);
+  pill(ctx, x, game.scale(12), hidText, '#60a5fa', game); x += Math.max(game.scale(game.isTouch ? 180 : 140), dynamicSpace * 0.9 | 0);
+  const timeText = `Day ${parts.day} — ${(parts.tDay * 24) | 0}:00 ${parts.isNight ? '🌙' : '☀️'}`;
+  pill(ctx, x, game.scale(12), timeText, parts.isNight ? '#ffd166' : '#6ee7ff', game);
   
   // Hotbar
-  const hbY = canvas.height - game.scale(46); 
-  const hbItemW = Math.max(game.scale(120), Math.min(game.scale(180), (canvas.width - PAD * 2) / parts.hotbar.length));
+  const hbY = canvas.height - game.scale(game.isTouch ? 86 : 64); 
+  const hbItemW = Math.max(game.scale(game.isTouch ? 170 : 140), Math.min(game.scale(game.isTouch ? 260 : 220), (canvas.width - PAD * 2) / parts.hotbar.length));
   x = PAD;
   
   ctx.fillStyle = '#0b122088'; 
-  ctx.fillRect(0, hbY, canvas.width, game.scale(46));
+  ctx.fillRect(0, hbY, canvas.width, game.scale(game.isTouch ? 86 : 64));
   ctx.strokeStyle = '#1e293b'; 
-  ctx.strokeRect(0, hbY + .5, canvas.width, game.scale(46));
-  ctx.font = game.getScaledFont(13);
+  ctx.strokeRect(0, hbY + .5, canvas.width, game.scale(game.isTouch ? 86 : 64));
+  ctx.font = game.getScaledFont(game.isTouch ? 17 : 15);
   
   for (let i = 0; i < parts.hotbar.length; i++) {
     const h = parts.hotbar[i];
-    drawHot(ctx, x + game.scale(2), hbY + game.scale(6), hbItemW - game.scale(6), game.scale(34), `${i + 1}. ${h.name}`, h.cost, h.selected, game);
+    const rx = x + game.scale(2);
+    const ry = hbY + game.scale(game.isTouch ? 14 : 10);
+    const rw = hbItemW - game.scale(6);
+    const rh = game.scale(game.isTouch ? 60 : 44);
+    drawHot(ctx, rx, ry, rw, rh, `${i + 1}. ${h.name}`, h.cost, h.selected, game);
+    // Record rect for click/tap detection
+    if (Array.isArray(game.hotbarRects)) {
+      game.hotbarRects[i] = { index: i, x: rx, y: ry, w: rw, h: rh };
+    }
     x += hbItemW;
   }
   
   // Messages - responsive positioning
-  let my = BARH + game.scale(6);
-  const msgWidth = Math.min(game.scale(360), canvas.width - PAD * 2);
+  let my = BARH + game.scale(game.isTouch ? 12 : 8);
+  const msgWidth = Math.min(game.scale(game.isTouch ? 520 : 420), canvas.width - PAD * 2);
   for (let i = parts.messages.length - 1; i >= 0; i--) { 
     const m = parts.messages[i]; 
     drawMsg(ctx, W - msgWidth - PAD, my, m.text, msgWidth, game); 
-    my += game.scale(22); 
+    my += game.scale(game.isTouch ? 34 : 26); 
   }
 }
 
 function pill(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, color: string, game: any) {
-  const w = ctx.measureText(text).width + game.scale(18); 
-  const h = game.scale(20);
+  const w = ctx.measureText(text).width + game.scale(game.isTouch ? 28 : 24); 
+  const h = game.scale(game.isTouch ? 32 : 26);
   ctx.fillStyle = '#0f172a'; 
   ctx.fillRect(x, y, w, h); 
   ctx.strokeStyle = '#1e293b'; 
   ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
   ctx.fillStyle = color; 
-  ctx.fillRect(x + game.scale(2), y + game.scale(2), game.scale(6), h - game.scale(4));
+  ctx.fillRect(x + game.scale(3), y + game.scale(3), game.scale(game.isTouch ? 10 : 8), h - game.scale(6));
   ctx.fillStyle = '#dbeafe'; 
-  ctx.fillText(text, x + game.scale(12), y + game.scale(14));
+  ctx.fillText(text, x + game.scale(game.isTouch ? 18 : 16), y + game.scale(game.isTouch ? 22 : 18));
 }
 
 function drawHot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, label: string, cost: string, selected: boolean, game: any) {
@@ -241,17 +249,17 @@ function drawHot(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
   ctx.strokeStyle = selected ? '#4b9fff' : '#1e293b'; 
   ctx.strokeRect(x + .5, y + .5, w - 1, h - 1);
   ctx.fillStyle = '#dbeafe'; 
-  ctx.fillText(label, x + game.scale(8), y + game.scale(20));
+  ctx.fillText(label, x + game.scale(10), y + game.scale(game.isTouch ? 36 : 28));
   ctx.fillStyle = '#9fb3c8'; 
-  ctx.fillText(cost, x + w - game.scale(48), y + game.scale(20));
+  ctx.fillText(cost, x + w - game.scale(game.isTouch ? 66 : 56), y + game.scale(game.isTouch ? 36 : 28));
 }
 
 function drawMsg(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, width: number, game: any) {
-  const h = game.scale(20);
+  const h = game.scale(game.isTouch ? 30 : 24);
   ctx.fillStyle = '#0f172aee'; 
   ctx.fillRect(x, y, width, h);
   ctx.strokeStyle = '#1e293b'; 
   ctx.strokeRect(x + .5, y + .5, width - 1, h - 1);
   ctx.fillStyle = '#dbeafe'; 
-  ctx.fillText(text, x + game.scale(8), y + game.scale(14));
+  ctx.fillText(text, x + game.scale(10), y + game.scale(game.isTouch ? 20 : 16));
 }

@@ -15,6 +15,8 @@ export class Game {
   // UI Scaling system
   uiScale = 1;
   baseFontSize = 14;
+  // Touch capability flag for responsive UI sizing
+  isTouch = false;
   
   RES = { wood: 0, stone: 0, food: 0 };
   BASE_STORAGE = 200; // Base storage capacity
@@ -81,6 +83,7 @@ export class Game {
   lastPaintCell: { gx: number; gy: number } | null = null;
   eraseDragStart: { x: number; y: number } | null = null;
   menuRects: Array<{ key: keyof typeof BUILD_TYPES; x: number; y: number; w: number; h: number }> = [];
+  hotbarRects: Array<{ index: number; x: number; y: number; w: number; h: number }> = [];
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -95,7 +98,10 @@ export class Game {
   }
 
   handleResize = () => {
-    const w = window.innerWidth, h = window.innerHeight - 48;
+    // Use actual header height for accurate canvas sizing across responsive layouts
+    const headerEl = document.querySelector('header') as HTMLElement | null;
+    const headerH = headerEl ? Math.ceil(headerEl.getBoundingClientRect().height) : 48;
+    const w = window.innerWidth, h = window.innerHeight - headerH;
     this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
     this.canvas.width = Math.floor(w * this.DPR); this.canvas.height = Math.floor(h * this.DPR);
     
@@ -115,16 +121,32 @@ export class Game {
     
     // Use the smaller scale to ensure UI fits
     let scale = Math.min(widthScale, heightScale);
-    
-    // Apply minimum and maximum bounds
-    scale = Math.max(0.7, Math.min(scale, 2.5)); // Min 70%, Max 250%
-    
-    // Boost scale for very small screens (mobile)
-    if (currentWidth < 768) {
-      scale *= 1.4; // 40% larger on mobile
-    } else if (currentWidth < 1200) {
-      scale *= 1.2; // 20% larger on tablets
+
+    // Heuristic boosts for touch devices and smaller screens
+    const isTouch = (("ontouchstart" in window) || (navigator as any).maxTouchPoints > 0);
+    this.isTouch = isTouch;
+    if (isTouch) {
+      // Aggressive readability boosts for touch devices
+      if (currentWidth < 600) {
+        // Phones
+        scale = Math.max(scale * 1.9, 1.6);
+      } else if (currentWidth <= 900) {
+        // Small tablets (e.g., iPad portrait 820px)
+        scale = Math.max(scale * 1.7, 1.5);
+      } else if (currentWidth <= 1200) {
+        // Larger tablets / small laptops with touch
+        scale = Math.max(scale * 1.5, 1.35);
+      } else {
+        // Large touch screens
+        scale = Math.max(scale * 1.25, scale);
+      }
+    } else {
+      // Non-touch small/medium displays
+      if (currentWidth < 1200) scale *= 1.1;
     }
+
+    // Apply final bounds (higher floor improves readability on tablets)
+    scale = Math.max(1.1, Math.min(scale, 3.0));
     
     this.uiScale = scale;
     console.log(`UI Scale calculated: ${scale.toFixed(2)} for ${currentWidth}x${currentHeight}`);
@@ -157,8 +179,18 @@ export class Game {
       }
     });
     c.addEventListener('mousedown', (e) => {
+      e.preventDefault();
       if ((e as MouseEvent).button === 0) {
         this.mouse.down = true;
+        // Detect hotbar click before anything else
+        const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+        for (const r of this.hotbarRects) {
+          if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+            const key = this.hotbar[r.index];
+            if (key) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); }
+            return;
+          }
+        }
         if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
         if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); }
         else if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); }
@@ -176,6 +208,7 @@ export class Game {
       }
     });
     c.addEventListener('mouseup', (e) => {
+      e.preventDefault();
       if ((e as MouseEvent).button === 0) { this.mouse.down = false; this.lastPaintCell = null; }
       if ((e as MouseEvent).button === 2) {
         if (this.eraseDragStart) {
@@ -197,6 +230,38 @@ export class Game {
     });
   window.addEventListener('keydown', (e) => { const k = (e as KeyboardEvent).key.toLowerCase(); this.keyState[k] = true; if (!this.once.has(k)) this.once.add(k); });
     window.addEventListener('keyup', (e) => { this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; });
+  }
+
+  // Handle a tap/click at screen-space coordinates (sx, sy)
+  // Mirrors the left mouse button logic to support touch taps.
+  handleTapOrClickAtScreen(sx: number, sy: number) {
+    const c = this.canvas;
+    const rect = c.getBoundingClientRect();
+    this.mouse.x = sx;
+    this.mouse.y = sy;
+    const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
+    this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+
+    // Hotbar selection
+    const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+    for (const r of this.hotbarRects) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        const key = this.hotbar[r.index];
+        if (key) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); }
+        return;
+      }
+    }
+
+    // Build menu click
+    if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+
+    // Building/selection logic
+    if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
+    if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); return; }
+
+    const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+    if (col) { this.selColonist = col; this.follow = true; return; }
+    this.placeAtMouse();
   }
 
   findColonistAt(x: number, y: number): Colonist | null {
@@ -1021,9 +1086,13 @@ export class Game {
     const cw = this.canvas.width; 
     const ch = this.canvas.height;
     
-    // Responsive panel sizing
-    const W = Math.min(this.scale(760), cw - this.scale(40)); 
-    const H = Math.min(this.scale(520), ch - this.scale(80)); 
+  // Responsive panel sizing (larger on touch devices)
+  const baseW = this.isTouch ? 980 : 860;
+  const baseH = this.isTouch ? 720 : 620;
+  const sidePad = this.isTouch ? 28 : 40;
+  const topPad = this.isTouch ? 60 : 80;
+  const W = Math.min(this.scale(baseW), cw - this.scale(sidePad)); 
+  const H = Math.min(this.scale(baseH), ch - this.scale(topPad)); 
     const X = (cw - W) / 2; 
     const Y = (ch - H) / 2;
     
@@ -1033,13 +1102,13 @@ export class Game {
     ctx.strokeStyle = '#1e293b'; 
     ctx.strokeRect(X + .5, Y + .5, W - 1, H - 1);
     
-    ctx.fillStyle = '#dbeafe'; 
-    ctx.font = this.getScaledFont(16, '600'); 
+  ctx.fillStyle = '#dbeafe'; 
+  ctx.font = this.getScaledFont(this.isTouch ? 22 : 18, '600'); 
     ctx.fillText('Build Menu (B to close)', X + this.scale(14), Y + this.scale(24));
     
     const groups = groupByCategory(BUILD_TYPES);
     const cats = Object.keys(groups);
-    const padding = this.scale(24);
+  const padding = this.scale(this.isTouch ? 36 : 28);
     const colW = Math.floor((W - padding) / Math.max(1, cats.length));
     
     this.menuRects = [];
@@ -1047,18 +1116,18 @@ export class Game {
     
     for (let i = 0; i < cats.length; i++) {
       const cx = X + this.scale(12) + i * colW; 
-      let cy = Y + this.scale(44);
+  let cy = Y + this.scale(50);
       const cat = cats[i];
       
-      ctx.fillStyle = '#93c5fd'; 
-      ctx.font = this.getScaledFont(13, '600');
+  ctx.fillStyle = '#93c5fd'; 
+  ctx.font = this.getScaledFont(this.isTouch ? 18 : 15, '600');
       ctx.fillText(cat, cx, cy);
-      cy += this.scale(8);
+  cy += this.scale(this.isTouch ? 12 : 8);
       
       const items = groups[cat];
       for (const [key, d] of items) {
-        cy += this.scale(8);
-        const rowH = this.scale(48); // Increased height for descriptions
+  cy += this.scale(this.isTouch ? 12 : 8);
+  const rowH = this.scale(this.isTouch ? 78 : 58); // Taller rows for readability and touch
         const rw = colW - this.scale(18); 
         const rx = cx; 
         const ry = cy;
@@ -1075,22 +1144,22 @@ export class Game {
         ctx.strokeRect(rx + .5, ry + .5, rw - 1, rowH - 1);
         
         // Building name
-        ctx.fillStyle = '#dbeafe'; 
-        ctx.font = this.getScaledFont(13, '600');
-        ctx.fillText(d.name, rx + this.scale(8), ry + this.scale(16));
+  ctx.fillStyle = '#dbeafe'; 
+  ctx.font = this.getScaledFont(this.isTouch ? 18 : 15, '600');
+  ctx.fillText(d.name, rx + this.scale(10), ry + this.scale(this.isTouch ? 22 : 18));
         
         // Cost
         const cost = this.costText(d.cost || {});
-        ctx.fillStyle = '#9fb3c8'; 
-        ctx.font = this.getScaledFont(11);
-        const costWidth = Math.min(this.scale(80), ctx.measureText(cost).width + this.scale(2));
-        ctx.fillText(cost, rx + rw - costWidth, ry + this.scale(16));
+  ctx.fillStyle = '#9fb3c8'; 
+  ctx.font = this.getScaledFont(this.isTouch ? 14 : 12);
+  const costWidth = Math.min(this.scale(this.isTouch ? 120 : 100), ctx.measureText(cost).width + this.scale(4));
+  ctx.fillText(cost, rx + rw - costWidth, ry + this.scale(this.isTouch ? 22 : 18));
         
         // Description (truncated to fit)
         if (d.description) {
           ctx.fillStyle = '#94a3b8'; 
-          ctx.font = this.getScaledFont(10);
-          const maxDescWidth = rw - this.scale(16);
+          ctx.font = this.getScaledFont(this.isTouch ? 14 : 12);
+          const maxDescWidth = rw - this.scale(18);
           let desc = d.description;
           
           // Truncate description if too long
@@ -1098,7 +1167,7 @@ export class Game {
             desc = desc.substring(0, desc.length - 4) + '...';
           }
           
-          ctx.fillText(desc, rx + this.scale(8), ry + this.scale(32));
+          ctx.fillText(desc, rx + this.scale(10), ry + this.scale(this.isTouch ? 46 : 36));
         }
         
         // Store for hover tooltip
@@ -1107,20 +1176,20 @@ export class Game {
         }
         
         this.menuRects.push({ key: key as keyof typeof BUILD_TYPES, x: rx, y: ry, w: rw, h: rowH });
-        cy += rowH;
+  cy += rowH;
         
-        if (cy > Y + H - this.scale(60)) break; // stop overflow
+  if (cy > Y + H - this.scale(this.isTouch ? 90 : 70)) break; // stop overflow
       }
     }
     
     // Draw detailed tooltip for hovered item
     if (hoveredItem) {
-      const tooltipPadding = this.scale(12);
-      const tooltipMaxWidth = this.scale(300);
+  const tooltipPadding = this.scale(this.isTouch ? 16 : 14);
+  const tooltipMaxWidth = this.scale(this.isTouch ? 420 : 360);
       
-      ctx.font = this.getScaledFont(12);
+  ctx.font = this.getScaledFont(this.isTouch ? 16 : 14);
       const lines = this.wrapText(hoveredItem.desc, tooltipMaxWidth - tooltipPadding * 2);
-      const lineHeight = this.scale(16);
+  const lineHeight = this.scale(this.isTouch ? 20 : 18);
       const tooltipHeight = lines.length * lineHeight + tooltipPadding * 2;
       
       const mx = this.mouse.x * this.DPR;
@@ -1133,7 +1202,7 @@ export class Game {
       if (tooltipY < 0) tooltipY = my + this.scale(20);
       
       // Tooltip background
-      ctx.fillStyle = '#0f1419f0';
+  ctx.fillStyle = '#0f1419f0';
       ctx.fillRect(tooltipX, tooltipY, tooltipMaxWidth, tooltipHeight);
       ctx.strokeStyle = '#374151';
       ctx.strokeRect(tooltipX + .5, tooltipY + .5, tooltipMaxWidth - 1, tooltipHeight - 1);
@@ -1147,10 +1216,10 @@ export class Game {
     
     // Instructions
     ctx.fillStyle = '#9fb3c8'; 
-    ctx.font = this.getScaledFont(12);
+  ctx.font = this.getScaledFont(this.isTouch ? 16 : 14);
     const instructionText = 'Click a building to select • Hover for details • Press B to close';
     const textWidth = ctx.measureText(instructionText).width;
-    ctx.fillText(instructionText, (cw - textWidth) / 2, Y + H + this.scale(20));
+  ctx.fillText(instructionText, (cw - textWidth) / 2, Y + H + this.scale(this.isTouch ? 30 : 24));
     
     ctx.restore();
   }
