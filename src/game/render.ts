@@ -111,8 +111,46 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
       ctx.strokeStyle = '#0b0f14cc'; 
       ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
     }
-  } else {
-    // Default building rendering for non-house buildings
+  } 
+  // Special handling for farm buildings with growth stage images
+  else if (b.kind === 'farm' && b.done) {
+    const assets = ImageAssets.getInstance();
+    
+    // Determine which growth stage to show based on growth progress
+    const growth = b.growth || 0;
+    let stageName = 'wheat_stage_1'; // Default to stage 1 (just planted)
+    
+    if (growth >= 0.67) {
+      stageName = 'wheat_stage_3'; // Ready to harvest
+    } else if (growth >= 0.33) {
+      stageName = 'wheat_stage_2'; // Growing
+    }
+    
+    const wheatImg = assets.getImage(stageName);
+    
+    if (wheatImg && assets.isLoaded()) {
+      // Draw the wheat image, scaled to fit the building size
+      ctx.drawImage(wheatImg, b.x, b.y, b.w, b.h);
+      
+      // Add border for consistency
+      ctx.strokeStyle = '#0b0f14cc'; 
+      ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+    } else {
+      // Fallback to colored rectangle with growth indicator if image isn't loaded
+      ctx.fillStyle = b.color; 
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.strokeStyle = '#0b0f14cc'; 
+      ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+      
+      // Draw a simple growth progress bar as fallback
+      if (growth > 0) {
+        ctx.fillStyle = '#4ade80'; // Green progress
+        ctx.fillRect(b.x + 2, b.y + b.h - 4, (b.w - 4) * Math.min(growth, 1), 2);
+      }
+    }
+  } 
+  else {
+    // Default building rendering for non-house, non-farm buildings
     ctx.fillStyle = b.color; 
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#0b0f14cc'; 
@@ -126,12 +164,12 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.fillRect(b.x, b.y - 6, pct * b.w, 4);
   }
 
-  // Building labels (skip for houses since they have the image)
-  if (b.kind !== 'house') {
+  // Building labels (skip for houses and completed farms since they have images)
+  if (b.kind !== 'house' && !(b.kind === 'farm' && b.done)) {
     ctx.fillStyle = '#0b0f14aa'; ctx.font = 'bold 12px system-ui';
     const cx = b.x + b.w / 2; const cy = b.y + b.h / 2; let letter = 'B';
     if (b.kind === 'hq') letter = 'HQ';
-    else if (b.kind === 'farm') letter = b.ready ? 'F*' : 'F';
+    else if (b.kind === 'farm') letter = 'F'; // Only for farms under construction
     else if (b.kind === 'turret') letter = 'T';
     else if (b.kind === 'wall') letter = 'W';
     else if (b.kind === 'stock') letter = 'S';

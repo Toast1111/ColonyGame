@@ -1,5 +1,8 @@
 // Asset loading system for building images
 import BuildingHouseImg from './BuildingHouse.png';
+import WheatStage1Img from './farm/wheat_stage_one.png';
+import WheatStage2Img from './farm/wheat_stage_two.png';
+import WheatStage3Img from './farm/wheat_stage_three.png';
 
 export class ImageAssets {
   private static instance: ImageAssets;
@@ -15,7 +18,10 @@ export class ImageAssets {
 
   async loadAssets(): Promise<void> {
     const assets = [
-      { name: 'house', path: BuildingHouseImg }
+      { name: 'house', path: BuildingHouseImg },
+      { name: 'wheat_stage_1', path: WheatStage1Img },
+      { name: 'wheat_stage_2', path: WheatStage2Img },
+      { name: 'wheat_stage_3', path: WheatStage3Img }
     ];
 
     const loadPromises = assets.map(asset => this.loadImage(asset.name, asset.path));
