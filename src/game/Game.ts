@@ -3,9 +3,10 @@ import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPat
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources } from "./types";
 import { BUILD_TYPES, hasCost, makeBuilding, payCost, groupByCategory } from "./buildings";
-import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon } from "./render";
+import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { updateColonistFSM } from "../ai/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
+import { generateColonistProfile, getColonistDescription, getColonistMood } from "./colonistGenerator";
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -439,8 +440,19 @@ export class Game {
   }
 
   spawnColonist(pos: { x: number; y: number }) {
-    const c: Colonist = { x: pos.x, y: pos.y, r: 8, hp: 100, speed: 50, task: null, target: null, carrying: null, hunger: 0, alive: true, color: COLORS.colonist, t: rand(0, 1) };
-    this.colonists.push(c); return c;
+    const profile = generateColonistProfile();
+    const c: Colonist = { 
+      x: pos.x, y: pos.y, r: 8, hp: 100, 
+      speed: 50 * profile.stats.workSpeed, // Apply work speed modifier
+      task: null, target: null, carrying: null, 
+      hunger: 0, alive: true, color: profile.avatar.clothing, 
+      t: rand(0, 1),
+      direction: 0, // Initialize facing direction (0 = facing right)
+      profile: profile
+    };
+    this.colonists.push(c); 
+    this.msg(`${getColonistDescription(profile)} has joined the colony!`, 'good');
+    return c;
   }
   spawnEnemy() {
     const edge = randi(0, 4); let x, y; if (edge === 0) { x = rand(0, WORLD.w); y = -80; } else if (edge === 1) { x = rand(0, WORLD.w); y = WORLD.h + 80; } else if (edge === 2) { x = -80; y = rand(0, WORLD.h); } else { x = WORLD.w + 80; y = rand(0, WORLD.h); }
@@ -815,6 +827,10 @@ export class Game {
     }
 
     // Simple movement toward the waypoint - let A* handle the smart routing
+    // Update direction for sprite facing (only if moving significantly)
+    if (L > 1) {
+      c.direction = Math.atan2(dy, dx);
+    }
     c.x = Math.max(0, Math.min(c.x + (dx / (L || 1)) * step, WORLD.w));
     c.y = Math.max(0, Math.min(c.y + (dy / (L || 1)) * step, WORLD.h));
     return false;
@@ -875,7 +891,7 @@ export class Game {
     const tent = this.buildings.find(b => b.kind === 'tent' && b.done);
     const cap = (this.buildings.find(b => b.kind === 'hq') ? 3 : 0) + this.buildings.filter(b => b.kind === 'house' && b.done).reduce((a, b) => a + ((b as any).popCap || 0), 0);
     if (tent && this.colonists.length < cap && this.RES.food >= 15) { this.RES.food -= 15; this.spawnColonist({ x: HQ_POS.x + rand(-20, 20), y: HQ_POS.y + rand(-20, 20) }); this.msg('A new colonist joined! (-15 food)', 'info'); }
-    if (this.day > 8) { this.win(); }
+    if (this.day > 20) { this.win(); }
   }
 
   // Update loop
@@ -895,6 +911,15 @@ export class Game {
         this.colonists.splice(i, 1);
         continue;
       }
+      
+      // Give profiles to existing colonists who don't have them (for backward compatibility)
+      if (!c.profile) {
+        c.profile = generateColonistProfile();
+        c.color = c.profile.avatar.clothing; // Update color to match clothing
+        // Apply stat modifiers
+        c.speed = 50 * c.profile.stats.workSpeed;
+      }
+      
       // Starvation damage is handled in colonistFSM.ts - no additional damage here
       // If extremely fatigued, reduce work effectiveness slightly (handled via movement slow); no direct hp damage
       if (c.hp <= 0) { 
@@ -1024,7 +1049,7 @@ export class Game {
       }
       ctx.restore();
     }
-  for (const c of this.colonists) { if (!c.inside && c.alive) drawCircle(ctx, c.x, c.y, c.r, (this.selColonist === c ? '#93c5fd' : COLORS.colonist)); }
+  for (const c of this.colonists) { if (!c.inside && c.alive) drawColonistAvatar(ctx, c.x, c.y, c, c.r, this.selColonist === c); }
     if (this.debug.nav) {
       // draw nav solids
       ctx.save();
@@ -1269,7 +1294,7 @@ export class Game {
   };
 
   // Win/Lose
-  win() { this.paused = true; this.msg('You survived! Day 8 reached.', 'good'); alert('You survived to Day 8 — victory!'); }
+  win() { this.paused = true; this.msg('You survived! Day 20 reached.', 'good'); alert('You survived to Day 20 — victory!'); }
   lose() { this.paused = true; this.msg('HQ destroyed. Colony fell.', 'bad'); alert('Your HQ was destroyed. Game over.'); }
 
   // Pathfinding grid and helpers
@@ -1279,8 +1304,8 @@ export class Game {
     
     // Mark buildings as obstacles (allow walking inside unfinished sites? keep blocked to avoid overlap)
     for (const b of this.buildings) {
-      // Block buildings except HQ, paths, and houses (houses are walkable for entry/exit)
-      if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house') {
+      // Block buildings except HQ, paths, houses, and farms (houses are walkable for entry/exit)
+      if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm') {
         markRectSolid(this.grid, b.x, b.y, b.w, b.h);
       }
       // Path tiles reduce traversal cost using proper road cost system
@@ -1468,9 +1493,9 @@ export class Game {
     const cw = this.canvas.width; 
     const ch = this.canvas.height; 
     
-    // Responsive sizing
-    const W = Math.min(this.scale(320), cw * 0.4); // Max 40% of screen width
-    const H = Math.min(this.scale(200), ch * 0.35); // Max 35% of screen height
+    // Responsive sizing - make it larger to fit personality info
+    const W = Math.min(this.scale(450), cw * 0.55); // Increased width for personality content
+    const H = Math.min(this.scale(380), ch * 0.55); // Increased height for backstory text
     const PAD = this.scale(12);
     const X = cw - W - PAD;
     const Y = this.scale(54);
@@ -1478,28 +1503,28 @@ export class Game {
     // Ensure panel doesn't go off screen
     const finalY = Math.min(Y, ch - H - PAD);
     
-  ctx.save();
+    ctx.save();
     ctx.fillStyle = '#0b1220cc'; 
     ctx.fillRect(X, finalY, W, H);
     ctx.strokeStyle = '#1e293b'; 
     ctx.strokeRect(X + .5, finalY + .5, W - 1, H - 1);
 
-  // Close button (top-right of panel)
-  const closeSize = this.scale(26);
-  const closePad = this.scale(8);
-  const closeX = X + W - closePad - closeSize;
-  const closeY = finalY + closePad;
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(closeX, closeY, closeSize, closeSize);
-  ctx.strokeStyle = '#1e293b';
-  ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
-  ctx.fillStyle = '#dbeafe';
-  ctx.font = this.getScaledFont(16, '700');
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + this.scale(1));
+    // Close button (top-right of panel)
+    const closeSize = this.scale(26);
+    const closePad = this.scale(8);
+    const closeX = X + W - closePad - closeSize;
+    const closeY = finalY + closePad;
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(closeX, closeY, closeSize, closeSize);
+    ctx.strokeStyle = '#1e293b';
+    ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
+    ctx.fillStyle = '#dbeafe';
+    ctx.font = this.getScaledFont(16, '700');
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + this.scale(1));
     
-    // avatar box
-    const avatarSize = this.scale(64);
+    // avatar box - smaller since we need more space for text
+    const avatarSize = this.scale(50);
     const ax = X + this.scale(18); 
     const ay = finalY + this.scale(26); 
     ctx.fillStyle = '#0f172a'; 
@@ -1507,40 +1532,102 @@ export class Game {
     ctx.strokeStyle = '#1e293b'; 
     ctx.strokeRect(ax + .5, ay + .5, avatarSize - 1, avatarSize - 1);
     
-    // avatar glyph
+    // Draw the custom colonist avatar
     ctx.save(); 
-    ctx.translate(ax + avatarSize/2, ay + avatarSize/2 + this.scale(4)); 
-    ctx.scale(this.uiScale * 2, this.uiScale * 2); 
-    drawPersonIcon(ctx as any, 0, 0, 10, '#93c5fd'); 
+    ctx.translate(ax + avatarSize/2, ay + avatarSize/2); 
+    ctx.scale(this.uiScale * 1.5, this.uiScale * 1.5); 
+    drawColonistAvatar(ctx as any, 0, 0, c, 12, true); 
     ctx.restore();
     
-    // texts and bars
-    ctx.fillStyle = '#dbeafe'; 
-    ctx.font = this.getScaledFont(14, '600'); 
-    ctx.fillText('Colonist', X + avatarSize + this.scale(32), finalY + this.scale(22));
-    ctx.font = this.getScaledFont(13);
+    const profile = c.profile;
+    const textX = X + avatarSize + this.scale(24);
+    let textY = finalY + this.scale(22);
     
+    // Name and background
+    ctx.fillStyle = '#dbeafe'; 
+    ctx.font = this.getScaledFont(16, '700'); 
+    ctx.textAlign = 'left';
+    if (profile) {
+      ctx.fillText(profile.name, textX, textY);
+      textY += this.scale(18);
+      ctx.font = this.getScaledFont(12, '400');
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(profile.background, textX, textY);
+      textY += this.scale(16);
+      
+      // Personality traits
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillText(`Personality: ${profile.personality.join(', ')}`, textX, textY);
+      textY += this.scale(16);
+      
+      // Favorite food
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, textX, textY);
+      textY += this.scale(20);
+    } else {
+      ctx.fillText('Unnamed Colonist', textX, textY);
+      textY += this.scale(18);
+      ctx.font = this.getScaledFont(12, '400');
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('No background available', textX, textY);
+      textY += this.scale(36);
+    }
+    
+    // Current status
     const task = c.inside ? 'Resting' : (c.task ? c.task : 'Idle');
     const hp = Math.max(0, Math.min(100, c.hp | 0));
     const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
     const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
+    const mood = getColonistMood(c);
     
-    const barX = X + avatarSize + this.scale(32);
-    let barY = finalY + this.scale(45);
-    const barSpacing = this.scale(24);
+    // Health bars in a more compact format
+    const barSpacing = this.scale(18);
+    this.barRow(textX, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
+    this.barRow(textX, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
+    this.barRow(textX, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
     
-    this.barRow(barX, barY, 'Health', hp, '#22c55e'); barY += barSpacing;
-    this.barRow(barX, barY, 'Tiredness', tired, '#eab308'); barY += barSpacing;
-    this.barRow(barX, barY, 'Hunger', hunger, '#f87171'); barY += barSpacing;
-    
+    // Status info
     ctx.fillStyle = '#9fb3c8';
-    ctx.fillText(`Task: ${task}`, barX, barY + this.scale(12)); barY += this.scale(18);
-    ctx.fillText(`Pos: ${c.x | 0}, ${c.y | 0}`, barX, barY); barY += this.scale(18);
-    ctx.fillText(this.follow ? 'Camera: Following (Esc to stop)' : 'Camera: Click colonist to follow', barX, Math.min(barY, finalY + H - this.scale(8)));
-  // Record panel rects for hit-testing (already in device pixels)
-  this.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
-  this.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
-  ctx.restore();
+    ctx.font = this.getScaledFont(11);
+    textY += this.scale(8);
+    ctx.fillText(`Currently: ${task}`, textX, textY); textY += this.scale(14);
+    ctx.fillText(`Mood: ${mood}`, textX, textY); textY += this.scale(14);
+    ctx.fillText(`Position: ${c.x | 0}, ${c.y | 0}`, textX, textY); textY += this.scale(14);
+    
+    // Backstory at the bottom if there's space
+    if (profile && profile.backstory && textY < finalY + H - this.scale(40)) {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = this.getScaledFont(10, '400');
+      const words = profile.backstory.split(' ');
+      const maxWidth = W - this.scale(40);
+      let line = '';
+      textY += this.scale(8);
+      
+      for (let word of words) {
+        const testLine = line + word + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && line !== '') {
+          ctx.fillText(line.trim(), textX, textY);
+          textY += this.scale(12);
+          line = word + ' ';
+          if (textY > finalY + H - this.scale(20)) break; // Stop if we run out of space
+        } else {
+          line = testLine;
+        }
+      }
+      if (line.trim() && textY <= finalY + H - this.scale(20)) {
+        ctx.fillText(line.trim(), textX, textY);
+      }
+    }
+    
+    ctx.fillStyle = '#4b5563';
+    ctx.font = this.getScaledFont(9);
+    ctx.fillText(this.follow ? 'Following (Esc to stop)' : 'Click to follow', textX, finalY + H - this.scale(8));
+    
+    // Record panel rects for hit-testing (already in device pixels)
+    this.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
+    this.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
+    ctx.restore();
   }
 
   barRow(x: number, y: number, label: string, val: number, color: string) {

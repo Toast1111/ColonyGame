@@ -61,7 +61,8 @@ async function initGame() {
   btnNew.onclick = () => { game.newGame(); };
   btnHelp.onclick = () => { if (helpEl) helpEl.hidden = !helpEl.hidden; };
 
-  (Object.assign(window as any, { game, BUILD_TYPES }));
+  // Make game and assets available globally
+  (Object.assign(window as any, { game, BUILD_TYPES, imageAssets: ImageAssets.getInstance() }));
 
   // UI Mode Management - improved user control
   const isTouch = (('ontouchstart' in window) || (navigator as any).maxTouchPoints > 0);

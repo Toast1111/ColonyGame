@@ -5,8 +5,8 @@ import type { Building, Colonist, Enemy, ColonistState } from "../game/types";
 // Helper function to check if a position would collide with buildings
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
   for (const b of game.buildings) {
-    // Skip HQ, paths, and houses as they don't block movement
-    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || !b.done) continue;
+    // Skip HQ, paths, houses, and farms as they don't block movement
+    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
     
     // Check circle-rectangle collision
     const closestX = Math.max(b.x, Math.min(x, b.x + b.w));
@@ -52,6 +52,11 @@ function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: num
   const normalizedDx = dx / distance;
   const normalizedDy = dy / distance;
   
+  // Update direction for sprite facing (only if actually moving)
+  if (distance > 1) {
+    c.direction = Math.atan2(dy, dx);
+  }
+  
   const newX = c.x + normalizedDx * moveDistance;
   const newY = c.y + normalizedDy * moveDistance;
   
@@ -69,6 +74,8 @@ function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: num
     const slideRightX = c.x + perpDx * moveDistance * 0.5;
     const slideRightY = c.y + perpDy * moveDistance * 0.5;
     if (!wouldCollideWithBuildings(game, slideRightX, slideRightY, c.r)) {
+      // Update direction for sliding movement
+      c.direction = Math.atan2(perpDy, perpDx);
       c.x = Math.max(0, Math.min(slideRightX, WORLD.w));
       c.y = Math.max(0, Math.min(slideRightY, WORLD.h));
       return false;
@@ -78,6 +85,8 @@ function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: num
     const slideLeftX = c.x - perpDx * moveDistance * 0.5;
     const slideLeftY = c.y - perpDy * moveDistance * 0.5;
     if (!wouldCollideWithBuildings(game, slideLeftX, slideLeftY, c.r)) {
+      // Update direction for sliding movement
+      c.direction = Math.atan2(-perpDy, -perpDx);
       c.x = Math.max(0, Math.min(slideLeftX, WORLD.w));
       c.y = Math.max(0, Math.min(slideLeftY, WORLD.h));
       return false;
@@ -189,10 +198,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   // Needs progression
   // Hunger increases faster when working; slower when resting (rebalanced for realistic meal frequency)
   const working = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' || c.state === 'flee' || c.state === 'move';
-  const hungerRate = working ? 0.25 : c.inside ? 0.1 : 0.15; // Much slower hunger accumulation - per second
+  
+  // Apply personality stats to hunger and fatigue rates
+  const hungerMultiplier = c.profile?.stats.hungerRate || 1.0;
+  const fatigueMultiplier = c.profile?.stats.fatigueRate || 1.0;
+  
+  const hungerRate = (working ? 0.25 : c.inside ? 0.1 : 0.15) * hungerMultiplier; // Apply personality modifier
   c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
+  
   // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
-  const fatigueRise = working ? 0.8 : 0.3; // Much slower fatigue accumulation
+  const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply personality modifier
   if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
   else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
   // Movement penalty from fatigue
@@ -236,8 +251,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
           c.task = null;
           c.target = null;
-          // Only clear path if we were doing a work task with pathfinding
+          // Clear path to prevent navigation conflicts
           game.clearPath && game.clearPath(c);
+          
+          if (reason && Math.random() < 0.2) {
+            console.log(`Cleared work task (${c.task}) when changing to ${newState}: ${reason}`);
+          }
         }
       }
       c.state = newState;
@@ -259,13 +278,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
                         c.state === 'harvest' ||
                         danger; // Always allow immediate flee from danger
 
+  // Simple energy-based fatigue system with hysteresis
+  // Enter rest state when fatigue >= 80, exit when fatigue <= 20 (60-point gap prevents oscillation)
+  const fatigueEnterThreshold = 80;
+  const fatigueExitThreshold = 20;
+
   // Critical states that can interrupt anything
   if (!c.inside && danger && c.state !== 'flee') { changeState('flee', 'danger detected'); }
   else if (!c.inside && !danger && game.isNight() && c.state !== 'sleep' && c.state !== 'flee' && canChangeState) { changeState('sleep', 'night time'); }
   // If gravely hurt (< 35 HP), seek infirmary
   else if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee' && canChangeState) { changeState('heal', 'low health'); }
-  // If very tired (80+ fatigue), seek rest during day
-  else if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) > 80 && c.state !== 'flee' && c.state !== 'heal' && c.state !== 'goToSleep' && canChangeState) { changeState('goToSleep', 'fatigue'); }
+  // If very tired (>= 80 fatigue), seek rest during day - simple threshold system
+  else if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) >= fatigueEnterThreshold && c.state !== 'flee' && c.state !== 'heal' && c.state !== 'goToSleep' && c.state !== 'resting' && canChangeState) { changeState('goToSleep', 'high fatigue'); }
   // If hungry and we have food, prioritize eating (adjusted threshold for realistic meal frequency)
   else if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0 && c.state !== 'flee' && c.state !== 'eat' && canChangeState) { changeState('eat', 'hunger'); }
   else if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
@@ -275,8 +299,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       c.hideTimer = Math.max(0, (c.hideTimer || 0) - dt);
       // Rest recovers fatigue quickly and heals slowly
       c.hp = Math.min(100, c.hp + 1.2 * dt);
-      const leave = (!game.isNight()) && (!danger && (c.hurt || 0) <= 0 && (c.hideTimer || 0) <= 0);
-      if (leave) { game.leaveBuilding(c); c.safeTarget = null; c.safeTimer = 0; c.state = 'seekTask'; c.stateSince = 0; }
+      
+      // Simple hysteresis: only leave when fatigue drops to 20 or below (entered at 80+)
+      // This creates a 60-point gap to prevent oscillation
+      const minRestTime = 1.0; // Minimum 1 second of rest
+      const canLeaveFromFatigue = (c.fatigue || 0) <= fatigueExitThreshold && c.stateSince >= minRestTime;
+      
+      const leave = (!game.isNight()) && (!danger && (c.hurt || 0) <= 0 && (c.hideTimer || 0) <= 0 && canLeaveFromFatigue);
+      if (leave) { 
+        game.leaveBuilding(c); 
+        c.safeTarget = null; 
+        c.safeTimer = 0; 
+        changeState('seekTask', 'finished resting');
+      }
       break;
     }
     case 'heal': {
@@ -421,7 +456,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           game.moveAlongPath(c, dt, dest, 20);
         }
       } else {
-        const d = norm(sub(c as any, danger as any) as any); c.x += d.x * (c.speed + 90) * dt; c.y += d.y * (c.speed + 90) * dt;
+        const d = norm(sub(c as any, danger as any) as any); 
+        // Update direction for flee movement
+        c.direction = Math.atan2(d.y, d.x);
+        c.x += d.x * (c.speed + 90) * dt; c.y += d.y * (c.speed + 90) * dt;
       }
       if (!danger) { c.state = 'seekTask'; c.stateSince = 0; }
       break;
@@ -461,10 +499,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         (b.kind === 'house' || b.kind === 'infirmary') && b.done && game.buildingHasSpace(b)
       );
       
+      // Simple threshold: only give up if fatigue drops to exit threshold (20) or below
+      const minTryTime = 2.0; // Try for at least 2 seconds
+      const shouldGiveUp = (c.fatigue || 0) <= fatigueExitThreshold && c.stateSince >= minTryTime;
+      
       if (restBuildings.length === 0) {
-        // No rest buildings available, just rest in place briefly
+        // No rest buildings available, rest in place if very tired
         if (c.stateSince > 3.0) {
-          c.state = 'seekTask'; c.stateSince = 0;
+          if (shouldGiveUp) {
+            changeState('seekTask', 'no rest buildings, fatigue recovered');
+          } else {
+            // Rest in place - reduce fatigue slowly
+            c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 2);
+          }
         }
         break;
       }
@@ -484,8 +531,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (distance <= 20 || nearRect) {
         if (game.tryEnterBuilding(c, best)) { 
           c.hideTimer = 0; 
-          c.state = 'resting'; 
-          c.stateSince = 0; 
+          changeState('resting', 'entered rest building');
         } else {
           // Try another building with space
           const next = restBuildings
@@ -496,15 +542,20 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             game.clearPath(c); 
             // Continue trying to find rest
           } else { 
-            // No buildings available, rest enough to continue working
-            if ((c.fatigue || 0) < 60) {
-              c.state = 'seekTask'; c.stateSince = 0; 
+            // No buildings available - check if we should give up
+            if (shouldGiveUp) {
+              changeState('seekTask', 'no available rest buildings, fatigue recovered');
             }
           }
         }
       } else {
         // Move toward the rest building using pathfinding
         game.moveAlongPath(c, dt, bc, 20);
+        
+        // If fatigue has recovered enough, give up the search
+        if (shouldGiveUp) {
+          changeState('seekTask', 'fatigue recovered while searching for rest');
+        }
       }
       break;
     }

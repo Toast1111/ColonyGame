@@ -4,8 +4,8 @@ import type { Building, Enemy, Colonist } from "../game/types";
 // Helper function to check if a position would collide with buildings (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
   for (const b of game.buildings) {
-    // Enemies can walk through HQ, paths, and houses, but not other buildings
-    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || !b.done) continue;
+    // Enemies can walk through HQ, paths, houses, and farms, but not other buildings
+    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
     
     // Check circle-rectangle collision
     const closestX = Math.max(b.x, Math.min(x, b.x + b.w));

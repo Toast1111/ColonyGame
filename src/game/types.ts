@@ -44,7 +44,25 @@ export type Building = BuildingDef & {
 
 export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep';
 
-export type Colonist = { x: number; y: number; r: number; hp: number; speed: number; task: string | null; target: any; carrying: any; hunger: number; alive: boolean; color: string; t: number; fatigue?: number; fatigueSlow?: number; state?: ColonistState; stateSince?: number; path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; lastHp?: number; hurt?: number; inside?: import('./types').Building | null; hideTimer?: number; safeTarget?: import('./types').Building | null; safeTimer?: number; reservedBuildFor?: import('./types').Building | null; stuckTimer?: number; lastDistToNode?: number; jitterScore?: number; jitterWindow?: number; lastDistSign?: number; };
+export type Colonist = { 
+  x: number; y: number; r: number; hp: number; speed: number; 
+  task: string | null; target: any; carrying: any; hunger: number; 
+  alive: boolean; color: string; t: number; 
+  fatigue?: number; fatigueSlow?: number; 
+  state?: ColonistState; stateSince?: number; 
+  path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; 
+  lastHp?: number; hurt?: number; 
+  inside?: import('./types').Building | null; hideTimer?: number; 
+  safeTarget?: import('./types').Building | null; safeTimer?: number; 
+  reservedBuildFor?: import('./types').Building | null; 
+  stuckTimer?: number; lastDistToNode?: number; jitterScore?: number; jitterWindow?: number; lastDistSign?: number;
+  
+  // Movement direction for sprite facing
+  direction?: number; // angle in radians of movement direction
+  
+  // New personality system
+  profile?: import('./colonistGenerator').ColonistProfile;
+};
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };
 
