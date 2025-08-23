@@ -36,8 +36,8 @@ export function clearGrid(grid: Grid): void {
 export function markRectSolid(grid: Grid, x: number, y: number, w: number, h: number): void {
   const startX = Math.floor(x / T);
   const startY = Math.floor(y / T);
-  const endX = Math.floor((x + w) / T);
-  const endY = Math.floor((y + h) / T);
+  const endX = Math.floor((x + w - 1) / T);  // Subtract 1 to avoid extra tile
+  const endY = Math.floor((y + h - 1) / T);  // Subtract 1 to avoid extra tile
 
   for (let gy = startY; gy <= endY; gy++) {
     for (let gx = startX; gx <= endX; gx++) {
@@ -75,8 +75,8 @@ export function markCircleSolid(grid: Grid, cx: number, cy: number, radius: numb
 export function markRectCost(grid: Grid, x: number, y: number, w: number, h: number, cost: number): void {
   const startX = Math.floor(x / T);
   const startY = Math.floor(y / T);
-  const endX = Math.floor((x + w) / T);
-  const endY = Math.floor((y + h) / T);
+  const endX = Math.floor((x + w - 1) / T);  // Subtract 1 to avoid extra tile
+  const endY = Math.floor((y + h - 1) / T);  // Subtract 1 to avoid extra tile
   
   for (let gy = startY; gy <= endY; gy++) {
     for (let gx = startX; gx <= endX; gx++) {
