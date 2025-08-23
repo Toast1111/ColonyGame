@@ -1,5 +1,5 @@
 import { clamp, dist2, rand, randi } from "../core/utils";
-import { aStar, clearGrid, makeGrid, markRectSolid, markRectCost } from "../core/pathfinding";
+import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS } from "../core/pathfinding";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources } from "./types";
 import { BUILD_TYPES, hasCost, makeBuilding, payCost, groupByCategory } from "./buildings";
@@ -393,6 +393,8 @@ export class Game {
   scatter() {
     for (let i = 0; i < 220; i++) { const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 220) continue; this.trees.push({ x: p.x, y: p.y, r: 12, hp: 40, type: 'tree' }); }
     for (let i = 0; i < 140; i++) { const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 200) continue; this.rocks.push({ x: p.x, y: p.y, r: 12, hp: 50, type: 'rock' }); }
+    // Rebuild navigation grid after scattering resources
+    this.rebuildNavGrid();
   }
   respawnTimer = 0; // seconds accumulator for resource respawn
   tryRespawn(dt: number) {
@@ -410,6 +412,8 @@ export class Game {
           for (const b of this.buildings) { if (p.x > b.x-24 && p.x < b.x+b.w+24 && p.y > b.y-24 && p.y < b.y+b.h+24) { ok=false; break; } }
           if (!ok) continue;
           if (kind==='tree') this.trees.push({ x:p.x, y:p.y, r:12, hp:40, type:'tree' }); else this.rocks.push({ x:p.x, y:p.y, r:12, hp:50, type:'rock' });
+          // Rebuild navigation grid when new resource is added
+          this.rebuildNavGrid();
           break;
         }
       };
@@ -1272,14 +1276,32 @@ export class Game {
   grid = makeGrid();
   rebuildNavGrid() {
     clearGrid(this.grid);
-    // mark buildings as obstacles (allow walking inside unfinished sites? keep blocked to avoid overlap)
+    
+    // Mark buildings as obstacles (allow walking inside unfinished sites? keep blocked to avoid overlap)
     for (const b of this.buildings) {
-  // Block buildings except HQ, paths, and houses (houses are walkable for entry/exit)
-  if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house') markRectSolid(this.grid, b.x, b.y, b.w, b.h);
-  // Path tiles reduce traversal cost
-  if (b.kind === 'path') {
-    markRectCost(this.grid, b.x, b.y, b.w, b.h, 0.6);
-  }
+      // Block buildings except HQ, paths, and houses (houses are walkable for entry/exit)
+      if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house') {
+        markRectSolid(this.grid, b.x, b.y, b.w, b.h);
+      }
+      // Path tiles reduce traversal cost using proper road cost system
+      if (b.kind === 'path') {
+        markRoadPath(this.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
+      }
+      // Add door tiles for houses to naturally guide approach points
+      if (b.kind === 'house' && b.done) {
+        // Place a fast road tile at the bottom-center of the house (the "door")
+        const doorX = b.x + b.w / 2 - T / 2; // Center horizontally
+        const doorY = b.y + b.h; // Bottom edge
+        markRoadPath(this.grid, doorX, doorY, T, T, 'FAST_ROAD');
+      }
+    }
+    
+    // Mark trees and rocks as obstacles in the grid
+    for (const tree of this.trees) {
+      markCircleSolid(this.grid, tree.x, tree.y, tree.r);
+    }
+    for (const rock of this.rocks) {
+      markCircleSolid(this.grid, rock.x, rock.y, rock.r);
     }
   }
   computePath(sx: number, sy: number, tx: number, ty: number) {
@@ -1296,48 +1318,148 @@ export class Game {
     const idx = this.cellIndexAt(x, y);
     return idx < 0 ? true : !!this.grid.solid[idx];
   }
-  isBlockedByResources(x: number, y: number, targetResource?: any) {
-    // Check for collision with trees (except the target)
-    for (const t of this.trees) {
-      if (targetResource && t === targetResource) continue;
-      const dx = x - t.x, dy = y - t.y;
-      if (dx * dx + dy * dy <= t.r * t.r) return true;
-    }
-    // Check for collision with rocks (except the target)
-    for (const r of this.rocks) {
-      if (targetResource && r === targetResource) continue;
-      const dx = x - r.x, dy = y - r.y;
-      if (dx * dx + dy * dy <= r.r * r.r) return true;
-    }
-    return false;
+  
+  // Check if position is within interaction range of a circle (for direct interaction checks)
+  isWithinInteractionRange(x: number, y: number, circle: { x: number; y: number; r: number }, interactDistance: number): boolean {
+    const dx = x - circle.x;
+    const dy = y - circle.y;
+    const dist = Math.hypot(dx, dy);
+    return dist <= circle.r + interactDistance;
   }
+  
   bestApproachToCircle(c: Colonist, circle: { x: number; y: number; r: number }, interact: number) {
-    // Sample multiple angles and pick the closest unblocked approach point
-    let best: { x: number; y: number } | null = null;
-    let bestD = Infinity;
+    // Sample multiple angles around the circle, snap to tile centers, and dedupe
     const samples = 16;
-    for (let i = 0; i < samples; i++) {
-      const ang = (i / samples) * Math.PI * 2;
-      const px = circle.x - Math.cos(ang) * (interact - 6);
-      const py = circle.y - Math.sin(ang) * (interact - 6);
-      if (this.isBlocked(px, py) || this.isBlockedByResources(px, py, circle)) continue;
-      const d = (c.x - px) * (c.x - px) + (c.y - py) * (c.y - py);
-      if (d < bestD) { bestD = d; best = { x: px, y: py }; }
+    const candidateTiles = new Set<string>(); // Use string key for deduplication
+    const candidates: { x: number; y: number; gx: number; gy: number }[] = [];
+    
+    // Nudge radius slightly inside to avoid solid edge issues
+    const R = Math.max(6, circle.r + interact - 2); // small inward bias
+    
+    // Order sample angles to try the most promising side first (toward colonist)
+    const baseAng = Math.atan2(circle.y - c.y, circle.x - c.x);
+    const order: number[] = [];
+    for (let k = 0; k < samples; k++) {
+      const s = ((k % 2) ? +1 : -1) * Math.ceil(k / 2);
+      order.push(((s / samples) * Math.PI * 2) + baseAng);
     }
+    
+    for (const ang of order) {
+      // Place target using adjusted radius
+      const px = circle.x + Math.cos(ang) * R;
+      const py = circle.y + Math.sin(ang) * R;
+      
+      // Snap to tile center with bounds check
+      const gx = Math.floor(px / T);
+      const gy = Math.floor(py / T);
+      
+      // Bounds-check before isBlocked to avoid redundant cellIndexAt calls
+      if (gx < 0 || gy < 0 || gx >= this.grid.cols || gy >= this.grid.rows) continue;
+      
+      const tileCenterX = gx * T + T / 2;
+      const tileCenterY = gy * T + T / 2;
+      
+      // Dedupe by tile coordinates
+      const tileKey = `${gx},${gy}`;
+      if (candidateTiles.has(tileKey)) continue;
+      candidateTiles.add(tileKey);
+      
+      // Skip if tile is blocked
+      if (this.isBlocked(tileCenterX, tileCenterY)) continue;
+      
+      candidates.push({ x: tileCenterX, y: tileCenterY, gx, gy });
+    }
+    
+    if (candidates.length === 0) {
+      // Fallback: walk back along the ray from the resource toward the colonist
+      const ang = Math.atan2(c.y - circle.y, c.x - circle.x);
+      const startR = circle.r + interact;
+      const step = Math.max(4, T * 0.33);
+
+      for (let rr = startR; rr >= Math.max(circle.r + 2, startR - 6 * T); rr -= step) {
+        const px = circle.x + Math.cos(ang) * rr;
+        const py = circle.y + Math.sin(ang) * rr;
+
+        // snap to center
+        const gx = Math.floor(px / T), gy = Math.floor(py / T);
+        if (gx < 0 || gy < 0 || gx >= this.grid.cols || gy >= this.grid.rows) continue;
+
+        const cx = gx * T + T / 2, cy = gy * T + T / 2;
+        if (this.isBlocked(cx, cy)) continue;
+
+        const path = this.computePath(c.x, c.y, cx, cy);
+        if (path) return { x: cx, y: cy };
+      }
+
+      // last resort: a point on the ring toward the colonist
+      return {
+        x: circle.x + Math.cos(ang) * startR,
+        y: circle.y + Math.sin(ang) * startR
+      };
+    }
+    
+    // Sort candidates by path quality - prefer road tiles with meaningful tie-break
+    let best: { x: number; y: number } | null = null;
+    let bestPathLength = Infinity;
+    let bestPathCost = Infinity;
+    let evaluatedCandidates = 0;
+    const maxEvaluations = 8; // Cap A* evaluations for performance
+    
+    for (const candidate of candidates) {
+      // Performance cap: stop after evaluating enough candidates
+      if (evaluatedCandidates >= maxEvaluations) break;
+      
+      // Use A* to evaluate the actual path
+      const path = this.computePath(c.x, c.y, candidate.x, candidate.y);
+      if (!path || path.length === 0) continue;
+      
+      evaluatedCandidates++;
+      
+      // Calculate path cost by summing grid costs along the path
+      let pathCost = 0;
+      for (const node of path) {
+        const idx = this.cellIndexAt(node.x, node.y);
+        if (idx < 0) { 
+          pathCost = Infinity; 
+          break; 
+        }
+        pathCost += this.grid.cost[idx] || 1;
+      }
+      
+      if (pathCost === Infinity) continue;
+      
+      // Prefer if the approach tile is on road (feels like "approach via path")
+      const lastIdx = this.cellIndexAt(candidate.x, candidate.y);
+      if (lastIdx >= 0 && this.grid.cost[lastIdx] <= 0.7) {
+        pathCost -= 0.05; // Meaningful road preference
+      }
+      
+      // Early-out if we find a great path (short and cheap)
+      if (path.length <= 3 && pathCost <= 2.0) {
+        if (Math.random() < 0.02) {
+          console.log(`Early-out: great path found with length ${path.length} and cost ${pathCost.toFixed(3)}`);
+        }
+        return candidate;
+      }
+      
+      // Track best option
+      if (pathCost < bestPathCost || (pathCost === bestPathCost && path.length < bestPathLength)) {
+        bestPathCost = pathCost;
+        bestPathLength = path.length;
+        best = candidate;
+      }
+    }
+    
     if (best) {
       // Debug logging
       if (Math.random() < 0.02) {
-        console.log(`Approach point found: (${best.x.toFixed(1)}, ${best.y.toFixed(1)}) for resource at (${circle.x.toFixed(1)}, ${circle.y.toFixed(1)})`);
+        console.log(`Best approach: (${best.x.toFixed(1)}, ${best.y.toFixed(1)}) with path cost ${bestPathCost.toFixed(3)} and length ${bestPathLength} (evaluated ${evaluatedCandidates} candidates)`);
       }
       return best;
     }
-    // Fallback toward current angle if all samples blocked
-    const ang = Math.atan2(circle.y - c.y, circle.x - c.x);
-    const fallback = { x: circle.x - Math.cos(ang) * (interact - 6), y: circle.y - Math.sin(ang) * (interact - 6) };
-    if (Math.random() < 0.02) {
-      console.log(`Using fallback approach point: (${fallback.x.toFixed(1)}, ${fallback.y.toFixed(1)}) for resource at (${circle.x.toFixed(1)}, ${circle.y.toFixed(1)})`);
-    }
-    return fallback;
+    
+    // Should never reach here given our fallback above
+    return candidates[0];
   }
 
   // UI: colonist profile panel

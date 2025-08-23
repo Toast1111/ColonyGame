@@ -677,6 +677,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (collected > 0) {
             game.msg(`+${collected} wood`, 'good');
           }
+          // Rebuild navigation grid since tree was removed
+          game.rebuildNavGrid();
           c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
         }
         break;
@@ -700,9 +702,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
         c.lastDistToNode = distance;
       }
-      
-      // If stuck too long, abandon (reduced from 15 to 10 seconds)
-      if (c.stateSince && c.stateSince > 10) {
+
+      // If stuck too long, abandon (increased from 10 to 20 seconds)
+      if (c.stateSince && c.stateSince > 20) {
         console.log(`Chop task timeout after ${c.stateSince.toFixed(1)}s, abandoning tree`);
         if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
         c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
@@ -738,6 +740,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (collected > 0) {
             game.msg(`+${collected} stone`, 'good');
           }
+          // Rebuild navigation grid since rock was removed
+          game.rebuildNavGrid();
           c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
         }
         break;
