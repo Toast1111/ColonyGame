@@ -62,6 +62,45 @@ export function aStar(g: Grid, sx: number, sy: number, tx: number, ty: number): 
       let id = cur;
       while (id !== -1) { const x = id % cols, y = (id / cols) | 0; path.push({ x: x * T + T / 2, y: y * T + T / 2 }); id = came[id]; }
       path.reverse(); path[path.length - 1] = { x: tx, y: ty }; // ensure final exact target
+      
+      // Add extra waypoints along path tiles for better path adherence
+      const densePath: { x: number; y: number }[] = [];
+      for (let i = 0; i < path.length - 1; i++) {
+        const current = path[i];
+        const next = path[i + 1];
+        densePath.push(current);
+        
+        // Check if this segment goes through path tiles
+        const currentGx = Math.floor(current.x / T), currentGy = Math.floor(current.y / T);
+        const nextGx = Math.floor(next.x / T), nextGy = Math.floor(next.y / T);
+        const currentIdx = currentGy * cols + currentGx;
+        const nextIdx = nextGy * cols + nextGx;
+        const currentIsPath = currentGx >= 0 && currentGy >= 0 && currentGx < cols && currentGy < rows && g.cost[currentIdx] <= 0.7;
+        const nextIsPath = nextGx >= 0 && nextGy >= 0 && nextGx < cols && nextGy < rows && g.cost[nextIdx] <= 0.7;
+        
+        // If both waypoints are on paths, add intermediate waypoints for tighter following
+        if (currentIsPath && nextIsPath) {
+          const dx = next.x - current.x;
+          const dy = next.y - current.y;
+          const dist = Math.hypot(dx, dy);
+          
+          // Add intermediate waypoints every 18 pixels (0.75 tiles) for path segments
+          const numIntermediatePoints = Math.floor(dist / 18);
+          for (let j = 1; j <= numIntermediatePoints; j++) {
+            const t = j / (numIntermediatePoints + 1);
+            densePath.push({
+              x: current.x + dx * t,
+              y: current.y + dy * t
+            });
+          }
+        }
+      }
+      // Add the final waypoint
+      if (path.length > 0) densePath.push(path[path.length - 1]);
+      
+      // Use the dense path instead of the original path for smoothing
+      path = densePath;
+      
       // Smooth path by removing intermediate waypoints with line-of-sight
       const smooth: { x: number; y: number }[] = [];
       const clearLine = (ax: number, ay: number, bx: number, by: number) => {
