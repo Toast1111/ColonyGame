@@ -238,10 +238,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
 
   // Helper function to cleanly change state and clear conflicting task data
   function changeState(newState: ColonistState, reason?: string) {
+    // Critical states bypass locks
+    const isCritical = (s: ColonistState) => (s === 'flee' || s === 'heal');
+    // Soft-lock: block low-priority flips while the timer runs
+    if (!isCritical(newState) && c.softLockUntil != null && c.t < (c.softLockUntil || 0)) {
+      return; // ignore low-priority flip
+    }
     if (c.state !== newState) {
       // Clear work task/target when changing to non-work states to prevent navigation conflicts
       if (newState === 'sleep' || newState === 'flee' || newState === 'heal' || newState === 'goToSleep' || newState === 'eat' || newState === 'resting') {
-        if (c.task && (c.task === 'chop' || c.task === 'mine' || c.task === 'build' || c.task === 'harvestFarm' || c.task === 'harvestWell')) {
+        const oldTask = c.task;
+        if (oldTask && (oldTask === 'chop' || oldTask === 'mine' || oldTask === 'build' || oldTask === 'harvestFarm' || oldTask === 'harvestWell')) {
           // Release any reservations for work tasks
           if (c.task === 'build' && c.target) {
             game.releaseBuildReservation && game.releaseBuildReservation(c);
@@ -255,14 +262,24 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           game.clearPath && game.clearPath(c);
           
           if (reason && Math.random() < 0.2) {
-            console.log(`Cleared work task (${c.task}) when changing to ${newState}: ${reason}`);
+            console.log(`Cleared work task (${oldTask}) when changing to ${newState}: ${reason}`);
           }
         }
       }
+      // Track previous state and reason for debugging
+      const prev = c.state;
+      (c as any).prevState = prev;
       c.state = newState;
       c.stateSince = 0;
+      (c as any).lastStateChangeReason = reason || '';
+      // Apply a short soft-lock to reduce thrashing for some states
+      if (newState === 'eat') c.softLockUntil = c.t + 1.5;
+      else if (newState === 'goToSleep') c.softLockUntil = c.t + 2.0;
+      else if (newState === 'sleep') c.softLockUntil = c.t + 2.0;
+      else if (newState === 'resting') c.softLockUntil = c.t + 1.0;
+      else c.softLockUntil = undefined;
       if (reason && Math.random() < 0.1) {
-        console.log(`Colonist state change: ${c.state} → ${newState} (${reason})`);
+        console.log(`Colonist state change: ${prev} → ${newState} (${reason})`);
       }
     }
   }
@@ -283,16 +300,54 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   const fatigueEnterThreshold = 80;
   const fatigueExitThreshold = 20;
 
-  // Critical states that can interrupt anything
-  if (!c.inside && danger && c.state !== 'flee') { changeState('flee', 'danger detected'); }
-  else if (!c.inside && !danger && game.isNight() && c.state !== 'sleep' && c.state !== 'flee' && canChangeState) { changeState('sleep', 'night time'); }
-  // If gravely hurt (< 35 HP), seek infirmary
-  else if (!c.inside && (c.hp || 0) < 35 && c.state !== 'flee' && canChangeState) { changeState('heal', 'low health'); }
-  // If very tired (>= 80 fatigue), seek rest during day - simple threshold system
-  else if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) >= fatigueEnterThreshold && c.state !== 'flee' && c.state !== 'heal' && c.state !== 'goToSleep' && c.state !== 'resting' && canChangeState) { changeState('goToSleep', 'high fatigue'); }
-  // If hungry and we have food, prioritize eating (adjusted threshold for realistic meal frequency)
-  else if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0 && c.state !== 'flee' && c.state !== 'eat' && canChangeState) { changeState('eat', 'hunger'); }
-  else if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
+  // Priority-based intent evaluation
+  function evaluateIntent(): { state: ColonistState; prio: number; reason: string } | null {
+    let best: { state: ColonistState; prio: number; reason: string } | null = null;
+    const set = (state: ColonistState, prio: number, reason: string) => {
+      if (!best || prio > best.prio) best = { state, prio, reason };
+    };
+    // Highest first
+    if (!c.inside && danger) set('flee', 100, 'danger detected');
+    if (!c.inside && !danger && (c.hp || 0) < 35) set('heal', 90 - Math.max(0, c.hp) * 0.1, 'low health');
+    if (!c.inside && !danger && game.isNight()) set('sleep', 80, 'night time');
+    if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) >= fatigueEnterThreshold)
+      set('goToSleep', 70 + Math.min(20, (c.fatigue || 0) - fatigueEnterThreshold), 'high fatigue');
+    if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0)
+      set('eat', 60 + Math.min(25, (c.hunger || 0) - 75), 'hunger');
+    // Default: keep working/seek tasks
+    set('seekTask', 10, 'default');
+    return best;
+  }
+
+  // If inside any building and not resting, immediately switch to resting
+  if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
+  else {
+    const statePriority = (s: ColonistState | undefined): number => {
+      switch (s) {
+        case 'flee': return 100;
+        case 'heal': return 90;
+        case 'sleep': return 80;
+        case 'goToSleep': return 75;
+        case 'eat': return 65;
+        case 'build':
+        case 'chop':
+        case 'mine':
+        case 'harvest': return 40;
+        case 'resting': return 35;
+        case 'move': return 25;
+        case 'idle': return 15;
+        case 'seekTask': return 10;
+        default: return 0;
+      }
+    };
+    const intent = evaluateIntent();
+    if (intent && intent.state !== c.state) {
+      const critical = intent.state === 'flee' || intent.state === 'heal';
+      const curPrio = statePriority(c.state as ColonistState);
+      const shouldSwitch = critical || (intent.prio > curPrio && canChangeState);
+      if (shouldSwitch) changeState(intent.state, intent.reason);
+    }
+  }
 
   switch (c.state) {
     case 'resting': {
@@ -317,7 +372,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'heal': {
       // Find nearest infirmary
       const infirmaries = (game.buildings as Building[]).filter(b => b.kind === 'infirmary' && b.done);
-      if (!infirmaries.length) { c.state = 'seekTask'; c.stateSince = 0; break; }
+  if (!infirmaries.length) { changeState('seekTask', 'no infirmary'); break; }
       let best = infirmaries[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
       for (let i = 1; i < infirmaries.length; i++) { const d = dist2(c as any, game.centerOf(infirmaries[i]) as any); if (d < bestD) { bestD = d; best = infirmaries[i]; } }
       const ic = game.centerOf(best);
@@ -326,11 +381,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const dist = Math.hypot(c.x - ic.x, c.y - ic.y);
       // If close enough, try to enter (uses building capacity via popCap); else stand in heal radius
       if (nearRect && game.tryEnterBuilding(c as any, best as any)) {
-        c.state = 'resting'; c.stateSince = 0; break;
+        changeState('resting', 'entered infirmary'); break;
       }
       if (dist <= range * 0.9) {
         // Wait and heal in aura; leave when healthy enough
-        if (c.hp >= 80) { c.state = 'seekTask'; c.stateSince = 0; }
+        if (c.hp >= 80) { changeState('seekTask', 'healed enough'); }
       } else {
         // Move toward infirmary center using pathfinding
         game.moveAlongPath(c, dt, ic, range * 0.9);
@@ -353,7 +408,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           c.hp = Math.max(0, c.hp - 2.5 * dt); // Slow starvation damage
         }
         console.log(`NO FOOD AVAILABLE! Colonist will continue tasks or sleep.`);
-        c.state = game.isNight() ? 'sleep' : 'seekTask'; c.stateSince = 0;
+        changeState(game.isNight() ? 'sleep' : 'seekTask', 'no food available');
         break;
       }
 
@@ -376,7 +431,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           game.RES.food -= 1;
           c.hunger = Math.max(0, (c.hunger || 0) - 60); // More filling meal
           c.hp = Math.min(100, c.hp + 2.5);
-          c.state = 'seekTask'; c.stateSince = 0;
+          changeState('seekTask', 'ate without building');
           console.log(`Colonist ate without building! Food remaining: ${game.RES.food}`);
         }
         break;
@@ -429,7 +484,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       if (!dest) { const hq = (game.buildings as Building[]).find((b: Building) => b.kind === 'hq' && game.buildingHasSpace(b)); if (hq) { buildingDest = hq; dest = game.centerOf(hq); } }
       if (!dest && tgtTurret) dest = game.centerOf(tgtTurret);
-      if (dest) {
+  if (dest) {
         // Use direct movement instead of pathfinding
         const dx = dest.x - c.x;
         const dy = dest.y - c.y;
@@ -437,8 +492,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const nearRect = buildingDest ? (c.x >= buildingDest.x - 8 && c.x <= buildingDest.x + buildingDest.w + 8 && c.y >= buildingDest.y - 8 && c.y <= buildingDest.y + buildingDest.h + 8) : false;
         
         if (distance <= 20 || nearRect) {
-          if (buildingDest && game.tryEnterBuilding(c, buildingDest)) {
-            c.hideTimer = 3; c.state = 'resting'; c.stateSince = 0;
+      if (buildingDest && game.tryEnterBuilding(c, buildingDest)) {
+    c.hideTimer = 3; changeState('resting', 'hid from danger');
           } else {
             // Retarget: find closest house with space, else HQ
             const choices = (game.buildings as Building[]).filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'));
@@ -461,12 +516,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.direction = Math.atan2(d.y, d.x);
         c.x += d.x * (c.speed + 90) * dt; c.y += d.y * (c.speed + 90) * dt;
       }
-      if (!danger) { c.state = 'seekTask'; c.stateSince = 0; }
+  if (!danger) { changeState('seekTask', 'no more danger'); }
       break;
     }
     case 'sleep': {
       const protectedHouses = (game.buildings as Building[]).filter(b => b.kind === 'house' && b.done && game.isProtectedByTurret(b) && game.buildingHasSpace(b));
-      if (!game.isNight() || protectedHouses.length === 0) { c.state = 'seekTask'; c.stateSince = 0; break; }
+  if (!game.isNight() || protectedHouses.length === 0) { changeState('seekTask', 'sleep canceled'); break; }
       let best = protectedHouses[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
       for (let i = 1; i < protectedHouses.length; i++) { const d = dist2(c as any, game.centerOf(protectedHouses[i]) as any); if (d < bestD) { bestD = d; best = protectedHouses[i]; } }
       let hc = game.centerOf(best);
@@ -478,14 +533,14 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
       
       if (distance <= 20 || nearRect) {
-        if (game.tryEnterBuilding(c, best)) { c.hideTimer = 0; c.state = 'resting'; c.stateSince = 0; }
+        if (game.tryEnterBuilding(c, best)) { c.hideTimer = 0; changeState('resting', 'fell asleep'); }
         else {
           // Try another house with space, or HQ if available
           const next = (game.buildings as Building[])
             .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'))
             .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
           if (next) { const nc = game.centerOf(next); best = next; hc = nc; /* retarget without clearing path */ }
-          else { c.state = 'seekTask'; c.stateSince = 0; }
+          else { changeState('seekTask', 'no bed available'); }
         }
       } else {
         // Move toward the house using pathfinding
@@ -561,7 +616,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     case 'seekTask': {
       if (game.isNight()) { changeState('sleep', 'night time'); break; }
-      if (!c.task || (c.task === 'idle' && Math.random() < 0.005)) {
+      if (!c.task || (c.task === 'idle' && Math.random() < 0.05)) {
         const oldTask = c.task;
         game.pickTask(c);
         if (oldTask !== c.task && Math.random() < 0.1) {
@@ -574,13 +629,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'harvestWell': changeState('harvest', 'assigned well task'); break;
         case 'chop': changeState('chop', 'assigned chop task'); break;
         case 'mine': changeState('mine', 'assigned mine task'); break;
-        case 'idle': default: changeState('idle', 'no tasks available'); break;
+        case 'idle': default:
+          // Keep moving toward a random idle target if we have one; else assign a new idle target
+          if (!c.target) {
+            c.target = { x: c.x + (Math.random() - 0.5) * 160, y: c.y + (Math.random() - 0.5) * 160 };
+          }
+          changeState('idle', 'no tasks available');
+          break;
       }
       break;
     }
     case 'idle': {
       const dst = c.target; if (!dst) { changeState('seekTask', 'no target'); break; }
-  if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'reached target'); }
+      if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'reached target'); }
       break;
     }
     case 'build': {
@@ -671,18 +732,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
           
           game.msg(b.name ? b.name + " complete" : "Building complete"); game.rebuildNavGrid(); game.clearPath(c);
-          game.releaseBuildReservation(c); c.task = null; c.target = null; c.state = 'seekTask';
+          game.releaseBuildReservation(c); c.task = null; c.target = null; changeState('seekTask', 'building complete');
         }
       }
       break;
     }
     case 'harvest': {
       const f = c.target as Building; 
-      if (!f) { c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; break; }
+      if (!f) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'no harvest target'); break; }
       
       // Check if farm is ready or if it's a well
       if (f.kind === 'farm' && !f.ready) { 
-        c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; break; 
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'farm not ready'); break; 
       }
       
       const pt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
@@ -700,7 +761,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             game.msg(`Well collected (+${collected} food)`, 'good');
           }
         }
-        c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; 
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'harvest complete'); 
       }
       break;
     }
@@ -708,7 +769,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const t = c.target as any; 
       if (!t || t.hp <= 0) { 
         if (t && game.assignedTargets.has(t)) game.assignedTargets.delete(t); 
-        c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; break; 
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'tree gone'); break; 
       }
       
       // Simplified approach: move directly toward the tree
@@ -730,7 +791,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
           // Rebuild navigation grid since tree was removed
           game.rebuildNavGrid();
-          c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
+          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'chopped tree');
         }
         break;
       } else {
@@ -758,7 +819,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (c.stateSince && c.stateSince > 20) {
         console.log(`Chop task timeout after ${c.stateSince.toFixed(1)}s, abandoning tree`);
         if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
-        c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'chop timeout');
       }
       break;
     }
@@ -766,7 +827,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const r = c.target as any; 
       if (!r || r.hp <= 0) { 
         if (r && game.assignedTargets.has(r)) game.assignedTargets.delete(r); 
-        c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask'; break; 
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'rock gone'); break; 
       }
       
       // Simplified approach: move directly toward the rock
@@ -783,7 +844,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (distance <= interact + slack + 0.1) {
         // Close enough to mine
-  r.hp -= 16 * dt;
+        r.hp -= 16 * dt;
         if (r.hp <= 0) {
           const collected = game.addResource('stone', 5);
           (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
@@ -793,7 +854,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
           // Rebuild navigation grid since rock was removed
           game.rebuildNavGrid();
-          c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
+          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'mined rock');
         }
         break;
       } else {
@@ -810,7 +871,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (c.stateSince && c.stateSince > 15) {
         console.log(`Colonist stuck mining for ${c.stateSince.toFixed(1)}s, abandoning`);
         if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
-        c.task = null; c.target = null; game.clearPath(c); c.state = 'seekTask';
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'mine timeout');
       }
       break;
     }

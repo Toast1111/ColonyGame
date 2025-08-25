@@ -56,6 +56,10 @@ export type Colonist = {
   safeTarget?: import('./types').Building | null; safeTimer?: number; 
   reservedBuildFor?: import('./types').Building | null; 
   stuckTimer?: number; lastDistToNode?: number; jitterScore?: number; jitterWindow?: number; lastDistSign?: number;
+  // FSM robustness helpers
+  prevState?: ColonistState; // last state before current
+  softLockUntil?: number;    // game-time (c.t) until which low-priority transitions are blocked
+  lastStateChangeReason?: string; // debug info
   
   // Movement direction for sprite facing
   direction?: number; // angle in radians of movement direction

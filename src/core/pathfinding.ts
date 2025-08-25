@@ -6,6 +6,11 @@ export interface Grid {
   solid: Uint8Array;
   cost: Float32Array;
   minCost: number;
+  // Sectioning for dynamic updates
+  sectionSize: number;
+  sectionCols: number;
+  sectionRows: number;
+  dirtyFlags: Uint8Array; // Track which sections need rebuilding
 }
 
 function h(ax: number, ay: number, bx: number, by: number) {
@@ -18,12 +23,22 @@ export function makeGrid(): Grid {
   const rows = Math.ceil(7680 / T); // WORLD.h / T
   const size = cols * rows;
 
+  // Section configuration - adjust this to balance update speed vs granularity
+  const sectionSize = 32; // Each section is 32x32 tiles
+  const sectionCols = Math.ceil(cols / sectionSize);
+  const sectionRows = Math.ceil(rows / sectionSize);
+  const numSections = sectionCols * sectionRows;
+
   return {
     cols,
     rows,
     solid: new Uint8Array(size),
     cost: new Float32Array(size).fill(1.0),
     minCost: 1.0, // start at 1.0 (grass). markRectCost will lower this when you paint roads.
+    sectionSize,
+    sectionCols,
+    sectionRows,
+    dirtyFlags: new Uint8Array(numSections), // Initially all clean
   };
 }
 
@@ -31,6 +46,37 @@ export function clearGrid(grid: Grid): void {
   grid.solid.fill(0);
   grid.cost.fill(1.0);
   grid.minCost = 1.0;
+  grid.dirtyFlags.fill(1); // Mark all sections as dirty after clear
+}
+
+// Helper function to mark sections as dirty based on world coordinates
+function markSectionsDirty(grid: Grid, x: number, y: number, w: number, h: number): void {
+  const startSectionX = Math.floor(Math.floor(x / T) / grid.sectionSize);
+  const startSectionY = Math.floor(Math.floor(y / T) / grid.sectionSize);
+  const endSectionX = Math.floor(Math.floor((x + w - 1) / T) / grid.sectionSize);
+  const endSectionY = Math.floor(Math.floor((y + h - 1) / T) / grid.sectionSize);
+
+  for (let sy = Math.max(0, startSectionY); sy <= Math.min(grid.sectionRows - 1, endSectionY); sy++) {
+    for (let sx = Math.max(0, startSectionX); sx <= Math.min(grid.sectionCols - 1, endSectionX); sx++) {
+      const sectionIdx = sy * grid.sectionCols + sx;
+      grid.dirtyFlags[sectionIdx] = 1;
+    }
+  }
+}
+
+// Helper function to mark sections as dirty based on grid coordinates  
+function markSectionsDirtyByGridCoords(grid: Grid, gx: number, gy: number, gw: number, gh: number): void {
+  const startSectionX = Math.floor(gx / grid.sectionSize);
+  const startSectionY = Math.floor(gy / grid.sectionSize);
+  const endSectionX = Math.floor((gx + gw - 1) / grid.sectionSize);
+  const endSectionY = Math.floor((gy + gh - 1) / grid.sectionSize);
+
+  for (let sy = Math.max(0, startSectionY); sy <= Math.min(grid.sectionRows - 1, endSectionY); sy++) {
+    for (let sx = Math.max(0, startSectionX); sx <= Math.min(grid.sectionCols - 1, endSectionX); sx++) {
+      const sectionIdx = sy * grid.sectionCols + sx;
+      grid.dirtyFlags[sectionIdx] = 1;
+    }
+  }
 }
 
 export function markRectSolid(grid: Grid, x: number, y: number, w: number, h: number): void {
@@ -47,6 +93,9 @@ export function markRectSolid(grid: Grid, x: number, y: number, w: number, h: nu
       }
     }
   }
+
+  // Mark affected sections as dirty
+  markSectionsDirty(grid, x, y, w, h);
 }
 
 export function markCircleSolid(grid: Grid, cx: number, cy: number, radius: number): void {
@@ -70,6 +119,9 @@ export function markCircleSolid(grid: Grid, cx: number, cy: number, radius: numb
       }
     }
   }
+
+  // Mark affected sections as dirty
+  markSectionsDirty(grid, cx - radius, cy - radius, radius * 2, radius * 2);
 }
 
 export function markRectCost(grid: Grid, x: number, y: number, w: number, h: number, cost: number): void {
@@ -87,6 +139,9 @@ export function markRectCost(grid: Grid, x: number, y: number, w: number, h: num
       }
     }
   }
+
+  // Mark affected sections as dirty
+  markSectionsDirty(grid, x, y, w, h);
 }/* ---------- helpers for road-centerline adherence ---------- */
 
 const ROAD_THRESHOLD = 0.7; // tiles with cost <= this are considered "road/path"
@@ -115,6 +170,159 @@ export function markRoadPath(grid: Grid, x: number, y: number, w: number, h: num
   const cost = ROAD_COSTS[roadType];
   const clampedCost = Math.max(0.5, Math.min(0.7, cost));
   markRectCost(grid, x, y, w, h, clampedCost);
+}
+
+// Main function to update only dirty sections of the nav mesh
+export function updateDirtySections(grid: Grid, buildings: any[], trees: any[], rocks: any[]): void {
+  // Only process sections that are marked as dirty
+  for (let sy = 0; sy < grid.sectionRows; sy++) {
+    for (let sx = 0; sx < grid.sectionCols; sx++) {
+      const sectionIdx = sy * grid.sectionCols + sx;
+      
+      if (!grid.dirtyFlags[sectionIdx]) continue; // Skip clean sections
+      
+      // Clear this section
+      clearSection(grid, sx, sy);
+      
+      // Rebuild this section with all relevant objects
+      rebuildSection(grid, sx, sy, buildings, trees, rocks);
+      
+      // Mark section as clean
+      grid.dirtyFlags[sectionIdx] = 0;
+    }
+  }
+}
+
+// Clear a specific section of the grid
+function clearSection(grid: Grid, sectionX: number, sectionY: number): void {
+  const startX = sectionX * grid.sectionSize;
+  const startY = sectionY * grid.sectionSize;
+  const endX = Math.min(startX + grid.sectionSize, grid.cols);
+  const endY = Math.min(startY + grid.sectionSize, grid.rows);
+
+  for (let gy = startY; gy < endY; gy++) {
+    for (let gx = startX; gx < endX; gx++) {
+      const idx = gy * grid.cols + gx;
+      grid.solid[idx] = 0;
+      grid.cost[idx] = 1.0; // Reset to grass cost
+    }
+  }
+}
+
+// Rebuild a specific section with all relevant game objects
+function rebuildSection(grid: Grid, sectionX: number, sectionY: number, buildings: any[], trees: any[], rocks: any[]): void {
+  const startWorldX = sectionX * grid.sectionSize * T;
+  const startWorldY = sectionY * grid.sectionSize * T;
+  const endWorldX = (sectionX + 1) * grid.sectionSize * T;
+  const endWorldY = (sectionY + 1) * grid.sectionSize * T;
+
+  // Check buildings that intersect with this section
+  for (const b of buildings) {
+    if (intersectsRect(b.x, b.y, b.w, b.h, startWorldX, startWorldY, endWorldX - startWorldX, endWorldY - startWorldY)) {
+      // Block buildings except HQ, paths, houses, and farms
+      if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm') {
+        markRectSolidNoUpdate(grid, b.x, b.y, b.w, b.h);
+      }
+      // Path tiles reduce traversal cost using proper road cost system
+      if (b.kind === 'path') {
+        markRoadPathNoUpdate(grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
+      }
+      // Add door tiles for houses to naturally guide approach points
+      if (b.kind === 'house' && b.done) {
+        // Place a fast road tile at the bottom-center of the house (the "door")
+        const doorX = b.x + b.w / 2 - T / 2; // Center horizontally
+        const doorY = b.y + b.h; // Bottom edge
+        markRoadPathNoUpdate(grid, doorX, doorY, T, T, 'FAST_ROAD');
+      }
+    }
+  }
+
+  // Check trees that intersect with this section
+  for (const tree of trees) {
+    if (intersectsCircle(tree.x, tree.y, tree.r, startWorldX, startWorldY, endWorldX - startWorldX, endWorldY - startWorldY)) {
+      markCircleSolidNoUpdate(grid, tree.x, tree.y, tree.r);
+    }
+  }
+
+  // Check rocks that intersect with this section
+  for (const rock of rocks) {
+    if (intersectsCircle(rock.x, rock.y, rock.r, startWorldX, startWorldY, endWorldX - startWorldX, endWorldY - startWorldY)) {
+      markCircleSolidNoUpdate(grid, rock.x, rock.y, rock.r);
+    }
+  }
+}
+
+// Intersection helpers
+function intersectsRect(x1: number, y1: number, w1: number, h1: number, x2: number, y2: number, w2: number, h2: number): boolean {
+  return !(x1 + w1 <= x2 || x1 >= x2 + w2 || y1 + h1 <= y2 || y1 >= y2 + h2);
+}
+
+function intersectsCircle(cx: number, cy: number, radius: number, rectX: number, rectY: number, rectW: number, rectH: number): boolean {
+  // Check if circle intersects with rectangle
+  const closestX = Math.max(rectX, Math.min(cx, rectX + rectW));
+  const closestY = Math.max(rectY, Math.min(cy, rectY + rectH));
+  const distX = cx - closestX;
+  const distY = cy - closestY;
+  return (distX * distX + distY * distY) <= (radius * radius);
+}
+
+// Non-updating versions of marking functions (for internal section rebuilding)
+function markRectSolidNoUpdate(grid: Grid, x: number, y: number, w: number, h: number): void {
+  const startX = Math.floor(x / T);
+  const startY = Math.floor(y / T);
+  const endX = Math.floor((x + w - 1) / T);
+  const endY = Math.floor((y + h - 1) / T);
+
+  for (let gy = startY; gy <= endY; gy++) {
+    for (let gx = startX; gx <= endX; gx++) {
+      if (gx >= 0 && gy >= 0 && gx < grid.cols && gy < grid.rows) {
+        const idx = gy * grid.cols + gx;
+        grid.solid[idx] = 1;
+      }
+    }
+  }
+}
+
+function markCircleSolidNoUpdate(grid: Grid, cx: number, cy: number, radius: number): void {
+  const startX = Math.floor((cx - radius) / T);
+  const startY = Math.floor((cy - radius) / T);
+  const endX = Math.floor((cx + radius) / T);
+  const endY = Math.floor((cy + radius) / T);
+
+  for (let gy = startY; gy <= endY; gy++) {
+    for (let gx = startX; gx <= endX; gx++) {
+      if (gx >= 0 && gy >= 0 && gx < grid.cols && gy < grid.rows) {
+        const tileCenterX = gx * T + T / 2;
+        const tileCenterY = gy * T + T / 2;
+        const dx = tileCenterX - cx;
+        const dy = tileCenterY - cy;
+        if (dx * dx + dy * dy <= radius * radius) {
+          const idx = gy * grid.cols + gx;
+          grid.solid[idx] = 1;
+        }
+      }
+    }
+  }
+}
+
+function markRoadPathNoUpdate(grid: Grid, x: number, y: number, w: number, h: number, roadType: keyof typeof ROAD_COSTS = 'BASIC_PATH'): void {
+  const cost = ROAD_COSTS[roadType];
+  const clampedCost = Math.max(0.5, Math.min(0.7, cost));
+  
+  const startX = Math.floor(x / T);
+  const startY = Math.floor(y / T);
+  const endX = Math.floor((x + w - 1) / T);
+  const endY = Math.floor((y + h - 1) / T);
+  
+  for (let gy = startY; gy <= endY; gy++) {
+    for (let gx = startX; gx <= endX; gx++) {
+      if (gx >= 0 && gy >= 0 && gx < grid.cols && gy < grid.rows) {
+        const idx = gy * grid.cols + gx;
+        grid.cost[idx] = clampedCost;
+        if (clampedCost < grid.minCost) grid.minCost = clampedCost;
+      }
+    }
+  }
 }
 function tileOf(x: number, y: number) {
   return { gx: Math.floor(x / T), gy: Math.floor(y / T) };

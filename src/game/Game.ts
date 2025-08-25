@@ -1,5 +1,5 @@
 import { clamp, dist2, rand, randi } from "../core/utils";
-import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS } from "../core/pathfinding";
+import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS, updateDirtySections } from "../core/pathfinding";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources } from "./types";
 import { BUILD_TYPES, hasCost, makeBuilding, payCost, groupByCategory } from "./buildings";
@@ -18,6 +18,9 @@ export class Game {
   baseFontSize = 14;
   // Touch capability flag for responsive UI sizing
   isTouch = false;
+  // Actual touch usage detection (vs just capability)
+  isActuallyTouchDevice = false;
+  lastInputWasTouch = false;
   
   RES = { wood: 0, stone: 0, food: 0 };
   BASE_STORAGE = 200; // Base storage capacity
@@ -73,7 +76,7 @@ export class Game {
   selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
   hotbar: Array<keyof typeof BUILD_TYPES> = ['house', 'farm', 'turret', 'wall', 'stock', 'tent', 'warehouse', 'well', 'infirmary'];
   showBuildMenu = false;
-  debug = { nav: false, paths: true, colonists: false };
+  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false };
   // selection & camera follow
   selColonist: Colonist | null = null;
   follow = false;
@@ -132,6 +135,8 @@ export class Game {
     // Heuristic boosts for touch devices and smaller screens
     const isTouch = (("ontouchstart" in window) || (navigator as any).maxTouchPoints > 0);
     this.isTouch = isTouch;
+    // Be more conservative about assuming actual touch usage - start with false
+    this.isActuallyTouchDevice = isTouch && (currentWidth < 900); // Only assume touch for smaller screens initially
     if (isTouch) {
       // Aggressive readability boosts for touch devices
       if (currentWidth < 600) {
@@ -187,6 +192,7 @@ export class Game {
     });
     c.addEventListener('mousedown', (e) => {
       e.preventDefault();
+      this.lastInputWasTouch = false; // Track that mouse is being used
       if ((e as MouseEvent).button === 0) {
         this.mouse.down = true;
         // Desktop: close colonist panel via X or clicking outside panel
@@ -285,11 +291,37 @@ export class Game {
     if (!this.once.has(k)) this.once.add(k); 
     
     // Prevent default behavior for game shortcuts to avoid browser interference
-    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'g' || k === 'j' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
+    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'g' || k === 'j' || k === 'k' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
       e.preventDefault();
     }
   });
     window.addEventListener('keyup', (e) => { this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; });
+    
+    // Touch event handlers to detect actual touch usage
+    c.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      this.isActuallyTouchDevice = true; // Once we see a touch event, we know it's actually being used
+      
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const rect = c.getBoundingClientRect();
+        const sx = touch.clientX - rect.left;
+        const sy = touch.clientY - rect.top;
+        this.handleTapOrClickAtScreen(sx, sy);
+      }
+    });
+    
+    c.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      // Handle touch move if needed for dragging
+    });
+    
+    c.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+    });
   }
 
   // Handle a tap/click at screen-space coordinates (sx, sy)
@@ -366,8 +398,8 @@ export class Game {
   if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
   if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); return; }
 
-  // Start precise placement on touch if nothing active
-  if (this.isTouch && this.selectedBuild) { this.placeAtMouse(); return; }
+  // Start precise placement on touch if nothing active (unless forced desktop mode)
+  if (!this.debug.forceDesktopMode && this.isActuallyTouchDevice && this.lastInputWasTouch && this.selectedBuild) { this.placeAtMouse(); return; }
 
     const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
     if (col) { this.selColonist = col; this.follow = true; return; }
@@ -474,8 +506,8 @@ export class Game {
   }
   placeAtMouse() {
     if (this.paused) return; const t = this.selectedBuild; if (!t) return; const def = BUILD_TYPES[t]; if (!def) return;
-    // Touch devices: start precise placement mode
-    if (this.isTouch) {
+    // Touch devices: start precise placement mode (only if actually using touch and not forced desktop mode)
+    if (!this.debug.forceDesktopMode && this.isActuallyTouchDevice && this.lastInputWasTouch) {
       // Snap to grid upper-left corner
       const gx = Math.floor(this.mouse.wx / T) * T;
       const gy = Math.floor(this.mouse.wy / T) * T;
@@ -936,6 +968,10 @@ export class Game {
   if (this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
     if (this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
+    if (this.keyPressed('k')) { 
+      this.debug.forceDesktopMode = !this.debug.forceDesktopMode; 
+      this.toast(this.debug.forceDesktopMode ? 'Debug: Force Desktop Mode ON' : 'Debug: Force Desktop Mode OFF'); 
+    }
   if (this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
     if (this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
     
