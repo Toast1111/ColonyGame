@@ -208,7 +208,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   
   // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
   const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply personality modifier
-  if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
+  // Only reduce fatigue when actually inside a building or in the resting state, NOT when just seeking sleep
+  if (c.inside || c.state === 'resting') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
   else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
   // Movement penalty from fatigue
   (c as any).fatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
@@ -239,7 +240,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   // Helper function to cleanly change state and clear conflicting task data
   function changeState(newState: ColonistState, reason?: string) {
     // Critical states bypass locks
-    const isCritical = (s: ColonistState) => (s === 'flee' || s === 'heal');
+    const isCritical = (s: ColonistState) => (s === 'flee' || s === 'heal' || (s === 'sleep' && game.isNight()));
     // Soft-lock: block low-priority flips while the timer runs
     if (!isCritical(newState) && c.softLockUntil != null && c.t < (c.softLockUntil || 0)) {
       return; // ignore low-priority flip
@@ -342,7 +343,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     };
     const intent = evaluateIntent();
     if (intent && intent.state !== c.state) {
-      const critical = intent.state === 'flee' || intent.state === 'heal';
+      const critical = intent.state === 'flee' || intent.state === 'heal' || (intent.state === 'sleep' && game.isNight());
       const curPrio = statePriority(c.state as ColonistState);
       const shouldSwitch = critical || (intent.prio > curPrio && canChangeState);
       if (shouldSwitch) changeState(intent.state, intent.reason);
@@ -521,9 +522,77 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     case 'sleep': {
       const protectedHouses = (game.buildings as Building[]).filter(b => b.kind === 'house' && b.done && game.isProtectedByTurret(b) && game.buildingHasSpace(b));
-  if (!game.isNight() || protectedHouses.length === 0) { changeState('seekTask', 'sleep canceled'); break; }
-      let best = protectedHouses[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
-      for (let i = 1; i < protectedHouses.length; i++) { const d = dist2(c as any, game.centerOf(protectedHouses[i]) as any); if (d < bestD) { bestD = d; best = protectedHouses[i]; } }
+      
+      // If no protected houses available, try any house or HQ, or sleep in place near HQ
+      if (protectedHouses.length === 0) {
+        const anyHouse = (game.buildings as Building[]).filter(b => (b.kind === 'house' || b.kind === 'hq') && b.done && game.buildingHasSpace(b));
+        
+        if (anyHouse.length > 0) {
+          // Try any available house/HQ
+          const house = anyHouse.sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
+          const hc = game.centerOf(house);
+          const distance = Math.hypot(hc.x - c.x, hc.y - c.y);
+          
+          if (distance <= 20) {
+            if (game.tryEnterBuilding(c, house)) {
+              c.hideTimer = 0;
+              changeState('resting', 'sleeping in unprotected shelter');
+            } else {
+              // If can't enter, sleep nearby
+              changeState('resting', 'sleeping outside shelter');
+            }
+          } else {
+            game.moveAlongPath(c, dt, hc, 20);
+          }
+        } else {
+          // No buildings available - sleep in place or move to HQ area for safety
+          const hq = (game.buildings as Building[]).find(b => b.kind === 'hq');
+          if (hq) {
+            const hqCenter = game.centerOf(hq);
+            const distToHQ = Math.hypot(hqCenter.x - c.x, hqCenter.y - c.y);
+            if (distToHQ > 50) {
+              // Move closer to HQ for safety
+              game.moveAlongPath(c, dt, hqCenter, 40);
+            } else {
+              // Sleep in place near HQ
+              changeState('resting', 'sleeping near HQ');
+            }
+          } else {
+            // No HQ - just sleep in place
+            changeState('resting', 'sleeping in place');
+          }
+        }
+        
+        // Timeout to prevent getting stuck
+        if (c.stateSince > 15) {
+          changeState('resting', 'sleep timeout - resting in place');
+        }
+        break;
+      }
+      
+      if (!game.isNight()) { 
+        changeState('seekTask', 'daybreak'); 
+        break; 
+      }
+      
+      // Improve house selection - prefer houses with more space and closer distance
+      let best = protectedHouses[0]; 
+      let bestScore = -1;
+      
+      for (const house of protectedHouses) {
+        const distance = dist2(c as any, game.centerOf(house) as any);
+        const capacity = game.buildingCapacity(house);
+        const current = game.insideCounts.get(house) || 0;
+        const spaceAvailable = capacity - current;
+        
+        // Score based on available space (higher is better) and inverse distance (closer is better)
+        const score = spaceAvailable * 100 - Math.sqrt(distance);
+        
+        if (score > bestScore) {
+          bestScore = score;
+          best = house;
+        }
+      }
       let hc = game.centerOf(best);
       
       // Use direct movement instead of pathfinding
@@ -533,18 +602,31 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
       
       if (distance <= 20 || nearRect) {
-        if (game.tryEnterBuilding(c, best)) { c.hideTimer = 0; changeState('resting', 'fell asleep'); }
-        else {
+        if (game.tryEnterBuilding(c, best)) { 
+          c.hideTimer = 0; 
+          changeState('resting', 'fell asleep'); 
+        } else {
           // Try another house with space, or HQ if available
           const next = (game.buildings as Building[])
             .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'))
             .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
-          if (next) { const nc = game.centerOf(next); best = next; hc = nc; /* retarget without clearing path */ }
-          else { changeState('seekTask', 'no bed available'); }
+          if (next) { 
+            const nc = game.centerOf(next); 
+            best = next; 
+            hc = nc; 
+            /* retarget without clearing path */ 
+          } else { 
+            changeState('seekTask', 'no bed available'); 
+          }
         }
       } else {
         // Move toward the house using pathfinding
         game.moveAlongPath(c, dt, hc, 20);
+        
+        // Add timeout for stuck colonists - if they've been trying to sleep for too long, give up
+        if (c.stateSince > 15) { // 15 seconds timeout
+          changeState('seekTask', 'sleep timeout');
+        }
       }
       break;
     }
@@ -640,6 +722,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'idle': {
+      // Check for night time even when idle - colonists should go to sleep
+      if (game.isNight()) { 
+        // Debug: Log when we catch a colonist being idle during night
+        if (Math.random() < 0.1) {
+          console.log(`Colonist was idle during night time, forcing sleep transition`);
+        }
+        changeState('sleep', 'night time while idle'); 
+        break; 
+      }
+      
       const dst = c.target; if (!dst) { changeState('seekTask', 'no target'); break; }
       if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'reached target'); }
       break;
@@ -668,11 +760,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break;
       }
       
-      // Track position for jitter detection
+      // Track position for jitter detection - TEMPORARILY DISABLED
       const distToTarget = Math.hypot(c.x - pt.x, c.y - pt.y);
       if (!c.lastDistToNode) c.lastDistToNode = distToTarget;
       
-      // Check for build jittering (not making progress)
+      // Check for build jittering (not making progress) - TEMPORARILY DISABLED
+      /*
       if (c.stateSince > 3 && Math.abs(distToTarget - c.lastDistToNode) < 5) {
         c.jitterScore = (c.jitterScore || 0) + 1;
         if (c.jitterScore > 30) { // 30 frames of no progress
@@ -687,6 +780,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       } else {
         c.jitterScore = 0;
       }
+      */
       c.lastDistToNode = distToTarget;
       
       if (game.moveAlongPath(c, dt, pt, 12)) {
@@ -798,10 +892,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Move toward the tree using pathfinding
         game.moveAlongPath(c, dt, t, interact + slack);
         
-        // Track progress to detect if we're making movement towards the tree
+        // Track progress to detect if we're making movement towards the tree - TEMPORARILY DISABLED
         if (!c.lastDistToNode) c.lastDistToNode = distance;
         
-        // If we've been trying for more than 5 seconds and not getting closer, try clearing path
+        // If we've been trying for more than 5 seconds and not getting closer, try clearing path - TEMPORARILY DISABLED
+        /*
         if (c.stateSince > 5.0 && Math.abs(distance - c.lastDistToNode) < 2) {
           c.jitterScore = (c.jitterScore || 0) + 1;
           if (c.jitterScore > 120) { // 2 seconds of no progress (at 60fps)
@@ -812,6 +907,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         } else {
           c.jitterScore = 0;
         }
+        */
         c.lastDistToNode = distance;
       }
 
@@ -877,9 +973,14 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
   }
 
-  // basic separation to avoid stacking
+  // Soft separation with grace period - colonists can overlap for 1 second before personal space kicks in
+  // Initialize overlap timers if not present
+  if (!(c as any).overlapTimers) {
+    (c as any).overlapTimers = new Map();
+  }
+  
   for (const o of game.colonists as Colonist[]) {
-    if (o === c) continue; 
+    if (o === c || !o.alive) continue; 
     
     // Skip separation if this colonist is actively mining or chopping (within interaction range)
     if ((c.state === 'mine' || c.state === 'chop') && c.target) {
@@ -889,7 +990,39 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (d <= interact + slack) continue; // Skip separation when actively working
     }
     
-    const dx = c.x - o.x, dy = c.y - o.y; const d2 = dx * dx + dy * dy; const rr = (c.r + 2) * (c.r + 2);
-    if (d2 > 0 && d2 < rr * 4) { const d = Math.sqrt(d2) || 1; const push = (rr * 2 - d) * 0.5; c.x += (dx / d) * push * dt * 6; c.y += (dy / d) * push * dt * 6; }
+    // Also skip separation if either colonist is inside a building
+    if (c.inside || o.inside) continue;
+    
+    const dx = c.x - o.x, dy = c.y - o.y; 
+    const d2 = dx * dx + dy * dy; 
+    const personalSpace = (c.r + o.r + 8); // Increased personal space preference
+    const rr = personalSpace * personalSpace;
+    
+    const otherId = (o as any).id || o; // Use colonist id as key
+    const overlapTimers = (c as any).overlapTimers as Map<any, number>;
+    
+    // Check if colonists are overlapping
+    if (d2 > 0 && d2 < rr) { 
+      // Track overlap time
+      if (!overlapTimers.has(otherId)) {
+        overlapTimers.set(otherId, 0);
+      }
+      overlapTimers.set(otherId, overlapTimers.get(otherId)! + dt);
+      
+      // Only apply separation after 1 second grace period
+      const overlapTime = overlapTimers.get(otherId)!;
+      if (overlapTime >= 1.0) {
+        const d = Math.sqrt(d2) || 1; 
+        const pushStrength = (personalSpace - d) / personalSpace; // Normalized push strength (0-1)
+        const softPush = pushStrength * 0.3; // Much gentler push
+        
+        // Apply gentle separation after grace period
+        c.x += (dx / d) * softPush * dt * 3;
+        c.y += (dy / d) * softPush * dt * 3;
+      }
+    } else {
+      // Not overlapping - clear the timer
+      overlapTimers.delete(otherId);
+    }
   }
 }

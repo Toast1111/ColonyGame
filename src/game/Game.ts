@@ -692,7 +692,11 @@ export class Game {
     if (cur <= 0) this.buildReservations.delete(b); else this.buildReservations.set(b, cur);
     c.reservedBuildFor = null;
   }
-  clearPath(c: Colonist) { c.path = undefined; c.pathIndex = undefined; c.repath = 0; }
+  clearPath(c: Colonist) { 
+    c.path = undefined; 
+    c.pathIndex = undefined; // RE-ENABLED
+    // c.repath = 0; // REPATH TIMER STILL DISABLED
+  }
   setTask(c: Colonist, task: string, target: any) {
     // release old reserved target
     if (c.target && (c.target as any).type && this.assignedTargets.has(c.target)) this.assignedTargets.delete(c.target);
@@ -708,6 +712,12 @@ export class Game {
     }
   }
   pickTask(c: Colonist) {
+    // During night time, don't assign new tasks - colonists should be sleeping
+    if (this.isNight()) {
+      this.setTask(c, 'idle', { x: c.x, y: c.y }); // Stay in place, FSM will handle sleep transition
+      return;
+    }
+    
     // Prefer an unfinished building with available crew slots
     let site: Building | null = null; let bestD = Infinity;
     for (const b of this.buildings) {
@@ -764,13 +774,16 @@ export class Game {
     let best: T | null = null, bestD = 1e9; for (const o of arr) { const d = dist2(p as any, o as any); if (d < bestD) { bestD = d; best = o; } } return best;
   }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
-    // periodic re-pathing but only if goal changed or timer elapsed
-    c.repath = (c.repath || 0) - dt;
+    // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
+    // c.repath = (c.repath || 0) - dt; // TEMPORARILY DISABLED
     const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24); // Increased from 12 to 24
-    if (target && (goalChanged || c.repath == null || c.repath <= 0 || !c.path || c.pathIndex == null)) {
+    // if (target && (goalChanged || c.repath == null || c.repath <= 0 || !c.path || c.pathIndex == null)) {
+    if (target && (goalChanged || !c.path || c.pathIndex == null)) { // RE-ENABLED PATHINDEX CHECK, REPATH TIMER STILL DISABLED
       const p = this.computePath(c.x, c.y, target.x, target.y);
       if (p && p.length) { 
-        c.path = p; c.pathIndex = 0; c.pathGoal = { x: target.x, y: target.y }; 
+        c.path = p; 
+        c.pathIndex = 0; // RE-ENABLED
+        c.pathGoal = { x: target.x, y: target.y }; 
         // Debug: Log if path goes through low-cost areas
         if (Math.random() < 0.1) {
           let pathTiles = 0;
@@ -791,12 +804,14 @@ export class Game {
           console.log(`Failed to compute path from (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) to (${target.x.toFixed(1)}, ${target.y.toFixed(1)})`);
         }
       }
-      c.repath = 5.0; // seconds between recompute (increased from 2.0 to reduce unnecessary re-pathing)
+      // c.repath = 5.0; // seconds between recompute - TEMPORARILY DISABLED
     }
+    // PATHINDEX LOGIC RE-ENABLED
     if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) {
       if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
       return false;
     }
+    // Use pathIndex to get current node
     const node = c.path[c.pathIndex];
     const dx = node.x - c.x; const dy = node.y - c.y; let L = Math.hypot(dx, dy);
     // Hysteresis to avoid oscillation around a node
@@ -823,9 +838,10 @@ export class Game {
     // Prevent overshoot that causes ping-pong around node: snap to node if close or step would overshoot
     const step = speed * dt;
     if (L <= Math.max(arriveNode, step)) {
-      // Snap to node and advance
+      // Snap to node and advance - PATHINDEX RE-ENABLED
       c.x = node.x; c.y = node.y;
       c.pathIndex++;
+      // Don't shift the array, just use pathIndex to track position
       c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
       if (c.pathIndex >= c.path.length) { c.path = undefined; c.pathIndex = undefined; if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive; return true; }
       return false;
@@ -847,15 +863,16 @@ export class Game {
     }
     c.lastDistToNode = L;
     if ((c.jitterScore || 0) >= 8 || (c.jitterWindow || 0) > 3.0) { // Increased thresholds to be less aggressive
-      // If very close to node, just advance; otherwise, try a light replan once
+      // If very close to node, just advance; otherwise, try a light replan once - PATHINDEX RE-ENABLED
       if (L < arriveNode + hysteresis) {
         c.pathIndex++;
+        // Don't shift array when using pathIndex
       } else if (target) {
         const p = this.computePath(c.x, c.y, target.x, target.y);
-        if (p && p.length) { c.path = p; c.pathIndex = 0; }
+        if (p && p.length) { c.path = p; c.pathIndex = 0; } // PATHINDEX RE-ENABLED
       }
       c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
-      if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false;
+      if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false; // RE-ENABLED
     }
 
     // Simple movement toward the waypoint - let A* handle the smart routing
@@ -1031,10 +1048,10 @@ export class Game {
             this.msg('Recruit tent attracted a new colonist! (-15 food)', 'good');
             b.cooldown = 60; // 60 second cooldown
           } else if (this.RES.food < totalFoodNeeded && this.RES.food >= 15) {
-            // Show message when recruitment is blocked due to low food reserves
-            if (Math.random() < 0.02) { // Occasional message to avoid spam
-              this.msg(`Recruitment halted: need ${totalFoodNeeded} food (${foodReserveNeeded} reserves + ${recruitmentCost} cost), have ${this.RES.food}`, 'warn');
-            }
+            // Show message when recruitment is blocked due to low food reserves - DISABLED TO REDUCE SPAM
+            // if (Math.random() < 0.02) { // Occasional message to avoid spam
+            //   this.msg(`Recruitment halted: need ${totalFoodNeeded} food (${foodReserveNeeded} reserves + ${recruitmentCost} cost), have ${this.RES.food}`, 'warn');
+            // }
           }
         }
       }
@@ -1126,7 +1143,7 @@ export class Game {
         if (!c.alive || !c.path || !c.path.length) continue;
         ctx.beginPath();
         ctx.moveTo(c.x, c.y);
-        for (let i = c.pathIndex ?? 0; i < c.path.length; i++) {
+        for (let i = c.pathIndex ?? 0; i < c.path.length; i++) { // PATHINDEX RE-ENABLED
           const p = c.path[i];
           ctx.lineTo(p.x, p.y);
         }

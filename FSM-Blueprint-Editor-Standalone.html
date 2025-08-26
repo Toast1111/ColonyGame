@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 FSM Blueprint Editor - Standalone</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 70px;
+            background: linear-gradient(135deg, #1e1e1e, #2d2d30);
+            border-bottom: 3px solid #0078d4;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 1000;
+            gap: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+        
+        .toolbar h1 {
+            margin: 0;
+            font-size: 20px;
+            background: linear-gradient(45deg, #0078d4, #00bcf2);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: bold;
+        }
+        
+        .toolbar button {
+            background: linear-gradient(45deg, #0078d4, #005a9e);
+            border: none;
+            color: white;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .toolbar button:hover {
+            background: linear-gradient(45deg, #106ebe, #0078d4);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,120,212,0.4);
+        }
+        
+        .toolbar button.special {
+            background: linear-gradient(45deg, #44ff44, #2d8f2d);
+        }
+        
+        .toolbar button.special:hover {
+            background: linear-gradient(45deg, #55ff55, #3d9f3d);
+        }
+        
+        .toolbar button.danger {
+            background: linear-gradient(45deg, #ff4444, #cc0000);
+        }
+        
+        .toolbar button.danger:hover {
+            background: linear-gradient(45deg, #ff5555, #dd1111);
+        }
+        
+        .main-container {
+            display: flex;
+            height: 100vh;
+            padding-top: 70px;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: linear-gradient(135deg, #1e1e1e, #2d2d30);
+            border-right: 2px solid #0078d4;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: 4px 0 12px rgba(0,0,0,0.3);
+        }
+        
+        .code-section {
+            margin-bottom: 25px;
+        }
+        
+        .code-section h3 {
+            color: #00bcf2;
+            margin-bottom: 10px;
+            font-size: 16px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+        
+        .code-input {
+            width: 100%;
+            height: 150px;
+            background: #0a0a0a;
+            border: 2px solid #444;
+            border-radius: 6px;
+            color: #fff;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            padding: 10px;
+            resize: vertical;
+            transition: border-color 0.2s;
+        }
+        
+        .code-input:focus {
+            outline: none;
+            border-color: #0078d4;
+            box-shadow: 0 0 10px rgba(0, 120, 212, 0.3);
+        }
+        
+        .canvas-area {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #363636 1px, transparent 1px);
+            background-size: 25px 25px;
+            overflow: hidden;
+        }
+        
+        .node-palette {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 280px;
+            background: rgba(30, 30, 30, 0.95);
+            border: 2px solid #0078d4;
+            border-radius: 8px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .palette-section {
+            margin-bottom: 15px;
+        }
+        
+        .palette-section h4 {
+            color: #00bcf2;
+            font-size: 12px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .palette-node {
+            background: linear-gradient(135deg, #404040, #505050);
+            border: 2px solid #666;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 5px 0;
+            cursor: move;
+            transition: all 0.2s;
+            font-size: 11px;
+            text-align: center;
+            user-select: none;
+        }
+        
+        .palette-node:hover {
+            border-color: #0078d4;
+            box-shadow: 0 0 15px rgba(0, 120, 212, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .palette-node.critical { border-color: #ff4444; background: linear-gradient(135deg, #4a1a1a, #5a2a2a); }
+        .palette-node.work { border-color: #44ff44; background: linear-gradient(135deg, #1a4a1a, #2a5a2a); }
+        .palette-node.rest { border-color: #4444ff; background: linear-gradient(135deg, #1a1a4a, #2a2a5a); }
+        .palette-node.movement { border-color: #ffff44; background: linear-gradient(135deg, #4a4a1a, #5a5a2a); }
+        .palette-node.management { border-color: #ff44ff; background: linear-gradient(135deg, #4a1a4a, #5a2a5a); }
+        
+        #blueprintCanvas {
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+            display: block;
+        }
+        
+        #blueprintCanvas:active {
+            cursor: grabbing;
+        }
+        
+        .blueprint-node {
+            position: absolute;
+            background: linear-gradient(135deg, #2d2d30, #404040);
+            border: 2px solid #666;
+            border-radius: 12px;
+            min-width: 200px;
+            min-height: 140px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+            cursor: move;
+            font-size: 12px;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        
+        .blueprint-node:hover {
+            box-shadow: 0 8px 25px rgba(0,120,212,0.3);
+        }
+        
+        .blueprint-node.selected {
+            border-color: #0078d4;
+            box-shadow: 0 0 25px rgba(0, 120, 212, 0.6);
+        }
+        
+        .blueprint-node.critical {
+            border-color: #ff4444;
+            background: linear-gradient(135deg, #4a1a1a, #5a2a2a);
+        }
+        
+        .blueprint-node.work {
+            border-color: #44ff44;
+            background: linear-gradient(135deg, #1a4a1a, #2a5a2a);
+        }
+        
+        .blueprint-node.rest {
+            border-color: #4444ff;
+            background: linear-gradient(135deg, #1a1a4a, #2a2a5a);
+        }
+        
+        .blueprint-node.movement {
+            border-color: #ffff44;
+            background: linear-gradient(135deg, #4a4a1a, #5a5a2a);
+        }
+        
+        .blueprint-node.management {
+            border-color: #ff44ff;
+            background: linear-gradient(135deg, #4a1a4a, #5a2a5a);
+        }
+        
+        .node-header {
+            background: linear-gradient(90deg, #0078d4, #005a9e);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 10px 10px 0 0;
+            font-weight: bold;
+            font-size: 14px;
+            border-bottom: 1px solid #333;
+        }
+        
+        .node-body {
+            padding: 15px;
+        }
+        
+        .node-description {
+            font-size: 11px;
+            color: #ccc;
+            margin-bottom: 10px;
+            line-height: 1.4;
+        }
+        
+        .node-priority {
+            background: #333;
+            border-radius: 12px;
+            padding: 4px 10px;
+            font-size: 10px;
+            color: #0078d4;
+            display: inline-block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        .connection-port {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 3px solid #666;
+            background: #2d2d30;
+            cursor: crosshair;
+            transition: all 0.2s;
+        }
+        
+        .connection-port.input {
+            left: -9px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .connection-port.output {
+            right: -9px;
+        }
+        
+        .connection-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #0078d4;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            cursor: move;
+            z-index: 20;
+            transition: all 0.2s;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        
+        .connection-handle:hover {
+            background: #00bcf2;
+            transform: scale(1.3);
+            box-shadow: 0 4px 12px rgba(0, 120, 212, 0.5);
+        }
+        
+        .connection-handle.selected {
+            background: #ff4444;
+            border-color: #ffff44;
+        }
+        
+        .connection-line {
+            stroke: #666;
+            stroke-width: 3;
+            fill: none;
+            cursor: pointer;
+            filter: drop-shadow(0 0 3px rgba(0,0,0,0.5));
+        }
+        
+        .connection-line:hover {
+            stroke-width: 4;
+            filter: drop-shadow(0 0 6px rgba(0,120,212,0.3));
+        }
+        
+        .connection-line.selected {
+            stroke: #0078d4;
+            stroke-width: 4;
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+        }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #1e1e1e, #2d2d30);
+            border: 2px solid #0078d4;
+            border-radius: 12px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80%;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+        
+        .modal h2 {
+            color: #00bcf2;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .export-area {
+            background: #0a0a0a;
+            border: 2px solid #444;
+            border-radius: 6px;
+            padding: 20px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        
+        .button-row {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: #1e1e1e;
+            border-top: 1px solid #444;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 12px;
+            color: #ccc;
+            justify-content: space-between;
+        }
+        
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .zoom-controls button {
+            background: #333;
+            border: 1px solid #555;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .zoom-controls button:hover {
+            background: #555;
+        }
+        
+        .minimap {
+            position: absolute;
+            bottom: 50px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            background: rgba(30, 30, 30, 0.9);
+            border: 2px solid #0078d4;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #minimapCanvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <h1>🎮 FSM Blueprint Editor v2.0</h1>
+        <button onclick="parseCode()" class="special">📥 Parse Code</button>
+        <button onclick="autoLayout()">🔧 Auto Layout</button>
+        <button onclick="resetView()">🎯 Reset View</button>
+        <button onclick="addNewState()">➕ Add State</button>
+        <button onclick="exportCode()">📤 Export TypeScript</button>
+        <button onclick="clearAll()" class="danger">🗑️ Clear All</button>
+        <button onclick="saveProject()">💾 Save Project</button>
+        <button onclick="loadProject()">📁 Load Project</button>
+    </div>
+    
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="code-section">
+                <h3>📝 Paste Your FSM Code Here</h3>
+                <textarea id="codeInput" class="code-input" placeholder="Paste your TypeScript FSM code here...
+Example:
+const colonistStates = {
+  seekTask: {
+    priority: 10,
+    conditions: {
+      idle: 'No tasks available'
+    }
+  },
+  idle: {
+    priority: 15,
+    conditions: {
+      seekTask: 'Looking for tasks'
+    }
+  }
+};"></textarea>
+                <button onclick="parseCode()" style="width: 100%; margin-top: 10px; padding: 8px;">
+                    🔄 Parse & Visualize
+                </button>
+            </div>
+            
+            <div class="code-section">
+                <h3>📋 Instructions</h3>
+                <div style="font-size: 11px; color: #ccc; line-height: 1.4;">
+                    <p><strong>1.</strong> Paste your FSM code above</p>
+                    <p><strong>2.</strong> Click "Parse & Visualize"</p>
+                    <p><strong>3.</strong> Drag nodes to organize</p>
+                    <p><strong>4.</strong> Add/edit states visually</p>
+                    <p><strong>5.</strong> Export clean TypeScript</p>
+                    <br>
+                    <p><strong>💡 Tips:</strong></p>
+                    <p>• Drag nodes from palette to add new states</p>
+                    <p>• Right-click nodes to edit properties</p>
+                    <p>• Use Auto Layout for clean organization</p>
+                    <p>• Save/Load projects as JSON files</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="canvas-area">
+            <canvas id="blueprintCanvas"></canvas>
+            <svg id="connectionLayer" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;"></svg>
+            
+            <div class="node-palette">
+                <div class="palette-section">
+                    <h4>🆘 Critical States</h4>
+                    <div class="palette-node critical" draggable="true" data-type="flee">
+                        <strong>Flee</strong><br>Emergency escape
+                    </div>
+                    <div class="palette-node critical" draggable="true" data-type="heal">
+                        <strong>Heal</strong><br>Recover health
+                    </div>
+                </div>
+                
+                <div class="palette-section">
+                    <h4>🔨 Work States</h4>
+                    <div class="palette-node work" draggable="true" data-type="build">
+                        <strong>Build</strong><br>Construct buildings
+                    </div>
+                    <div class="palette-node work" draggable="true" data-type="work">
+                        <strong>Work</strong><br>General task
+                    </div>
+                </div>
+                
+                <div class="palette-section">
+                    <h4>🛌 Rest States</h4>
+                    <div class="palette-node rest" draggable="true" data-type="sleep">
+                        <strong>Sleep</strong><br>Night rest
+                    </div>
+                    <div class="palette-node rest" draggable="true" data-type="eat">
+                        <strong>Eat</strong><br>Consume food
+                    </div>
+                </div>
+                
+                <div class="palette-section">
+                    <h4>🎯 Management</h4>
+                    <div class="palette-node management" draggable="true" data-type="idle">
+                        <strong>Idle</strong><br>Wait for orders
+                    </div>
+                </div>
+            </div>
+            
+            <div class="minimap">
+                <canvas id="minimapCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <div>
+            <span id="statusText">Ready - Paste your FSM code and click Parse!</span>
+        </div>
+        <div class="zoom-controls">
+            <button onclick="zoomOut()">-</button>
+            <span id="zoomLevel">100%</span>
+            <button onclick="zoomIn()">+</button>
+        </div>
+    </div>
+    
+    <!-- Export Modal -->
+    <div id="exportModal" class="modal">
+        <div class="modal-content">
+            <h2>📤 Export TypeScript Code</h2>
+            <div id="exportArea" class="export-area"></div>
+            <div class="button-row">
+                <button onclick="copyToClipboard()">📋 Copy to Clipboard</button>
+                <button onclick="downloadFile()">💾 Download File</button>
+                <button onclick="closeModal()">❌ Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let fsm = { nodes: {}, connections: [] };
+        let camera = { x: 0, y: 0, zoom: 1 };
+        let selectedNode = null;
+        let selectedConnection = null;
+        let selectedHandle = null;
+        let isDragging = false;
+        let isDraggingHandle = false;
+        let dragOffset = { x: 0, y: 0 };
+        let isConnecting = false;
+        let connectionStart = null;
+        let nextNodeId = 1;
+
+        // Canvas setup
+        const canvas = document.getElementById('blueprintCanvas');
+        const ctx = canvas.getContext('2d');
+        const connectionLayer = document.getElementById('connectionLayer');
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            connectionLayer.setAttribute('width', canvas.width);
+            connectionLayer.setAttribute('height', canvas.height);
+            render();
+        }
+
+        // Coordinate transformations
+        function worldToScreen(x, y) {
+            return {
+                x: (x + camera.x) * camera.zoom,
+                y: (y + camera.y) * camera.zoom
+            };
+        }
+
+        function screenToWorld(x, y) {
+            return {
+                x: x / camera.zoom - camera.x,
+                y: y / camera.zoom - camera.y
+            };
+        }
+
+        // Code parsing function
+        function parseCode() {
+            const code = document.getElementById('codeInput').value.trim();
+            if (!code) {
+                updateStatus('⚠️ Please paste some FSM code first!');
+                return;
+            }
+
+            try {
+                // Reset FSM
+                const nodes = {};
+                const connections = [];
+                let nodeCounter = 0;
+
+                // Parse your actual switch-case FSM structure
+                const switchRegex = /switch\s*\(\s*c\.state\s*\)\s*\{([\s\S]*?)\n\s*\}/;
+                const switchMatch = code.match(switchRegex);
+                
+                if (!switchMatch) {
+                    updateStatus('❌ Could not find switch(c.state) block');
+                    return;
+                }
+
+                const switchContent = switchMatch[1];
+                
+                // Extract all case statements and their content
+                const caseRegex = /case\s+['"`](\w+)['"`]\s*:\s*\{([\s\S]*?)(?=case\s+['"`]\w+['"`]|default:|break;\s*\}|\}$)/g;
+                
+                let match;
+                const states = new Set();
+                const transitions = [];
+                
+                while ((match = caseRegex.exec(switchContent)) !== null) {
+                    const [, stateName, caseContent] = match;
+                    states.add(stateName);
+                    
+                    // Look for changeState calls to find transitions
+                    const changeStateRegex = /changeState\s*\(\s*['"`](\w+)['"`]\s*,\s*['"`]([^'"`]+)['"`]\s*\)/g;
+                    let transitionMatch;
+                    
+                    while ((transitionMatch = changeStateRegex.exec(caseContent)) !== null) {
+                        const [, targetState, condition] = transitionMatch;
+                        states.add(targetState); // Also add target states
+                        transitions.push({
+                            from: stateName,
+                            to: targetState,
+                            condition: condition
+                        });
+                    }
+                }
+
+                // Also look for changeState calls in the evaluateIntent function and other places
+                const globalChangeStateRegex = /(?:set|changeState)\s*\(\s*['"`](\w+)['"`]/g;
+                while ((match = globalChangeStateRegex.exec(code)) !== null) {
+                    const [, targetState] = match;
+                    states.add(targetState);
+                }
+
+                // Create nodes for all discovered states
+                states.forEach(stateName => {
+                    nodes[stateName] = {
+                        id: stateName,
+                        title: stateName.charAt(0).toUpperCase() + stateName.slice(1),
+                        description: getStateDescription(stateName),
+                        priority: getStatePriority(stateName),
+                        type: getStateType(stateName),
+                        position: { 
+                            x: 100 + (nodeCounter % 4) * 250, 
+                            y: 100 + Math.floor(nodeCounter / 4) * 200 
+                        },
+                        size: { width: 200, height: 140 },
+                        conditions: {}
+                    };
+                    nodeCounter++;
+                });
+
+                // Create connections
+                transitions.forEach((trans, index) => {
+                    if (nodes[trans.from] && nodes[trans.to]) {
+                        connections.push({
+                            id: `conn_${index}`,
+                            from: trans.from,
+                            to: trans.to,
+                            condition: trans.condition,
+                            priority: getTransitionPriority(trans.condition)
+                        });
+                    }
+                });
+
+                const nodeCount = Object.keys(nodes).length;
+                const connCount = connections.length;
+                
+                if (nodeCount === 0) {
+                    updateStatus('❌ No FSM states found. Make sure you have case statements in your switch block.');
+                } else {
+                    fsm = { nodes, connections };
+                    render();
+                    updateStatus(`✅ Parsed ${nodeCount} states and ${connCount} transitions from your ColonistFSM!`);
+                }
+                
+            } catch (error) {
+                updateStatus('❌ Error parsing code: ' + error.message);
+                console.error('Parse error:', error);
+            }
+        }
+
+        function getStateDescription(stateName) {
+            const descriptions = {
+                'resting': 'Recover fatigue and health inside buildings',
+                'heal': 'Seek medical attention at infirmary',
+                'eat': 'Consume food to reduce hunger',
+                'flee': 'Escape from danger to safe location',
+                'sleep': 'Go to bed during night time',
+                'goToSleep': 'Seek rest when very tired',
+                'seekTask': 'Look for available work assignments',
+                'idle': 'Wander around when no tasks available',
+                'build': 'Construct buildings and structures',
+                'harvest': 'Collect crops from farms or wells',
+                'chop': 'Cut down trees for wood resources',
+                'mine': 'Extract stone from rock deposits',
+                'move': 'Navigate to target location'
+            };
+            return descriptions[stateName] || `${stateName} state behavior`;
+        }
+
+        function getStatePriority(stateName) {
+            const priorities = {
+                'flee': 100,
+                'heal': 90,
+                'sleep': 80,
+                'goToSleep': 75,
+                'eat': 65,
+                'build': 40,
+                'chop': 40,
+                'mine': 40,
+                'harvest': 40,
+                'resting': 35,
+                'move': 25,
+                'idle': 15,
+                'seekTask': 10
+            };
+            return priorities[stateName] || 50;
+        }
+
+        function getTransitionPriority(condition) {
+            if (condition.includes('danger')) return 100;
+            if (condition.includes('health') || condition.includes('heal')) return 90;
+            if (condition.includes('night')) return 80;
+            if (condition.includes('fatigue') || condition.includes('tired')) return 75;
+            if (condition.includes('hunger') || condition.includes('food')) return 65;
+            if (condition.includes('complete') || condition.includes('done')) return 50;
+            return 30;
+        }
+
+        function getStateType(stateName) {
+            const name = stateName.toLowerCase();
+            if (name.includes('flee') || name.includes('heal') || name.includes('danger')) return 'critical';
+            if (name.includes('build') || name.includes('work') || name.includes('chop') || name.includes('mine') || name.includes('harvest')) return 'work';
+            if (name.includes('sleep') || name.includes('eat') || name.includes('rest')) return 'rest';
+            if (name.includes('move') || name.includes('go')) return 'movement';
+            return 'management';
+        }
+
+        // Rendering functions
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            drawGrid();
+            
+            // Clear previous DOM nodes
+            document.querySelectorAll('.blueprint-node').forEach(node => node.remove());
+            
+            // Draw nodes
+            for (const node of Object.values(fsm.nodes)) {
+                drawBlueprintNode(node);
+            }
+            
+            // Draw connections
+            drawConnections();
+            
+            // Update minimap
+            updateMinimap();
+        }
+
+        function drawGrid() {
+            const gridSize = 30 * camera.zoom;
+            const offsetX = (camera.x * camera.zoom) % gridSize;
+            const offsetY = (camera.y * camera.zoom) % gridSize;
+            
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            
+            for (let x = offsetX; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = offsetY; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        function drawBlueprintNode(node) {
+            const screenPos = worldToScreen(node.position.x, node.position.y);
+            const width = node.size.width * camera.zoom;
+            const height = node.size.height * camera.zoom;
+            
+            // Skip if off-screen
+            if (screenPos.x + width < 0 || screenPos.x > canvas.width || 
+                screenPos.y + height < 0 || screenPos.y > canvas.height) {
+                return;
+            }
+
+            // Create or update DOM element
+            let nodeElement = document.getElementById(`node_${node.id}`);
+            if (!nodeElement) {
+                nodeElement = createNodeElement(node);
+                canvas.parentElement.appendChild(nodeElement);
+            }
+
+            // Update position and size
+            nodeElement.style.left = screenPos.x + 'px';
+            nodeElement.style.top = screenPos.y + 'px';
+            nodeElement.style.width = width + 'px';
+            nodeElement.style.height = height + 'px';
+            nodeElement.style.fontSize = Math.max(10, 12 * camera.zoom) + 'px';
+        }
+
+        function createNodeElement(node) {
+            const element = document.createElement('div');
+            element.id = `node_${node.id}`;
+            element.className = `blueprint-node ${node.type}`;
+            
+            const conditionCount = Object.keys(node.conditions || {}).length;
+            const outputPorts = Array.from({length: Math.max(1, conditionCount + 1)}, (_, i) => 
+                `<div class="connection-port output" style="top: ${40 + i * 25}px;" data-target="${Object.keys(node.conditions || {})[i] || ''}"></div>`
+            ).join('');
+            
+            element.innerHTML = `
+                <div class="node-header">${node.title}</div>
+                <div class="node-body">
+                    <div class="node-priority">Priority: ${node.priority}</div>
+                    <div class="node-description">${node.description}</div>
+                </div>
+                <div class="connection-port input"></div>
+                ${outputPorts}
+            `;
+
+            // Add drag functionality
+            element.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && !e.target.classList.contains('connection-port')) {
+                    selectedNode = node.id;
+                    isDragging = true;
+                    const rect = element.getBoundingClientRect();
+                    dragOffset.x = e.clientX - rect.left;
+                    dragOffset.y = e.clientY - rect.top;
+                    
+                    // Clear other selections
+                    document.querySelectorAll('.blueprint-node').forEach(n => n.classList.remove('selected'));
+                    element.classList.add('selected');
+                    e.preventDefault();
+                }
+            });
+
+            // Double-click to edit
+            element.addEventListener('dblclick', () => {
+                editNode(node.id);
+            });
+
+            return element;
+        }
+
+        function drawConnections() {
+            connectionLayer.innerHTML = '';
+            
+            for (const connection of fsm.connections) {
+                const fromNode = fsm.nodes[connection.from];
+                const toNode = fsm.nodes[connection.to];
+                
+                if (!fromNode || !toNode) continue;
+
+                const fromPos = worldToScreen(
+                    fromNode.position.x + fromNode.size.width,
+                    fromNode.position.y + fromNode.size.height / 2
+                );
+                const toPos = worldToScreen(
+                    toNode.position.x,
+                    toNode.position.y + toNode.size.height / 2
+                );
+
+                // Default control points or use custom handles
+                let cp1x, cp1y, cp2x, cp2y;
+                
+                if (connection.handles) {
+                    // Use custom handle positions
+                    const handle1 = worldToScreen(connection.handles.cp1.x, connection.handles.cp1.y);
+                    const handle2 = worldToScreen(connection.handles.cp2.x, connection.handles.cp2.y);
+                    cp1x = handle1.x;
+                    cp1y = handle1.y;
+                    cp2x = handle2.x;
+                    cp2y = handle2.y;
+                } else {
+                    // Default bezier curve
+                    const controlOffset = Math.min(150, Math.abs(toPos.x - fromPos.x) / 2) * camera.zoom;
+                    cp1x = fromPos.x + controlOffset;
+                    cp1y = fromPos.y;
+                    cp2x = toPos.x - controlOffset;
+                    cp2y = toPos.y;
+                }
+
+                // Create SVG path with bezier curve
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const pathData = `M ${fromPos.x} ${fromPos.y} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${toPos.x} ${toPos.y}`;
+                
+                path.setAttribute('d', pathData);
+                path.setAttribute('stroke', getPriorityColor(connection.priority));
+                path.setAttribute('stroke-width', Math.max(2, 3 * camera.zoom));
+                path.setAttribute('fill', 'none');
+                path.setAttribute('filter', 'drop-shadow(0 0 3px rgba(0,0,0,0.5))');
+                path.setAttribute('data-connection-id', connection.id);
+                
+                // Make connection clickable
+                path.style.pointerEvents = 'stroke';
+                path.style.cursor = 'pointer';
+                
+                // Highlight selected connection
+                if (selectedConnection === connection) {
+                    path.setAttribute('stroke-width', Math.max(4, 5 * camera.zoom));
+                    path.setAttribute('filter', 'drop-shadow(0 0 6px rgba(76, 175, 80, 0.8))');
+                }
+                
+                path.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectConnection(connection);
+                });
+                
+                // Double-click to add handles
+                path.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    addConnectionHandles(connection);
+                });
+                
+                connectionLayer.appendChild(path);
+
+                // Add condition label
+                if (camera.zoom > 0.7) {
+                    const midX = (fromPos.x + toPos.x) / 2;
+                    const midY = (fromPos.y + toPos.y) / 2 - 15;
+                    
+                    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    label.setAttribute('x', midX);
+                    label.setAttribute('y', midY);
+                    label.setAttribute('text-anchor', 'middle');
+                    label.setAttribute('fill', '#ccc');
+                    label.setAttribute('font-size', Math.max(10, 11 * camera.zoom));
+                    label.setAttribute('font-family', 'Segoe UI, sans-serif');
+                    label.textContent = connection.condition || 'condition';
+                    label.style.pointerEvents = 'none';
+                    
+                    connectionLayer.appendChild(label);
+                }
+            }
+            
+            // Draw connection handles if a connection is selected
+            drawConnectionHandles();
+        }
+
+        function selectConnection(connection) {
+            selectedConnection = connection;
+            selectedNode = null;
+            selectedHandle = null;
+            
+            // Clear node selections
+            document.querySelectorAll('.blueprint-node').forEach(n => n.classList.remove('selected'));
+            
+            render();
+            updateStatus(`🔗 Selected connection: ${connection.from} → ${connection.to}`);
+        }
+
+        function addConnectionHandles(connection) {
+            if (connection.handles) {
+                updateStatus('⚠️ Connection already has handles! Drag them to adjust.');
+                return;
+            }
+            
+            const fromNode = fsm.nodes[connection.from];
+            const toNode = fsm.nodes[connection.to];
+            
+            if (!fromNode || !toNode) return;
+
+            // Calculate default handle positions
+            const fromPos = {
+                x: fromNode.position.x + fromNode.size.width,
+                y: fromNode.position.y + fromNode.size.height / 2
+            };
+            const toPos = {
+                x: toNode.position.x,
+                y: toNode.position.y + toNode.size.height / 2
+            };
+
+            const controlOffset = Math.min(150, Math.abs(toPos.x - fromPos.x) / 2);
+            
+            connection.handles = {
+                cp1: {
+                    x: fromPos.x + controlOffset,
+                    y: fromPos.y
+                },
+                cp2: {
+                    x: toPos.x - controlOffset,
+                    y: toPos.y
+                }
+            };
+            
+            selectConnection(connection);
+            updateStatus(`✨ Added handles to connection! Drag the blue circles to bend the line.`);
+        }
+
+        function drawConnectionHandles() {
+            // Remove existing handles
+            document.querySelectorAll('.connection-handle').forEach(handle => handle.remove());
+            
+            if (!selectedConnection || !selectedConnection.handles) return;
+            
+            const handles = selectedConnection.handles;
+            
+            // Draw control point 1
+            const cp1Screen = worldToScreen(handles.cp1.x, handles.cp1.y);
+            const handle1 = createHandle('cp1', cp1Screen.x, cp1Screen.y);
+            document.querySelector('.canvas-area').appendChild(handle1);
+            
+            // Draw control point 2
+            const cp2Screen = worldToScreen(handles.cp2.x, handles.cp2.y);
+            const handle2 = createHandle('cp2', cp2Screen.x, cp2Screen.y);
+            document.querySelector('.canvas-area').appendChild(handle2);
+            
+            // Draw handle lines (visual guides)
+            if (camera.zoom > 0.5) {
+                const fromNode = fsm.nodes[selectedConnection.from];
+                const toNode = fsm.nodes[selectedConnection.to];
+                
+                if (fromNode && toNode) {
+                    const fromPos = worldToScreen(
+                        fromNode.position.x + fromNode.size.width,
+                        fromNode.position.y + fromNode.size.height / 2
+                    );
+                    const toPos = worldToScreen(
+                        toNode.position.x,
+                        toNode.position.y + toNode.size.height / 2
+                    );
+                    
+                    // Guide line from start to handle 1
+                    const guideLine1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    guideLine1.setAttribute('x1', fromPos.x);
+                    guideLine1.setAttribute('y1', fromPos.y);
+                    guideLine1.setAttribute('x2', cp1Screen.x);
+                    guideLine1.setAttribute('y2', cp1Screen.y);
+                    guideLine1.style.stroke = '#666';
+                    guideLine1.style.strokeWidth = '1';
+                    guideLine1.style.strokeDasharray = '5,5';
+                    guideLine1.style.pointerEvents = 'none';
+                    connectionLayer.appendChild(guideLine1);
+                    
+                    // Guide line from handle 2 to end
+                    const guideLine2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    guideLine2.setAttribute('x1', cp2Screen.x);
+                    guideLine2.setAttribute('y1', cp2Screen.y);
+                    guideLine2.setAttribute('x2', toPos.x);
+                    guideLine2.setAttribute('y2', toPos.y);
+                    guideLine2.style.stroke = '#666';
+                    guideLine2.style.strokeWidth = '1';
+                    guideLine2.style.strokeDasharray = '5,5';
+                    guideLine2.style.pointerEvents = 'none';
+                    connectionLayer.appendChild(guideLine2);
+                }
+            }
+        }
+
+        function createHandle(type, x, y) {
+            const handle = document.createElement('div');
+            handle.className = `connection-handle ${selectedHandle === type ? 'selected' : ''}`;
+            handle.style.left = (x - 6) + 'px';
+            handle.style.top = (y - 6) + 'px';
+            handle.dataset.handleType = type;
+            
+            handle.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                selectedHandle = type;
+                isDraggingHandle = true;
+                dragOffset.x = e.clientX - x;
+                dragOffset.y = e.clientY - y;
+                handle.classList.add('selected');
+                updateStatus(`🎯 Dragging handle ${type.toUpperCase()}...`);
+            });
+            
+            return handle;
+        }
+
+        function getPriorityColor(priority) {
+            if (priority >= 90) return '#ff4444';
+            if (priority >= 70) return '#ff8844';
+            if (priority >= 50) return '#ffff44';
+            if (priority >= 30) return '#44ff44';
+            return '#4488ff';
+        }
+
+        // Layout functions
+        function autoLayout() {
+            const nodeTypes = {};
+            
+            // Group nodes by type
+            for (const node of Object.values(fsm.nodes)) {
+                if (!nodeTypes[node.type]) nodeTypes[node.type] = [];
+                nodeTypes[node.type].push(node);
+            }
+
+            // Position by type
+            let yOffset = 50;
+            const typeOrder = ['management', 'work', 'critical', 'rest', 'movement'];
+            
+            for (const type of typeOrder) {
+                if (nodeTypes[type]) {
+                    nodeTypes[type].forEach((node, index) => {
+                        node.position.x = 50 + index * 250;
+                        node.position.y = yOffset;
+                    });
+                    yOffset += 200;
+                }
+            }
+            
+            render();
+            updateStatus('🔧 Auto layout applied!');
+        }
+
+        function resetView() {
+            camera = { x: 0, y: 0, zoom: 1 };
+            render();
+            updateZoomDisplay();
+            updateStatus('🎯 View reset!');
+        }
+
+        // Export functions
+        function exportCode() {
+            if (Object.keys(fsm.nodes).length === 0) {
+                updateStatus('⚠️ No FSM to export! Parse some code first.');
+                return;
+            }
+
+            const code = generateTypeScriptCode();
+            document.getElementById('exportArea').textContent = code;
+            document.getElementById('exportModal').style.display = 'flex';
+        }
+
+        function generateTypeScriptCode() {
+            let code = '// Generated FSM Code\n';
+            code += '// Copy this back into your TypeScript file\n\n';
+            code += 'const fsmStates = {\n';
+            
+            for (const [nodeId, node] of Object.entries(fsm.nodes)) {
+                code += `  ${nodeId}: {\n`;
+                code += `    priority: ${node.priority},\n`;
+                
+                if (Object.keys(node.conditions || {}).length > 0) {
+                    code += `    conditions: {\n`;
+                    for (const [target, condition] of Object.entries(node.conditions)) {
+                        code += `      ${target}: '${condition}',\n`;
+                    }
+                    code += `    },\n`;
+                }
+                
+                code += `  },\n`;
+            }
+            
+            code += '};\n\n';
+            code += '// Export for use in your game\n';
+            code += 'export { fsmStates };';
+            
+            return code;
+        }
+
+        function copyToClipboard() {
+            const code = document.getElementById('exportArea').textContent;
+            navigator.clipboard.writeText(code).then(() => {
+                updateStatus('📋 Code copied to clipboard!');
+            }).catch(() => {
+                updateStatus('❌ Failed to copy to clipboard');
+            });
+        }
+
+        function downloadFile() {
+            const code = document.getElementById('exportArea').textContent;
+            const blob = new Blob([code], { type: 'text/typescript' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'fsm-states.ts';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            updateStatus('💾 File downloaded!');
+        }
+
+        function closeModal() {
+            document.getElementById('exportModal').style.display = 'none';
+        }
+
+        // Project save/load
+        function saveProject() {
+            const project = {
+                fsm: fsm,
+                camera: camera,
+                timestamp: new Date().toISOString()
+            };
+            
+            const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'fsm-project.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            updateStatus('💾 Project saved!');
+        }
+
+        function loadProject() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const project = JSON.parse(e.target.result);
+                            fsm = project.fsm || { nodes: {}, connections: [] };
+                            camera = project.camera || { x: 0, y: 0, zoom: 1 };
+                            render();
+                            updateZoomDisplay();
+                            updateStatus('📁 Project loaded successfully!');
+                        } catch (error) {
+                            updateStatus('❌ Invalid project file');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            });
+            input.click();
+        }
+
+        // Utility functions
+        function addNewState() {
+            const stateName = prompt('Enter state name:');
+            if (!stateName) return;
+            
+            const node = {
+                id: stateName,
+                title: stateName.charAt(0).toUpperCase() + stateName.slice(1),
+                description: `${stateName} state behavior`,
+                priority: 50,
+                type: 'management',
+                position: { x: 100 + Object.keys(fsm.nodes).length * 50, y: 100 },
+                size: { width: 200, height: 140 },
+                conditions: {}
+            };
+            
+            fsm.nodes[stateName] = node;
+            render();
+            updateStatus(`➕ Added new state: ${stateName}`);
+        }
+
+        function clearAll() {
+            if (confirm('Are you sure you want to clear everything?')) {
+                fsm = { nodes: {}, connections: [] };
+                render();
+                updateStatus('🗑️ All cleared!');
+            }
+        }
+
+        function editNode(nodeId) {
+            const node = fsm.nodes[nodeId];
+            if (!node) return;
+            
+            const newTitle = prompt('Node title:', node.title);
+            if (newTitle !== null) node.title = newTitle;
+            
+            const newPriority = prompt('Priority (0-100):', node.priority);
+            if (newPriority !== null && !isNaN(newPriority)) {
+                node.priority = parseInt(newPriority);
+            }
+            
+            const newDescription = prompt('Description:', node.description);
+            if (newDescription !== null) node.description = newDescription;
+            
+            render();
+            updateStatus(`✏️ Edited node: ${node.title}`);
+        }
+
+        function updateStatus(message) {
+            document.getElementById('statusText').textContent = message;
+            console.log(message);
+        }
+
+        function zoomIn() {
+            camera.zoom = Math.min(3, camera.zoom * 1.2);
+            render();
+            updateZoomDisplay();
+        }
+
+        function zoomOut() {
+            camera.zoom = Math.max(0.3, camera.zoom * 0.8);
+            render();
+            updateZoomDisplay();
+        }
+
+        function updateZoomDisplay() {
+            document.getElementById('zoomLevel').textContent = Math.round(camera.zoom * 100) + '%';
+        }
+
+        function updateMinimap() {
+            // Simple minimap implementation
+            const minimapCanvas = document.getElementById('minimapCanvas');
+            const minimapCtx = minimapCanvas.getContext('2d');
+            
+            minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            minimapCtx.fillStyle = '#2a2a2a';
+            minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+            
+            // Draw nodes as small rectangles
+            for (const node of Object.values(fsm.nodes)) {
+                const x = (node.position.x + 1000) * 0.1;
+                const y = (node.position.y + 1000) * 0.1;
+                
+                minimapCtx.fillStyle = getPriorityColor(node.priority);
+                minimapCtx.fillRect(x, y, 8, 6);
+            }
+        }
+
+        // Event listeners
+        isConnecting = false;
+        connectionStart = null;
+        let draggedPaletteNode = null;
+
+        // Palette drag and drop functionality
+        let paletteMouseDown = false;
+        let paletteStartPos = { x: 0, y: 0 };
+        
+        document.querySelectorAll('.palette-node').forEach(node => {
+            // HTML5 drag and drop (primary method)
+            node.addEventListener('dragstart', (e) => {
+                draggedPaletteNode = e.target.dataset.type;
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', e.target.dataset.type);
+                console.log('Drag started with node type:', draggedPaletteNode);
+                updateStatus('🎯 Drag to canvas to create new state');
+            });
+
+            node.addEventListener('dragend', (e) => {
+                console.log('Drag ended, resetting draggedPaletteNode');
+                // Small delay to allow drop event to process first
+                setTimeout(() => {
+                    if (draggedPaletteNode) {
+                        draggedPaletteNode = null;
+                        updateStatus('❌ Node placement cancelled');
+                    }
+                }, 100);
+            });
+            
+            // Manual drag fallback for cases where HTML5 drag fails
+            node.addEventListener('mousedown', (e) => {
+                paletteMouseDown = true;
+                paletteStartPos.x = e.clientX;
+                paletteStartPos.y = e.clientY;
+                draggedPaletteNode = e.target.dataset.type;
+                console.log('Palette mousedown:', draggedPaletteNode);
+            });
+        });
+        
+        // Global mouse events for manual drag fallback
+        document.addEventListener('mousemove', (e) => {
+            if (paletteMouseDown && draggedPaletteNode) {
+                const deltaX = Math.abs(e.clientX - paletteStartPos.x);
+                const deltaY = Math.abs(e.clientY - paletteStartPos.y);
+                
+                if (deltaX > 5 || deltaY > 5) {
+                    // Movement threshold reached, we're dragging
+                    updateStatus('🎯 Click on canvas to place the node');
+                }
+            }
+        });
+        
+        document.addEventListener('mouseup', (e) => {
+            if (paletteMouseDown && draggedPaletteNode) {
+                paletteMouseDown = false;
+                
+                // Check if we're over the canvas
+                const canvasRect = canvas.getBoundingClientRect();
+                const isOverCanvas = (
+                    e.clientX >= canvasRect.left &&
+                    e.clientX <= canvasRect.right &&
+                    e.clientY >= canvasRect.top &&
+                    e.clientY <= canvasRect.bottom
+                );
+                
+                if (isOverCanvas) {
+                    console.log('Manual drop on canvas');
+                    // Create the node manually
+                    const worldPos = screenToWorld(e.clientX - canvasRect.left, e.clientY - canvasRect.top);
+                    
+                    const newNodeId = draggedPaletteNode + '_' + Date.now();
+                    const newNode = {
+                        id: newNodeId,
+                        title: draggedPaletteNode.charAt(0).toUpperCase() + draggedPaletteNode.slice(1),
+                        description: `${draggedPaletteNode} state behavior`,
+                        priority: 50,
+                        type: getStateType(draggedPaletteNode),
+                        position: { x: worldPos.x, y: worldPos.y },
+                        size: { width: 200, height: 140 },
+                        conditions: {}
+                    };
+                    
+                    fsm.nodes[newNodeId] = newNode;
+                    render();
+                    updateStatus(`✅ Created new ${draggedPaletteNode} state!`);
+                    console.log('Node created via manual drag');
+                }
+                
+                draggedPaletteNode = null;
+            }
+        });
+
+        // Canvas drop functionality
+        // Canvas interaction events
+        canvas.addEventListener('click', (e) => {
+            // Don't interfere with palette node placement
+            if (draggedPaletteNode) {
+                return;
+            }
+            
+            // Deselect connections and handles when clicking on empty canvas
+            if (e.target === canvas) {
+                selectedConnection = null;
+                selectedHandle = null;
+                render();
+            }
+        });
+
+        canvas.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+
+        canvas.addEventListener('drop', (e) => {
+            e.preventDefault();
+            console.log('Drop event triggered, draggedPaletteNode:', draggedPaletteNode);
+            
+            if (draggedPaletteNode) {
+                const rect = canvas.getBoundingClientRect();
+                const worldPos = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+                
+                const newNodeId = draggedPaletteNode + '_' + Date.now();
+                const newNode = {
+                    id: newNodeId,
+                    title: draggedPaletteNode.charAt(0).toUpperCase() + draggedPaletteNode.slice(1),
+                    description: `${draggedPaletteNode} state behavior`,
+                    priority: 50,
+                    type: getStateType(draggedPaletteNode),
+                    position: { x: worldPos.x, y: worldPos.y },
+                    size: { width: 200, height: 140 },
+                    conditions: {}
+                };
+                
+                fsm.nodes[newNodeId] = newNode;
+                render();
+                updateStatus(`✅ Created new ${draggedPaletteNode} state!`);
+                draggedPaletteNode = null;
+                console.log('Node created successfully');
+            }
+        });
+
+        // Connection port functionality
+        function setupConnectionPorts() {
+            document.addEventListener('click', (e) => {
+                if (e.target.classList.contains('connection-port')) {
+                    e.stopPropagation();
+                    const nodeElement = e.target.closest('.blueprint-node');
+                    const nodeId = nodeElement.id.replace('node_', '');
+                    
+                    if (e.target.classList.contains('output')) {
+                        // Starting a connection
+                        if (!isConnecting) {
+                            isConnecting = true;
+                            connectionStart = { nodeId, port: e.target };
+                            e.target.style.backgroundColor = '#00ff00';
+                            updateStatus('🔗 Click on an input port to complete connection');
+                        }
+                    } else if (e.target.classList.contains('input')) {
+                        // Completing a connection
+                        if (isConnecting && connectionStart) {
+                            const targetNodeId = nodeId;
+                            const sourceNodeId = connectionStart.nodeId;
+                            
+                            if (sourceNodeId !== targetNodeId) {
+                                // Add connection
+                                if (!fsm.nodes[sourceNodeId].conditions) {
+                                    fsm.nodes[sourceNodeId].conditions = {};
+                                }
+                                
+                                const condition = prompt(`Enter condition for ${sourceNodeId} → ${targetNodeId}:`, 'condition');
+                                if (condition) {
+                                    fsm.nodes[sourceNodeId].conditions[targetNodeId] = condition;
+                                    
+                                    // Update connections
+                                    fsm.connections.push({
+                                        id: `${sourceNodeId}_to_${targetNodeId}`,
+                                        from: sourceNodeId,
+                                        to: targetNodeId,
+                                        condition: condition,
+                                        priority: fsm.nodes[sourceNodeId].priority || 50
+                                    });
+                                    
+                                    render();
+                                    updateStatus(`🔗 Connected ${sourceNodeId} → ${targetNodeId}`);
+                                }
+                            } else {
+                                updateStatus('❌ Cannot connect node to itself');
+                            }
+                            
+                            // Reset connection state
+                            isConnecting = false;
+                            if (connectionStart.port) {
+                                connectionStart.port.style.backgroundColor = '';
+                            }
+                            connectionStart = null;
+                        }
+                    }
+                }
+            });
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            // Don't interfere with palette dragging
+            if (draggedPaletteNode || paletteMouseDown) {
+                return;
+            }
+            
+            if (isDraggingHandle && selectedConnection && selectedHandle) {
+                // Drag connection handle
+                const rect = canvas.getBoundingClientRect();
+                const worldPos = screenToWorld(e.clientX - rect.left - dragOffset.x, e.clientY - rect.top - dragOffset.y);
+                
+                selectedConnection.handles[selectedHandle].x = worldPos.x;
+                selectedConnection.handles[selectedHandle].y = worldPos.y;
+                render();
+            } else if (isDragging && selectedNode) {
+                // Drag node
+                const rect = canvas.getBoundingClientRect();
+                const worldPos = screenToWorld(e.clientX - rect.left - dragOffset.x, e.clientY - rect.top - dragOffset.y);
+                fsm.nodes[selectedNode].position.x = worldPos.x;
+                fsm.nodes[selectedNode].position.y = worldPos.y;
+                render();
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            // Don't interfere with palette node placement
+            if (draggedPaletteNode || paletteMouseDown) {
+                return;
+            }
+            
+            if (isDraggingHandle) {
+                isDraggingHandle = false;
+                selectedHandle = null;
+                updateStatus('✅ Handle position updated');
+            } else {
+                isDragging = false;
+                selectedNode = null;
+            }
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            camera.zoom = Math.max(0.3, Math.min(3, camera.zoom * zoomFactor));
+            render();
+            updateZoomDisplay();
+        });
+
+        // Cancel connection on Escape and other keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isConnecting) {
+                isConnecting = false;
+                if (connectionStart && connectionStart.port) {
+                    connectionStart.port.style.backgroundColor = '';
+                }
+                connectionStart = null;
+                updateStatus('❌ Connection cancelled');
+            }
+            
+            // Delete handles from selected connection
+            if (e.key === 'Delete' && selectedConnection && selectedConnection.handles) {
+                delete selectedConnection.handles;
+                selectedConnection = null;
+                selectedHandle = null;
+                render();
+                updateStatus('🗑️ Connection handles removed');
+            }
+            
+            if (e.ctrlKey || e.metaKey) {
+                switch (e.key) {
+                    case 's':
+                        e.preventDefault();
+                        saveProject();
+                        break;
+                    case 'o':
+                        e.preventDefault();
+                        loadProject();
+                        break;
+                    case 'e':
+                        e.preventDefault();
+                        exportCode();
+                        break;
+                }
+            }
+        });
+
+        // Initialize
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            setupConnectionPorts();
+            updateStatus('🎮 FSM Blueprint Editor ready! Paste your code and click Parse.');
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+    </script>
+</body>
+</html>

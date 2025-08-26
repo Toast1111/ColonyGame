@@ -121,9 +121,10 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
   }
   
   // Get the image assets instance
-  const imageAssets = (window as any).imageAssets || null;
+  const imageAssets = ImageAssets.getInstance();
   if (!imageAssets || !imageAssets.isLoaded()) {
     // Fallback to simple circle if assets not loaded
+    console.log('Assets not loaded, using fallback circles for colonist:', profile?.name || 'unknown');
     ctx.fillStyle = profile.avatar.clothing;
     ctx.beginPath();
     ctx.arc(0, 0, size, 0, Math.PI * 2);

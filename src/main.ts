@@ -60,6 +60,22 @@ async function initGame() {
   btnPause.onclick = () => { game.paused = !game.paused; btnPause.textContent = game.paused ? 'Resume' : 'Pause'; };
   btnNew.onclick = () => { game.newGame(); };
   btnHelp.onclick = () => { if (helpEl) helpEl.hidden = !helpEl.hidden; };
+  
+  // FSM Editor functionality
+const btnFSM = document.getElementById('btnFSM') as HTMLButtonElement;
+const btnBlueprint = document.getElementById('btnBlueprint') as HTMLButtonElement;
+
+if (btnFSM) {
+    btnFSM.onclick = () => {
+        window.open('./fsm-editor.html', '_blank');
+    };
+}
+
+if (btnBlueprint) {
+    btnBlueprint.onclick = () => {
+        window.open('./blueprint-fsm-editor.html', '_blank');
+    };
+}
 
   // Make game and assets available globally
   (Object.assign(window as any, { game, BUILD_TYPES, imageAssets: ImageAssets.getInstance() }));

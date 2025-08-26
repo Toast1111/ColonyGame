@@ -68,11 +68,11 @@ export const EYE_COLORS: ColorVariant[] = [
   { name: 'Heterochromia', hex: '#FF1493', rgb: [255, 20, 147], rarity: 'rare' }
 ];
 
-// Hair Styles (matches existing asset names)
+// Hair Styles (matches existing asset names - lowercase to match sprite names)
 export const HAIR_STYLES = [
-  'Afro', 'Bob', 'Bowlcut', 'Braidbun', 'Bravo', 'Burgundy',
-  'Cleopatra', 'Curly', 'Cute', 'Decent', 'Elder', 'Fancybun',
-  'Firestarter', 'Flowy', 'Fringe'
+  'afro', 'bob', 'bowlcut', 'braidbun', 'bravo', 'burgundy',
+  'cleopatra', 'curly', 'cute', 'decent', 'elder', 'fancybun',
+  'firestarter', 'flowy', 'fringe'
 ];
 
 // Body Types

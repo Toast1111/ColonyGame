@@ -48,12 +48,14 @@ function generateStats(): ColonistProfile['stats'] {
 }
 
 export function generateColonistProfile(): ColonistProfile {
+  console.log('DEBUG: Generating new colonist profile...');
   const firstName = randomChoice(NAMES.FIRST);
   const lastName = randomChoice(NAMES.LAST);
   const name = `${firstName} ${lastName}`;
   
   // Generate traits using the new modular system
   const traits = generateCompleteTraitSet();
+  console.log('DEBUG: Generated traits:', traits);
   
   const favoriteFood = randomChoice(FAVORITE_FOODS);
   
