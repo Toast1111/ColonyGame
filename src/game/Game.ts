@@ -4,9 +4,9 @@ import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
 import { BUILD_TYPES, hasCost, makeBuilding, payCost, groupByCategory } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
-import { updateColonistFSM } from "../ai/colonistFSM";
+import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
-import { generateColonistProfile, getColonistDescription, getColonistMood } from "./colonistGenerator";
+import { generateColonistProfile, getColonistDescription, getColonistMood } from "./colonist_systems/colonistGenerator";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles, drawParticles } from "../core/particles";
 
 export class Game {
@@ -1100,7 +1100,7 @@ export class Game {
       if (b.particles) {
         b.particles = updateParticles(b.particles, dt);
         // Remove empty particle arrays
-        if (b.particles.length === 0) {
+        if (b.particles && b.particles.length === 0) {
           delete b.particles;
         }
       }

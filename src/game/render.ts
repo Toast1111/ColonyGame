@@ -1,7 +1,7 @@
 import { COLORS, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Message, Particle } from "./types";
 import { ImageAssets } from "../assets/images";
-import { getColonistMood } from "./colonistGenerator";
+import { getColonistMood } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
 
 export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {

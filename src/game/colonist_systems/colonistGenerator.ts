@@ -1,5 +1,5 @@
 // Colonist personality and background generator
-import { ImageAssets } from '../assets/images';
+import { ImageAssets } from '../../assets/images';
 import { 
   generateCompleteTraitSet,
   NAMES,
