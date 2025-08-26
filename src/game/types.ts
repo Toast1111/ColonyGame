@@ -40,6 +40,7 @@ export type Building = BuildingDef & {
   x: number; y: number; w: number; h: number;
   buildLeft: number; done: boolean; hp: number;
   growth?: number; ready?: boolean; cooldown?: number;
+  rot?: 0 | 90 | 180 | 270; // orientation in degrees
 };
 
 export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep';

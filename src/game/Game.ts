@@ -82,6 +82,9 @@ export class Game {
   // selection & camera follow
   selColonist: Colonist | null = null;
   follow = false;
+  // Touch gesture state
+  private touchLastPan: { x: number; y: number } | null = null;
+  private touchLastDist: number | null = null;
 
   keyState: Record<string, boolean> = {};
   once = new Set<string>();
@@ -91,8 +94,10 @@ export class Game {
   menuRects: Array<{ key: keyof typeof BUILD_TYPES; x: number; y: number; w: number; h: number }> = [];
   hotbarRects: Array<{ index: number; x: number; y: number; w: number; h: number }> = [];
   // Precise placement (touch): pending building location to adjust before confirm
-  pendingPlacement: { key: keyof typeof BUILD_TYPES; x: number; y: number } | null = null;
-  placeUIRects: Array<{ id: 'up'|'down'|'left'|'right'|'ok'|'cancel'; x: number; y: number; w: number; h: number }> = [];
+  pendingPlacement: { key: keyof typeof BUILD_TYPES; x: number; y: number; rot?: 0|90|180|270 } | null = null;
+  placeUIRects: Array<{ id: 'up'|'down'|'left'|'right'|'ok'|'cancel'|'rotL'|'rotR'; x: number; y: number; w: number; h: number }> = [];
+  // Dragging support for precise placement
+  private pendingDragging = false;
   // UI hit regions for colonist panel
   colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
@@ -105,8 +110,26 @@ export class Game {
     window.addEventListener('resize', () => this.handleResize());
     this.bindInput();
     this.newGame();
-  this.rebuildNavGrid();
+    this.rebuildNavGrid(); 
+    this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; 
+    const viewW = this.canvas.width / this.DPR / this.camera.zoom; 
+    const viewH = this.canvas.height / this.DPR / this.camera.zoom; 
+    this.camera.x = HQ_POS.x - viewW / 2; 
+    this.camera.y = HQ_POS.y - viewH / 2; 
+    this.clampCameraToWorld();
     requestAnimationFrame(this.frame);
+  }
+  
+  // Ensure camera remains within world bounds based on current zoom and canvas size
+  private clampCameraToWorld() {
+    const viewW = this.canvas.width / this.DPR / this.camera.zoom;
+    const viewH = this.canvas.height / this.DPR / this.camera.zoom;
+    const maxX = Math.max(0, WORLD.w - viewW);
+    const maxY = Math.max(0, WORLD.h - viewH);
+    if (!Number.isFinite(this.camera.x)) this.camera.x = 0;
+    if (!Number.isFinite(this.camera.y)) this.camera.y = 0;
+    this.camera.x = clamp(this.camera.x, 0, maxX);
+    this.camera.y = clamp(this.camera.y, 0, maxY);
   }
 
   handleResize = () => {
@@ -119,6 +142,8 @@ export class Game {
     
     // Calculate UI scale based on screen size and DPR
     this.calculateUIScale();
+  // Keep camera in bounds after resize
+  this.clampCameraToWorld();
   };
   
   calculateUIScale() {
@@ -186,6 +211,16 @@ export class Game {
       this.mouse.y = (e.clientY - rect.top);
       const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
       this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+      // While adjusting a pending placement, drag follows cursor (grid-snap)
+      if (this.pendingPlacement && this.mouse.down) {
+        const def = BUILD_TYPES[this.pendingPlacement.key];
+        const rot = this.pendingPlacement.rot || 0; const rotated = (rot === 90 || rot === 270);
+        const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
+        const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
+        this.pendingPlacement.x = clamp(gx, 0, WORLD.w - w);
+        this.pendingPlacement.y = clamp(gy, 0, WORLD.h - h);
+        return;
+      }
       // Drag-to-paint paths
       if (this.mouse.down) {
         if (this.selectedBuild === 'path') this.paintPathAtMouse();
@@ -213,7 +248,7 @@ export class Game {
             if (!inside) { this.selColonist = null; this.follow = false; return; }
           }
         }
-        // If precise placement UI active, handle mouse clicks like taps
+        // If precise placement UI active, handle mouse clicks like taps/drag
         if (this.pendingPlacement) {
           const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
           // Buttons first
@@ -226,18 +261,25 @@ export class Game {
                 else if (r.id === 'right') this.nudgePending(1, 0);
                 else if (r.id === 'ok') this.confirmPending();
                 else if (r.id === 'cancel') this.cancelPending();
+                else if (r.id === 'rotL') this.rotatePending(-90);
+                else if (r.id === 'rotR') this.rotatePending(90);
                 return;
               }
             }
           }
-          // Ghost hit = confirm; else move ghost to clicked tile
+          // Ghost hit = start drag/confirm; else move ghost to clicked tile
           const p = this.pendingPlacement; const def = BUILD_TYPES[p.key];
           const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
           const g = toScreen(p.x, p.y);
           const gw = def.size.w * T * this.camera.zoom; const gh = def.size.h * T * this.camera.zoom;
-          if (mx >= g.x && mx <= g.x + gw && my >= g.y && my <= g.y + gh) { this.confirmPending(); return; }
+          if (mx >= g.x && mx <= g.x + gw && my >= g.y && my <= g.y + gh) { 
+            // Begin dragging the ghost instead of instant-confirm; double-click not needed
+            this.pendingDragging = true; 
+            return; 
+          }
+          const rot = p.rot || 0; const rotated = (rot === 90 || rot === 270);
           const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
-          const w = def.size.w * T, h = def.size.h * T;
+          const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
           p.x = clamp(gx, 0, WORLD.w - w); p.y = clamp(gy, 0, WORLD.h - h);
           return;
         }
@@ -268,7 +310,10 @@ export class Game {
     });
     c.addEventListener('mouseup', (e) => {
       e.preventDefault();
-      if ((e as MouseEvent).button === 0) { this.mouse.down = false; this.lastPaintCell = null; }
+      if ((e as MouseEvent).button === 0) { 
+        this.mouse.down = false; this.lastPaintCell = null; 
+        this.pendingDragging = false;
+      }
       if ((e as MouseEvent).button === 2) {
         if (this.eraseDragStart) {
           const x0 = Math.min(this.eraseDragStart.x, this.mouse.wx);
@@ -299,34 +344,80 @@ export class Game {
   });
     window.addEventListener('keyup', (e) => { this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; });
     
-    // Touch event handlers: if external handlers are installed (main.ts), skip these to avoid conflicts
+    // Unified touch input: pan, pinch-zoom, and tap/select/place
     c.addEventListener('touchstart', (e) => {
-      if ((window as any)._externalTouchControls) return;
       e.preventDefault();
       this.lastInputWasTouch = true;
-      this.isActuallyTouchDevice = true; // Once we see a touch event, we know it's actually being used
-      
+      this.isActuallyTouchDevice = true;
       if (e.touches.length === 1) {
-        const touch = e.touches[0];
+        this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        this.touchLastDist = Math.hypot(dx, dy);
+      }
+    }, { passive: false } as any);
+
+    c.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      if (e.touches.length === 1 && this.touchLastPan) {
+        // If adjusting a pending placement ghost, move it with the finger
+        if (this.pendingPlacement) {
+          const rect = c.getBoundingClientRect();
+          const sx = e.touches[0].clientX - rect.left;
+          const sy = e.touches[0].clientY - rect.top;
+          const wpt = this.screenToWorld(sx, sy);
+          this.mouse.x = sx; this.mouse.y = sy; this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+          const def = BUILD_TYPES[this.pendingPlacement.key];
+          const rot = this.pendingPlacement.rot || 0; const rotated = (rot === 90 || rot === 270);
+          const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
+          const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
+          this.pendingPlacement.x = clamp(gx, 0, WORLD.w - w);
+          this.pendingPlacement.y = clamp(gy, 0, WORLD.h - h);
+          return;
+        }
+        // Pan camera in world units
+        const nx = e.touches[0].clientX, ny = e.touches[0].clientY;
+        const dx = nx - this.touchLastPan.x, dy = ny - this.touchLastPan.y;
+        this.touchLastPan = { x: nx, y: ny };
+        this.camera.x -= dx / this.camera.zoom;
+        this.camera.y -= dy / this.camera.zoom;
+        this.clampCameraToWorld();
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.hypot(dx, dy);
+        if (this.touchLastDist != null && this.touchLastDist > 0) {
+          const factor = dist / this.touchLastDist;
+          // Zoom around midpoint between touches
+          const rect = c.getBoundingClientRect();
+          const cx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+          const cy = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
+          const worldBefore = this.screenToWorld(cx, cy);
+          const newZoom = Math.max(0.6, Math.min(2.2, this.camera.zoom * factor));
+          this.camera.zoom = newZoom;
+          const worldAfter = this.screenToWorld(cx, cy);
+          this.camera.x += worldBefore.x - worldAfter.x;
+          this.camera.y += worldBefore.y - worldAfter.y;
+          this.clampCameraToWorld();
+        }
+        this.touchLastDist = dist;
+      }
+    }, { passive: false } as any);
+
+    c.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      // Treat single-finger touchend as a tap/click if not panning
+      if (e.changedTouches.length === 1 && e.touches.length === 0) {
         const rect = c.getBoundingClientRect();
-        const sx = touch.clientX - rect.left;
-        const sy = touch.clientY - rect.top;
+        const sx = e.changedTouches[0].clientX - rect.left;
+        const sy = e.changedTouches[0].clientY - rect.top;
         this.handleTapOrClickAtScreen(sx, sy);
       }
-    });
-    
-    c.addEventListener('touchmove', (e) => {
-      if ((window as any)._externalTouchControls) return;
-      e.preventDefault();
-      this.lastInputWasTouch = true;
-      // Handle touch move if needed for dragging
-    });
-    
-    c.addEventListener('touchend', (e) => {
-      if ((window as any)._externalTouchControls) return;
-      e.preventDefault();
-      this.lastInputWasTouch = true;
-    });
+      if (e.touches.length === 0) { this.touchLastPan = null; this.touchLastDist = null; }
+    }, { passive: false } as any);
   }
 
   // Handle a tap/click at screen-space coordinates (sx, sy)
@@ -352,6 +443,8 @@ export class Game {
             else if (r.id === 'right') this.nudgePending(1, 0);
             else if (r.id === 'ok') this.confirmPending();
             else if (r.id === 'cancel') this.cancelPending();
+            else if (r.id === 'rotL') this.rotatePending(-90);
+            else if (r.id === 'rotR') this.rotatePending(90);
             return;
           }
         }
@@ -469,7 +562,7 @@ export class Game {
   this.colonists.length = this.enemies.length = this.trees.length = this.rocks.length = this.buildings.length = this.bullets.length = this.messages.length = 0;
   this.buildReservations.clear();
   this.insideCounts.clear();
-    this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - this.canvas.width / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - this.canvas.height / (2 * this.camera.zoom);
+  this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - (this.canvas.width / this.DPR) / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - (this.canvas.height / this.DPR) / (2 * this.camera.zoom);
     this.buildHQ();
     this.scatter();
   for (let i = 0; i < 3; i++) { const a = rand(0, Math.PI * 2); const r = 80 + rand(-10, 10); this.spawnColonist({ x: HQ_POS.x + Math.cos(a) * r, y: HQ_POS.y + Math.sin(a) * r }); }
@@ -499,7 +592,9 @@ export class Game {
 
   // Placement
   canPlace(def: Building, x: number, y: number) {
-    const rect = { x, y, w: def.size.w * T, h: def.size.h * T };
+    const w = (def as any).w ?? def.size.w * T;
+    const h = (def as any).h ?? def.size.h * T;
+    const rect = { x, y, w, h };
     if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > WORLD.w || rect.y + rect.h > WORLD.h) return false;
     for (const b of this.buildings) { if (!(rect.x + rect.w <= b.x || rect.x >= b.x + b.w || rect.y + rect.h <= b.y || rect.y >= b.y + b.h)) return false; }
     const circleRectOverlap = (c: { x: number; y: number; r: number }, r: { x: number; y: number; w: number; h: number }) => {
@@ -516,16 +611,17 @@ export class Game {
       // Snap to grid upper-left corner
       const gx = Math.floor(this.mouse.wx / T) * T;
       const gy = Math.floor(this.mouse.wy / T) * T;
-      this.pendingPlacement = { key: t, x: gx, y: gy };
+  this.pendingPlacement = { key: t, x: gx, y: gy, rot: 0 };
       return;
     }
     // Desktop: immediate placement
     this.tryPlaceNow(t, this.mouse.wx, this.mouse.wy);
   }
 
-  private tryPlaceNow(t: keyof typeof BUILD_TYPES, wx: number, wy: number) {
+  private tryPlaceNow(t: keyof typeof BUILD_TYPES, wx: number, wy: number, rot?: 0|90|180|270) {
     const def = BUILD_TYPES[t]; if (!def) return;
     const b = makeBuilding(t, wx, wy);
+    if (rot) { (b as any).rot = rot; if (rot === 90 || rot === 270) { const tmp = b.w; b.w = b.h; b.h = tmp; } }
     if (!this.canPlace(b as any, b.x, b.y)) { this.toast("Can't place here"); return; }
     if (!hasCost(this.RES, def.cost)) { this.toast('Not enough resources'); return; }
     payCost(this.RES, def.cost);
@@ -547,16 +643,35 @@ export class Game {
     const nx = this.pendingPlacement.x + dx * T;
     const ny = this.pendingPlacement.y + dy * T;
     // Clamp within world
-    const w = def.size.w * T, h = def.size.h * T;
+  const rot = this.pendingPlacement.rot || 0; const rotated = (rot === 90 || rot === 270);
+  const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
     this.pendingPlacement.x = clamp(nx, 0, WORLD.w - w);
     this.pendingPlacement.y = clamp(ny, 0, WORLD.h - h);
   }
 
+  rotatePending(delta: -90 | 90) {
+    if (!this.pendingPlacement) return;
+    const def = BUILD_TYPES[this.pendingPlacement.key];
+    const next = (((this.pendingPlacement.rot || 0) + delta + 360) % 360) as 0 | 90 | 180 | 270;
+    this.pendingPlacement.rot = next;
+    // Clamp within world after rotation change
+    const rotated = (next === 90 || next === 270);
+    const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
+    this.pendingPlacement.x = clamp(this.pendingPlacement.x, 0, WORLD.w - w);
+    this.pendingPlacement.y = clamp(this.pendingPlacement.y, 0, WORLD.h - h);
+  }
+
   confirmPending() {
     if (!this.pendingPlacement) return;
-    const { key, x, y } = this.pendingPlacement;
-    this.pendingPlacement = null;
-    this.tryPlaceNow(key, x + 1, y + 1);
+    const { key, x, y, rot } = this.pendingPlacement;
+  const def = BUILD_TYPES[key];
+  const b = makeBuilding(key, x + 1, y + 1);
+  if (rot) { (b as any).rot = rot; if (rot === 90 || rot === 270) { const tmp = b.w; b.w = b.h; b.h = tmp; } }
+  // Validate before closing overlay (friendlier UX)
+  const valid = this.canPlace(b as any, b.x, b.y) && hasCost(this.RES, def.cost);
+  if (!valid) { this.toast("Can't place here"); return; }
+  this.pendingPlacement = null;
+  this.tryPlaceNow(key, x + 1, y + 1, rot);
   }
 
   cancelPending() { this.pendingPlacement = null; }
@@ -1124,7 +1239,9 @@ export class Game {
 
   // Draw
   draw() {
-    const { ctx } = this; clear(ctx, this.canvas);
+  const { ctx } = this; clear(ctx, this.canvas);
+  // Clamp camera each frame (covers zoom changes and touch panning)
+  this.clampCameraToWorld();
     ctx.save(); applyWorldTransform(ctx, this.camera); drawGround(ctx);
     for (const t of this.trees) drawCircle(ctx, t.x, t.y, t.r, COLORS.tree);
     for (const r of this.rocks) drawCircle(ctx, r.x, r.y, r.r, COLORS.rock);
@@ -1948,18 +2065,23 @@ export class Game {
     // Convert world to screen coords (device pixels)
     const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
     const scr = toScreen(p.x, p.y);
-    const sw = w * this.camera.zoom;
-    const sh = h * this.camera.zoom;
+  let sw = w * this.camera.zoom;
+  let sh = h * this.camera.zoom;
+  const rot = p.rot || 0; const rotated = (rot === 90 || rot === 270);
+  if (rotated) { const tmp = sw; sw = sh; sh = tmp; }
 
-    // Ghost at pending position (overlay)
+  // Ghost at pending position (overlay)
     ctx.save();
-    ctx.globalAlpha = .6; ctx.fillStyle = COLORS.ghost; ctx.fillRect(scr.x, scr.y, sw, sh); ctx.globalAlpha = 1;
+  // Validate placement for feedback
+  const bTmp = makeBuilding(p.key as any, p.x + 1, p.y + 1);
+  const can = this.canPlace(bTmp as any, bTmp.x, bTmp.y) && hasCost(this.RES, def.cost);
+  ctx.globalAlpha = .6; ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88'; ctx.fillRect(scr.x, scr.y, sw, sh); ctx.globalAlpha = 1;
     ctx.strokeStyle = '#4b9fff'; ctx.setLineDash([4,3]); ctx.strokeRect(scr.x + .5, scr.y + .5, sw - 1, sh - 1); ctx.setLineDash([]);
     ctx.restore();
 
-    // Controls near the ghost, in screen space
+  // Controls near the ghost, in screen space
     const pad = this.scale(10);
-    const btn = this.scale(38);
+  const btn = this.scale(42);
     let cx = scr.x + sw + pad; // default to right of ghost
     let cy = scr.y;
     // If off right edge, place to the left
@@ -1972,21 +2094,37 @@ export class Game {
       makeRect('left', cx, cy + btn),
       makeRect('right', cx + btn * 2, cy + btn),
       makeRect('down', cx + btn, cy + btn * 2),
-      makeRect('cancel', cx, cy + btn * 3 + this.scale(4)),
-      makeRect('ok', cx + btn * 2, cy + btn * 3 + this.scale(4)),
+      makeRect('rotL', cx, cy + btn * 3 + this.scale(6)),
+      makeRect('rotR', cx + btn * 2, cy + btn * 3 + this.scale(6)),
+      makeRect('cancel', cx, cy + btn * 4 + this.scale(6)),
+      makeRect('ok', cx + btn * 2, cy + btn * 4 + this.scale(6)),
     ];
     this.placeUIRects = rects as any; // store screen-space rects for hit testing
     ctx.save();
     ctx.fillStyle = '#0f172aee'; ctx.strokeStyle = '#1e293b';
-    const drawBtn = (r: any, label: string) => { ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1); ctx.fillStyle = '#dbeafe'; ctx.font = this.getScaledFont(18, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + this.scale(2)); ctx.fillStyle = '#0f172aee'; };
+    const drawBtn = (r: any, label: string, disabled = false) => { 
+      ctx.save();
+      ctx.globalAlpha = disabled ? 0.5 : 1;
+      ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1);
+      ctx.fillStyle = '#dbeafe'; ctx.font = this.getScaledFont(18, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + this.scale(2));
+      ctx.restore();
+      ctx.fillStyle = '#0f172aee';
+    };
     for (const r of rects) {
       if (r.id === 'up') drawBtn(r, '↑');
       else if (r.id === 'down') drawBtn(r, '↓');
       else if (r.id === 'left') drawBtn(r, '←');
       else if (r.id === 'right') drawBtn(r, '→');
-      else if (r.id === 'ok') drawBtn(r, 'OK');
+  else if (r.id === 'rotL') drawBtn(r, '⟲');
+  else if (r.id === 'rotR') drawBtn(r, '⟳');
+  else if (r.id === 'ok') drawBtn(r, 'OK', !can);
       else if (r.id === 'cancel') drawBtn(r, 'X');
     }
+    // Hint text: drag to move
+    ctx.fillStyle = '#dbeafe';
+    ctx.font = this.getScaledFont(14, '500');
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.fillText('Drag to move • Tap OK to place', Math.max(this.scale(6), scr.x), Math.max(this.scale(6), scr.y - this.scale(26)));
     ctx.restore();
   }
 }

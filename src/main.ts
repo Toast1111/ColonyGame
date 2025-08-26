@@ -5,9 +5,9 @@ import { ImageAssets } from "./assets/images";
 const canvas = document.getElementById('game') as HTMLCanvasElement;
 const btnPause = document.getElementById('btnPause') as HTMLButtonElement | null;
 const btnHelp = document.getElementById('btnHelp') as HTMLButtonElement | null;
-const btnToggleUI = document.getElementById('btnToggleUI') as HTMLButtonElement | null;
-const btnMenu = document.getElementById('btnMenu') as HTMLButtonElement | null;
-const headerDropdown = document.getElementById('headerDropdown') as HTMLDivElement | null;
+const btnToggleUI = document.getElementById('btnToggleUI') as HTMLButtonElement | null; // may not exist
+const btnMenu = document.getElementById('btnMenu') as HTMLButtonElement | null; // may not exist
+const headerDropdown = document.getElementById('headerDropdown') as HTMLDivElement | null; // optional
 const hdNew = document.getElementById('hd-new') as HTMLButtonElement | null;
 const hdHelp = document.getElementById('hd-help') as HTMLButtonElement | null;
 const hdBuild = document.getElementById('hd-build') as HTMLButtonElement | null;
@@ -80,44 +80,8 @@ if (btnBlueprint) {
   // Make game and assets available globally
   (Object.assign(window as any, { game, BUILD_TYPES, imageAssets: ImageAssets.getInstance() }));
 
-  // UI Mode Management - improved user control
-  const isTouch = (('ontouchstart' in window) || (navigator as any).maxTouchPoints > 0);
-  
-  // Check for saved preference, otherwise use device detection as default
-  let savedUIMode = localStorage.getItem('colonyUI_mobileMode');
-  let isMobileUI = savedUIMode !== null ? savedUIMode === 'true' : isTouch;
-  
-  const setMobileUI = (on: boolean) => {
-    isMobileUI = on;
-    (window as any)._mobileUI = on;
-    localStorage.setItem('colonyUI_mobileMode', on.toString());
-    
-    // Mobile controls should only show in mobile UI mode
-    if (mobileControls) {
-      mobileControls.hidden = !on;
-      // Ensure they're completely hidden in desktop mode
-      mobileControls.style.display = on ? 'flex' : 'none';
-    }
-    if (btnMenu) btnMenu.hidden = !on;
-    
-    // Update toggle button icon and title
-    if (btnToggleUI) {
-      btnToggleUI.textContent = on ? '🖥️' : '📱';
-      btnToggleUI.title = on ? 'Switch to Desktop UI' : 'Switch to Mobile UI';
-    }
-    
-    game.toast(on ? 'Mobile UI: ON' : 'Desktop UI: ON');
-  };
-
-  // Main UI toggle button (always visible)
-  if (btnToggleUI) {
-    btnToggleUI.onclick = () => {
-      setMobileUI(!isMobileUI);
-    };
-  }
-
-  // Initialize UI mode
-  setMobileUI(isMobileUI);
+  // No UI mode switching; visibility of mobile controls handled by CSS only.
+  if (mobileControls) mobileControls.hidden = false; // rely on CSS media queries to show/hide
 
   // Prevent keyboard navigation from interfering with game controls
   document.addEventListener('keydown', (e) => {
@@ -132,16 +96,13 @@ if (btnBlueprint) {
     }
   });
 
-  // Header dropdown menu (mobile fallback)
+  // Header dropdown menu (optional)
   if (btnMenu && headerDropdown) {
     btnMenu.onclick = () => { headerDropdown.hidden = !headerDropdown.hidden; };
     hdNew && (hdNew.onclick = () => { headerDropdown.hidden = true; game.newGame(); });
     hdHelp && (hdHelp.onclick = () => { headerDropdown.hidden = true; if (helpEl) helpEl.hidden = !helpEl.hidden; });
-    hdBuild && (hdBuild.onclick = () => { headerDropdown.hidden = true; game.showBuildMenu = !game.showBuildMenu; });
-    hdToggleMobile && (hdToggleMobile.onclick = () => {
-      headerDropdown.hidden = true;
-      setMobileUI(!isMobileUI);
-    });
+  hdBuild && (hdBuild.onclick = () => { headerDropdown.hidden = true; game.showBuildMenu = !game.showBuildMenu; });
+  // Mobile UI toggle removed: no mode switching
     // Close dropdown on outside tap
     document.addEventListener('click', (ev) => {
       if (!headerDropdown) return;
@@ -152,7 +113,11 @@ if (btnBlueprint) {
 
   // Mobile control buttons
   mcBuild && (mcBuild.onclick = () => { game.showBuildMenu = !game.showBuildMenu; });
-  mcCancel && (mcCancel.onclick = () => { game.selectedBuild = null; game.toast('Build canceled'); });
+  mcCancel && (mcCancel.onclick = () => { 
+    game.selectedBuild = null; 
+    game.pendingPlacement = null;
+    game.toast('Build canceled'); 
+  });
   mcErase && (mcErase.onclick = () => { 
     // Toggle a simple erase-tap mode: tap button to enable; next tap on canvas erases single item
     (window as any)._eraseOnce = true; game.toast('Erase mode: tap on a building to remove');
@@ -165,74 +130,7 @@ if (btnBlueprint) {
   mcZoomIn && (mcZoomIn.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom * 1.1)); });
   mcZoomOut && (mcZoomOut.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom / 1.1)); });
 
-  // Touch gestures: one-finger pan, two-finger pinch zoom (available for both mobile and desktop with touch)
-  // Flag so Game.ts doesn't also attach conflicting touch logic
-  (window as any)._externalTouchControls = true;
-  let lastTouchDist: number | null = null;
-  let lastPan: { x: number; y: number } | null = null;
-  canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    if (e.touches.length === 1) {
-      lastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    } else if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      lastTouchDist = Math.hypot(dx, dy);
-    }
-  }, { passive: false });
-  canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    if (e.touches.length === 1 && lastPan) {
-      // Pan camera
-      const nx = e.touches[0].clientX, ny = e.touches[0].clientY;
-      const dx = nx - lastPan.x, dy = ny - lastPan.y;
-      lastPan = { x: nx, y: ny };
-      game.camera.x -= dx * (1 / game.camera.zoom) * (game.DPR);
-      game.camera.y -= dy * (1 / game.camera.zoom) * (game.DPR);
-    } else if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const dist = Math.hypot(dx, dy);
-      if (lastTouchDist != null) {
-        const factor = dist / (lastTouchDist || dist);
-        game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom * factor));
-      }
-      lastTouchDist = dist;
-    }
-  }, { passive: false });
-  canvas.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    // One-shot erase if enabled
-    const eraseOnce = (window as any)._eraseOnce;
-    if (eraseOnce && e.changedTouches.length === 1) {
-      (window as any)._eraseOnce = false;
-      // Map touch to world and try to remove a building
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.changedTouches[0].clientX - rect.left;
-      const sy = e.changedTouches[0].clientY - rect.top;
-      const wpt = game.screenToWorld(sx, sy);
-      // Mimic cancelOrErase but for single point
-      for (let i = game.buildings.length - 1; i >= 0; i--) {
-        const b = game.buildings[i];
-        if (b.kind === 'hq') continue;
-        if (wpt.x >= b.x && wpt.x <= b.x + b.w && wpt.y >= b.y && wpt.y <= b.y + b.h) {
-          game.evictColonistsFrom(b);
-          game.buildings.splice(i, 1);
-          game.msg('Building removed');
-          game.rebuildNavGrid();
-          break;
-        }
-      }
-    }
-    // If not erasing, treat as a primary tap/click for gameplay
-    if (!eraseOnce && e.changedTouches.length === 1) {
-      const rect = canvas.getBoundingClientRect();
-      const sx = e.changedTouches[0].clientX - rect.left;
-      const sy = e.changedTouches[0].clientY - rect.top;
-      game.handleTapOrClickAtScreen(sx, sy);
-    }
-    if (e.touches.length === 0) { lastPan = null; lastTouchDist = null; }
-  }, { passive: false });
+  // No external touch listeners; Game handles all input consistently.
 }
 
 // Start the game

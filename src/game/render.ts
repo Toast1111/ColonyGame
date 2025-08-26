@@ -10,23 +10,44 @@ export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) 
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
+// Apply camera transform for world rendering
 export function applyWorldTransform(ctx: CanvasRenderingContext2D, cam: Camera) {
   ctx.translate(-cam.x * cam.zoom, -cam.y * cam.zoom);
   ctx.scale(cam.zoom, cam.zoom);
 }
 
+// Simple ground renderer with grid
 export function drawGround(ctx: CanvasRenderingContext2D) {
+  ctx.save();
+  // Base ground
   ctx.fillStyle = COLORS.ground;
   ctx.fillRect(0, 0, WORLD.w, WORLD.h);
-  ctx.globalAlpha = 0.08; ctx.strokeStyle = '#d6e4ff'; ctx.lineWidth = 1;
+  // High-contrast grid that stays ~1px in screen space
+  const tr = (ctx as any).getTransform ? (ctx.getTransform() as DOMMatrix) : null;
+  const zoom = tr ? Math.max(0.001, tr.a) : 1;
+  ctx.lineWidth = Math.max(1 / zoom, 0.75 / zoom);
+  ctx.strokeStyle = '#1e293b';
+  ctx.globalAlpha = 0.5;
   ctx.beginPath();
-  for (let x = 0; x <= WORLD.w; x += T) { ctx.moveTo(x, 0); ctx.lineTo(x, WORLD.h); }
-  for (let y = 0; y <= WORLD.h; y += T) { ctx.moveTo(0, y); ctx.lineTo(WORLD.w, y); }
-  ctx.stroke(); ctx.globalAlpha = 1;
+  for (let x = 0; x <= WORLD.w; x += T) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, WORLD.h);
+  }
+  for (let y = 0; y <= WORLD.h; y += T) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(WORLD.w, y);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
+// Utility to draw a filled circle
 export function drawCircle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
-  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 export function drawPoly(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, n: number, color: string, rot = 0) {
