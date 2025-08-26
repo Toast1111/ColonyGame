@@ -933,6 +933,13 @@ export class Game {
     }
     // Use pathIndex to get current node
     const node = c.path[c.pathIndex];
+    if (!node || node.x == null || node.y == null) {
+      // Invalid node - clear path and return failure
+      console.log(`Invalid path node at index ${c.pathIndex}, clearing path`);
+      this.clearPath(c);
+      if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
+      return false;
+    }
     const dx = node.x - c.x; const dy = node.y - c.y; let L = Math.hypot(dx, dy);
     // Hysteresis to avoid oscillation around a node
     const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
@@ -986,6 +993,12 @@ export class Game {
       // If very close to node, just advance; otherwise, try a light replan once - PATHINDEX RE-ENABLED
       if (L < arriveNode + hysteresis) {
         c.pathIndex++;
+        // Check bounds after increment to prevent accessing invalid nodes
+        if (c.pathIndex >= c.path.length) {
+          this.clearPath(c);
+          if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive;
+          return false;
+        }
         // Don't shift array when using pathIndex
       } else if (target) {
         const p = this.computePath(c.x, c.y, target.x, target.y);
