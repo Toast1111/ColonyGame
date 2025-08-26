@@ -299,8 +299,9 @@ export class Game {
   });
     window.addEventListener('keyup', (e) => { this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; });
     
-    // Touch event handlers to detect actual touch usage
+    // Touch event handlers: if external handlers are installed (main.ts), skip these to avoid conflicts
     c.addEventListener('touchstart', (e) => {
+      if ((window as any)._externalTouchControls) return;
       e.preventDefault();
       this.lastInputWasTouch = true;
       this.isActuallyTouchDevice = true; // Once we see a touch event, we know it's actually being used
@@ -315,12 +316,14 @@ export class Game {
     });
     
     c.addEventListener('touchmove', (e) => {
+      if ((window as any)._externalTouchControls) return;
       e.preventDefault();
       this.lastInputWasTouch = true;
       // Handle touch move if needed for dragging
     });
     
     c.addEventListener('touchend', (e) => {
+      if ((window as any)._externalTouchControls) return;
       e.preventDefault();
       this.lastInputWasTouch = true;
     });

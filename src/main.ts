@@ -3,8 +3,8 @@ import { BUILD_TYPES } from "./game/buildings";
 import { ImageAssets } from "./assets/images";
 
 const canvas = document.getElementById('game') as HTMLCanvasElement;
-const btnPause = document.getElementById('btnPause') as HTMLButtonElement;
-const btnHelp = document.getElementById('btnHelp') as HTMLButtonElement;
+const btnPause = document.getElementById('btnPause') as HTMLButtonElement | null;
+const btnHelp = document.getElementById('btnHelp') as HTMLButtonElement | null;
 const btnToggleUI = document.getElementById('btnToggleUI') as HTMLButtonElement | null;
 const btnMenu = document.getElementById('btnMenu') as HTMLButtonElement | null;
 const headerDropdown = document.getElementById('headerDropdown') as HTMLDivElement | null;
@@ -12,7 +12,7 @@ const hdNew = document.getElementById('hd-new') as HTMLButtonElement | null;
 const hdHelp = document.getElementById('hd-help') as HTMLButtonElement | null;
 const hdBuild = document.getElementById('hd-build') as HTMLButtonElement | null;
 const hdToggleMobile = document.getElementById('hd-toggle-mobile') as HTMLButtonElement | null;
-const btnNew = document.getElementById('btnNew') as HTMLButtonElement;
+const btnNew = document.getElementById('btnNew') as HTMLButtonElement | null;
 const helpEl = document.getElementById('help') as HTMLDivElement;
 const mobileControls = document.getElementById('mobileControls') as HTMLDivElement | null;
 const mcBuild = document.getElementById('mc-build') as HTMLButtonElement | null;
@@ -57,9 +57,9 @@ async function initGame() {
   // Create game instance
   const game = new Game(canvas);
 
-  btnPause.onclick = () => { game.paused = !game.paused; btnPause.textContent = game.paused ? 'Resume' : 'Pause'; };
-  btnNew.onclick = () => { game.newGame(); };
-  btnHelp.onclick = () => { if (helpEl) helpEl.hidden = !helpEl.hidden; };
+  if (btnPause) btnPause.onclick = () => { game.paused = !game.paused; btnPause.textContent = game.paused ? 'Resume' : 'Pause'; };
+  if (btnNew) btnNew.onclick = () => { game.newGame(); };
+  if (btnHelp) btnHelp.onclick = () => { if (helpEl) helpEl.hidden = !helpEl.hidden; };
   
   // FSM Editor functionality
 const btnFSM = document.getElementById('btnFSM') as HTMLButtonElement;
@@ -157,12 +157,17 @@ if (btnBlueprint) {
     // Toggle a simple erase-tap mode: tap button to enable; next tap on canvas erases single item
     (window as any)._eraseOnce = true; game.toast('Erase mode: tap on a building to remove');
   });
-  mcPause && (mcPause.onclick = () => { game.paused = !game.paused; btnPause.textContent = game.paused ? 'Resume' : 'Pause'; });
+  mcPause && (mcPause.onclick = () => { 
+    game.paused = !game.paused; 
+    if (btnPause) btnPause.textContent = game.paused ? 'Resume' : 'Pause'; 
+  });
   mcFF && (mcFF.onclick = () => { game.fastForward = (game.fastForward === 1 ? 6 : 1); game.toast(game.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); });
   mcZoomIn && (mcZoomIn.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom * 1.1)); });
   mcZoomOut && (mcZoomOut.onclick = () => { game.camera.zoom = Math.max(0.6, Math.min(2.2, game.camera.zoom / 1.1)); });
 
   // Touch gestures: one-finger pan, two-finger pinch zoom (available for both mobile and desktop with touch)
+  // Flag so Game.ts doesn't also attach conflicting touch logic
+  (window as any)._externalTouchControls = true;
   let lastTouchDist: number | null = null;
   let lastPan: { x: number; y: number } | null = null;
   canvas.addEventListener('touchstart', (e) => {

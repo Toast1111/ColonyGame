@@ -1,6 +1,6 @@
-import { dist2, norm, sub } from "../core/utils";
-import { WORLD } from "../game/constants";
-import type { Building, Colonist, Enemy, ColonistState } from "../game/types";
+import { dist2, norm, sub } from "../../core/utils";
+import { WORLD } from "../constants";
+import type { Building, Colonist, Enemy, ColonistState } from "../types";
 
 // Helper function to check if a position would collide with buildings
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {

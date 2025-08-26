@@ -65,7 +65,7 @@ export type Colonist = {
   direction?: number; // angle in radians of movement direction
   
   // New personality system
-  profile?: import('./colonistGenerator').ColonistProfile;
+  profile?: import('./colonist_systems/colonistGenerator').ColonistProfile;
 };
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };
