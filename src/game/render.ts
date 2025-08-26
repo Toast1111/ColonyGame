@@ -1,7 +1,8 @@
 import { COLORS, T, WORLD } from "./constants";
-import type { Building, Bullet, Camera, Message } from "./types";
+import type { Building, Bullet, Camera, Message, Particle } from "./types";
 import { ImageAssets } from "../assets/images";
 import { getColonistMood } from "./colonistGenerator";
+import { drawParticles } from "../core/particles";
 
 export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -331,6 +332,12 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#0b0f14cc'; 
     ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+    
+    // Turret flash effect when firing
+    if (b.kind === 'turret' && (b as any).flashTimer > 0) {
+      ctx.fillStyle = '#ffffff88';
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
   }
 
   // Build progress bar
@@ -367,7 +374,20 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
 
 export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
   for (const b of bullets) {
-    ctx.globalAlpha = .8; ctx.strokeStyle = '#e0f2fe'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.tx, b.ty); ctx.stroke(); ctx.globalAlpha = 1;
+    // Draw the projectile trail particles if they exist
+    if (b.particles && b.particles.length > 0) {
+      drawParticles(ctx, b.particles);
+    }
+    
+    // Draw a very subtle projectile line
+    ctx.globalAlpha = .15; 
+    ctx.strokeStyle = '#e0f2fe'; 
+    ctx.lineWidth = 1; 
+    ctx.beginPath(); 
+    ctx.moveTo(b.x, b.y); 
+    ctx.lineTo(b.tx, b.ty); 
+    ctx.stroke(); 
+    ctx.globalAlpha = 1;
   }
 }
 

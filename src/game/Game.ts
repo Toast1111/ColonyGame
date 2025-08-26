@@ -1,12 +1,13 @@
 import { clamp, dist2, rand, randi } from "../core/utils";
 import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS, updateDirtySections } from "../core/pathfinding";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
-import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources } from "./types";
+import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
 import { BUILD_TYPES, hasCost, makeBuilding, payCost, groupByCategory } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { updateColonistFSM } from "../ai/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { generateColonistProfile, getColonistDescription, getColonistMood } from "./colonistGenerator";
+import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles, drawParticles } from "../core/particles";
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -71,6 +72,7 @@ export class Game {
   rocks: Array<{ x: number; y: number; r: number; hp: number; type: 'rock' }> = [];
   buildings: Building[] = [];
   bullets: Bullet[] = [];
+  particles: Particle[] = [];
   messages: Message[] = [];
 
   selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
@@ -915,10 +917,40 @@ export class Game {
   centerOf(b: Building) { return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; }
   pointInRect(p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) { return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; }
   updateTurret(b: Building, dt: number) {
-    if (!('range' in b) || !(b as any).range) return; b.cooldown = Math.max(0, (b.cooldown || 0) - dt);
-    let best: Enemy | null = null, bestD = 1e9; const bc = this.centerOf(b);
-    for (const e of this.enemies) { const d = dist2(e as any, bc as any); if (d < (b as any).range * (b as any).range && d < bestD) { bestD = d; best = e; } }
-    if (best && (b.cooldown || 0) <= 0) { best.hp -= ((b as any).dps || 0); this.bullets.push({ x: bc.x, y: bc.y, tx: best.x, ty: best.y, t: .12 }); b.cooldown = (b as any).fireRate || 0.6; }
+    if (!('range' in b) || !(b as any).range) return; 
+    b.cooldown = Math.max(0, (b.cooldown || 0) - dt);
+    
+    // Update flash timer
+    if ('flashTimer' in b) {
+      (b as any).flashTimer = Math.max(0, ((b as any).flashTimer || 0) - dt);
+    }
+    
+    let best: Enemy | null = null, bestD = 1e9; 
+    const bc = this.centerOf(b);
+    for (const e of this.enemies) { 
+      const d = dist2(e as any, bc as any); 
+      if (d < (b as any).range * (b as any).range && d < bestD) { 
+        bestD = d; best = e; 
+      } 
+    }
+    if (best && (b.cooldown || 0) <= 0) { 
+      best.hp -= ((b as any).dps || 0); 
+      
+      // Create bullet with particle trail
+      const bullet: Bullet = { x: bc.x, y: bc.y, tx: best.x, ty: best.y, t: .12 };
+      bullet.particles = createProjectileTrail(bullet);
+      this.bullets.push(bullet);
+      
+      // Create muzzle flash particles
+      const angle = Math.atan2(best.y - bc.y, best.x - bc.x);
+      const muzzleFlash = createMuzzleFlash(bc.x, bc.y, angle);
+      this.particles.push(...muzzleFlash);
+      
+      // Add flash effect to turret
+      (b as any).flashTimer = 0.08;
+      
+      b.cooldown = (b as any).fireRate || 0.6; 
+    }
   }
 
   // Day/Night & waves
@@ -1058,7 +1090,32 @@ export class Game {
     }
     // resource respawn
     this.tryRespawn(dt);
-    for (let i = this.bullets.length - 1; i >= 0; i--) { const b = this.bullets[i]; b.t -= dt; if (b.t <= 0) this.bullets.splice(i, 1); }
+    
+    // Update bullets and create impact particles when they expire
+    for (let i = this.bullets.length - 1; i >= 0; i--) { 
+      const b = this.bullets[i]; 
+      b.t -= dt; 
+      
+      // Update bullet's own particles
+      if (b.particles) {
+        b.particles = updateParticles(b.particles, dt);
+        // Remove empty particle arrays
+        if (b.particles.length === 0) {
+          delete b.particles;
+        }
+      }
+      
+      if (b.t <= 0) { 
+        // Create impact particles at target location
+        const impact = createImpactEffect(b.tx, b.ty);
+        this.particles.push(...impact);
+        this.bullets.splice(i, 1); 
+      }
+    }
+    
+    // Update global particles
+    this.particles = updateParticles(this.particles, dt);
+    
     for (let i = this.messages.length - 1; i >= 0; i--) { const m = this.messages[i]; m.t -= dt; if (m.t <= 0) this.messages.splice(i, 1); }
   }
 
@@ -1299,6 +1356,10 @@ export class Game {
 
     for (const e of this.enemies) drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
     drawBullets(ctx, this.bullets);
+    
+    // Draw global particles (muzzle flash, impact effects)
+    drawParticles(ctx, this.particles);
+    
     if (this.isNight()) { ctx.fillStyle = `rgba(6,10,18, 0.58)`; ctx.fillRect(0, 0, WORLD.w, WORLD.h); }
   if (this.selectedBuild && !this.pendingPlacement) {
       const def = BUILD_TYPES[this.selectedBuild];

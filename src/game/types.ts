@@ -70,7 +70,13 @@ export type Colonist = {
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };
 
-export type Bullet = { x: number; y: number; tx: number; ty: number; t: number };
+export type Bullet = { x: number; y: number; tx: number; ty: number; t: number; particles?: Particle[] };
+
+export type Particle = {
+  x: number; y: number; vx: number; vy: number; 
+  life: number; maxLife: number; 
+  size: number; color: string; alpha: number;
+};
 
 export type Message = { text: string; t: number; kind: "info" | "warn" | "good" | "bad" };
 
