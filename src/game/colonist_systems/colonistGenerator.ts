@@ -5,6 +5,8 @@ import {
   NAMES,
   FAVORITE_FOODS,
   APPEARANCE_OPTIONS,
+  CLOTHING_COLORS,
+  getRandomColor,
   randomChoice,
   type ColonistTraits
 } from './traits';
@@ -63,7 +65,8 @@ export function generateColonistProfile(): ColonistProfile {
     skinTone: traits.appearance.skinTone.hex,
     hairColor: traits.appearance.hairColor.hex,
     eyeColor: traits.appearance.eyeColor.hex,
-    clothing: randomChoice(APPEARANCE_OPTIONS.CLOTHING_COLORS),
+  // Use weighted clothing color selection from appearance traits
+  clothing: getRandomColor(CLOTHING_COLORS).hex,
     sprites: {
       headType: randomChoice(ImageAssets.getInstance().getAvailableHeadTypes()),
       bodyType: traits.appearance.bodyType,
