@@ -521,6 +521,31 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'sleep': {
+      // Persist target house briefly to avoid oscillation between similar choices
+      const selectSleepTarget = (options: Building[]): Building | null => {
+        if (!options.length) return null;
+        const now = c.t || 0;
+        const remembered: Building | undefined = (c as any).sleepTarget;
+        const lockUntil: number = (c as any).sleepTargetLockUntil || 0;
+        if (remembered && options.includes(remembered) && now < lockUntil) {
+          return remembered;
+        }
+        // Compute best by available space and distance
+        let best = options[0];
+        let bestScore = -Infinity;
+        for (const house of options) {
+          const distance = dist2(c as any, game.centerOf(house) as any);
+          const capacity = game.buildingCapacity(house);
+          const current = game.insideCounts.get(house) || 0;
+          const spaceAvailable = capacity - current;
+          const score = spaceAvailable * 100 - Math.sqrt(distance);
+          if (score > bestScore) { bestScore = score; best = house; }
+        }
+        // Remember choice for a short time to reduce thrashing
+        (c as any).sleepTarget = best;
+        (c as any).sleepTargetLockUntil = now + 3.0; // lock for 3s
+        return best;
+      };
       const protectedHouses = (game.buildings as Building[]).filter(b => b.kind === 'house' && b.done && game.isProtectedByTurret(b) && game.buildingHasSpace(b));
       
       // If no protected houses available, try any house or HQ, or sleep in place near HQ
@@ -528,16 +553,23 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const anyHouse = (game.buildings as Building[]).filter(b => (b.kind === 'house' || b.kind === 'hq') && b.done && game.buildingHasSpace(b));
         
         if (anyHouse.length > 0) {
-          // Try any available house/HQ
-          const house = anyHouse.sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
+          // Try any available house/HQ (with brief target lock to prevent flipping)
+          const house = selectSleepTarget(anyHouse);
+          if (!house) { changeState('seekTask', 'no bed available'); break; }
           const hc = game.centerOf(house);
           const distance = Math.hypot(hc.x - c.x, hc.y - c.y);
           
           if (distance <= 20) {
             if (game.tryEnterBuilding(c, house)) {
               c.hideTimer = 0;
+              // Clear remembered target after success
+              (c as any).sleepTarget = undefined;
+              (c as any).sleepTargetLockUntil = 0;
               changeState('resting', 'sleeping in unprotected shelter');
             } else {
+              // Entry failed (maybe filled meanwhile) - allow immediate re-pick
+              (c as any).sleepTarget = undefined;
+              (c as any).sleepTargetLockUntil = 0;
               // If can't enter, sleep nearby
               changeState('resting', 'sleeping outside shelter');
             }
@@ -575,25 +607,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break; 
       }
       
-      // Improve house selection - prefer houses with more space and closer distance
-      let best = protectedHouses[0]; 
-      let bestScore = -1;
-      
-      for (const house of protectedHouses) {
-        const distance = dist2(c as any, game.centerOf(house) as any);
-        const capacity = game.buildingCapacity(house);
-        const current = game.insideCounts.get(house) || 0;
-        const spaceAvailable = capacity - current;
-        
-        // Score based on available space (higher is better) and inverse distance (closer is better)
-        const score = spaceAvailable * 100 - Math.sqrt(distance);
-        
-        if (score > bestScore) {
-          bestScore = score;
-          best = house;
-        }
-      }
-      let hc = game.centerOf(best);
+    // Improve house selection - prefer houses with more space and closer distance, but lock briefly once chosen
+    let best = selectSleepTarget(protectedHouses);
+    if (!best) { changeState('seekTask', 'no bed available'); break; }
+    let hc = game.centerOf(best);
       
       // Use direct movement instead of pathfinding
       const dx = hc.x - c.x;
@@ -604,9 +621,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (distance <= 20 || nearRect) {
         if (game.tryEnterBuilding(c, best)) { 
           c.hideTimer = 0; 
+      // Clear remembered target after success
+      (c as any).sleepTarget = undefined;
+      (c as any).sleepTargetLockUntil = 0;
           changeState('resting', 'fell asleep'); 
         } else {
           // Try another house with space, or HQ if available
+      // Allow immediate re-pick if entry failed
+      (c as any).sleepTarget = undefined;
+      (c as any).sleepTargetLockUntil = 0;
           const next = (game.buildings as Building[])
             .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'))
             .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
