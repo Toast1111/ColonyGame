@@ -330,7 +330,17 @@ export class Game {
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
       const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-      this.camera.zoom = Math.max(0.6, Math.min(2.2, this.camera.zoom * zoomFactor));
+      // Zoom around cursor position
+      const rect = c.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const worldBefore = this.screenToWorld(cx, cy);
+      const newZoom = Math.max(0.6, Math.min(2.2, this.camera.zoom * zoomFactor));
+      this.camera.zoom = newZoom;
+      const worldAfter = this.screenToWorld(cx, cy);
+      this.camera.x += worldBefore.x - worldAfter.x;
+      this.camera.y += worldBefore.y - worldAfter.y;
+      this.clampCameraToWorld();
     });
   window.addEventListener('keydown', (e) => { 
     const k = (e as KeyboardEvent).key.toLowerCase(); 
