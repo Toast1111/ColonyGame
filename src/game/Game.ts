@@ -101,6 +101,8 @@ export class Game {
   // UI hit regions for colonist panel
   colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
+  colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'stats' | 'log' = 'bio';
+  colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -239,6 +241,15 @@ export class Game {
             const r = this.colonistPanelCloseRect;
             if (mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h) {
               this.selColonist = null; this.follow = false; return;
+            }
+          }
+          // Check for tab clicks
+          if (this.colonistTabRects) {
+            for (const tabRect of this.colonistTabRects) {
+              if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
+                this.colonistProfileTab = tabRect.tab as any;
+                return;
+              }
             }
           }
           if (this.colonistPanelRect) {
@@ -480,6 +491,15 @@ export class Game {
         const r = this.colonistPanelCloseRect;
         if (mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h) {
           this.selColonist = null; this.follow = false; return;
+        }
+      }
+      // Check for tab clicks
+      if (this.colonistTabRects) {
+        for (const tabRect of this.colonistTabRects) {
+          if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
+            this.colonistProfileTab = tabRect.tab as any;
+            return;
+          }
         }
       }
       if (this.isTouch && this.colonistPanelRect) {
@@ -1745,14 +1765,15 @@ export class Game {
   }
 
   // UI: colonist profile panel
+  // UI: colonist profile panel
   drawColonistProfile(c: Colonist) {
     const ctx = this.ctx; 
     const cw = this.canvas.width; 
     const ch = this.canvas.height; 
     
-    // Responsive sizing - make it larger to fit personality info
-    const W = Math.min(this.scale(450), cw * 0.55); // Increased width for personality content
-    const H = Math.min(this.scale(380), ch * 0.55); // Increased height for backstory text
+    // Responsive sizing - larger to accommodate tabs
+    const W = Math.min(this.scale(550), cw * 0.65);
+    const H = Math.min(this.scale(450), ch * 0.7);
     const PAD = this.scale(12);
     const X = cw - W - PAD;
     const Y = this.scale(54);
@@ -1780,111 +1801,434 @@ export class Game {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + this.scale(1));
     
-    // avatar box - smaller since we need more space for text
-    const avatarSize = this.scale(50);
-    const ax = X + this.scale(18); 
-    const ay = finalY + this.scale(26); 
-    ctx.fillStyle = '#0f172a'; 
-    ctx.fillRect(ax, ay, avatarSize, avatarSize); 
-    ctx.strokeStyle = '#1e293b'; 
-    ctx.strokeRect(ax + .5, ay + .5, avatarSize - 1, avatarSize - 1);
+    // Tab navigation
+    const tabHeight = this.scale(32);
+    const tabY = finalY + this.scale(12);
+    const tabs = [
+      { id: 'bio', label: 'Bio', icon: '👤' },
+      { id: 'health', label: 'Health', icon: '❤️' },
+      { id: 'gear', label: 'Gear', icon: '🎒' },
+      { id: 'social', label: 'Social', icon: '👥' },
+      { id: 'stats', label: 'Stats', icon: '📊' },
+      { id: 'log', label: 'Log', icon: '📜' }
+    ];
     
-    // Draw the custom colonist avatar
-    ctx.save(); 
-    ctx.translate(ax + avatarSize/2, ay + avatarSize/2); 
-    ctx.scale(this.uiScale * 1.5, this.uiScale * 1.5); 
-    drawColonistAvatar(ctx as any, 0, 0, c, 12, true); 
+    this.colonistTabRects = [];
+    const tabWidth = (W - this.scale(32)) / tabs.length;
+    
+    for (let i = 0; i < tabs.length; i++) {
+      const tab = tabs[i];
+      const tabX = X + this.scale(16) + i * tabWidth;
+      const isActive = this.colonistProfileTab === tab.id;
+      
+      // Tab background
+      ctx.fillStyle = isActive ? '#1e293b' : '#0f172a';
+      ctx.fillRect(tabX, tabY, tabWidth, tabHeight);
+      ctx.strokeStyle = isActive ? '#3b82f6' : '#1e293b';
+      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
+      
+      // Tab label
+      ctx.fillStyle = isActive ? '#60a5fa' : '#9ca3af';
+      ctx.font = this.getScaledFont(10, '600');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const textY = tabY + tabHeight / 2;
+      ctx.fillText(`${tab.icon} ${tab.label}`, tabX + tabWidth / 2, textY);
+      
+      // Store for hit testing
+      this.colonistTabRects.push({
+        tab: tab.id,
+        x: tabX,
+        y: tabY,
+        w: tabWidth,
+        h: tabHeight
+      });
+    }
+    
+    // Content area
+    const contentY = tabY + tabHeight + this.scale(8);
+    const contentH = H - (contentY - finalY) - this.scale(16);
+    
+    // Draw content based on active tab
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(X + this.scale(8), contentY, W - this.scale(16), contentH);
+    ctx.clip();
+    
+    switch (this.colonistProfileTab) {
+      case 'bio':
+        this.drawBioTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'health':
+        this.drawHealthTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'gear':
+        this.drawGearTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'social':
+        this.drawSocialTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'stats':
+        this.drawStatsTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'log':
+        this.drawLogTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+    }
+    
     ctx.restore();
-    
-    const profile = c.profile;
-    const textX = X + avatarSize + this.scale(24);
-    let textY = finalY + this.scale(22);
-    
-    // Name and background
-    ctx.fillStyle = '#dbeafe'; 
-    ctx.font = this.getScaledFont(16, '700'); 
-    ctx.textAlign = 'left';
-    if (profile) {
-      ctx.fillText(profile.name, textX, textY);
-      textY += this.scale(18);
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(profile.background, textX, textY);
-      textY += this.scale(16);
-      
-      // Personality traits
-      ctx.fillStyle = '#60a5fa';
-      ctx.fillText(`Personality: ${profile.personality.join(', ')}`, textX, textY);
-      textY += this.scale(16);
-      
-      // Favorite food
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, textX, textY);
-      textY += this.scale(20);
-    } else {
-      ctx.fillText('Unnamed Colonist', textX, textY);
-      textY += this.scale(18);
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText('No background available', textX, textY);
-      textY += this.scale(36);
-    }
-    
-    // Current status
-    const task = c.inside ? 'Resting' : (c.task ? c.task : 'Idle');
-    const hp = Math.max(0, Math.min(100, c.hp | 0));
-    const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
-    const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
-    const mood = getColonistMood(c);
-    
-    // Health bars in a more compact format
-    const barSpacing = this.scale(18);
-    this.barRow(textX, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
-    this.barRow(textX, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
-    this.barRow(textX, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
-    
-    // Status info
-    ctx.fillStyle = '#9fb3c8';
-    ctx.font = this.getScaledFont(11);
-    textY += this.scale(8);
-    ctx.fillText(`Currently: ${task}`, textX, textY); textY += this.scale(14);
-    ctx.fillText(`Mood: ${mood}`, textX, textY); textY += this.scale(14);
-    ctx.fillText(`Position: ${c.x | 0}, ${c.y | 0}`, textX, textY); textY += this.scale(14);
-    
-    // Backstory at the bottom if there's space
-    if (profile && profile.backstory && textY < finalY + H - this.scale(40)) {
-      ctx.fillStyle = '#6b7280';
-      ctx.font = this.getScaledFont(10, '400');
-      const words = profile.backstory.split(' ');
-      const maxWidth = W - this.scale(40);
-      let line = '';
-      textY += this.scale(8);
-      
-      for (let word of words) {
-        const testLine = line + word + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && line !== '') {
-          ctx.fillText(line.trim(), textX, textY);
-          textY += this.scale(12);
-          line = word + ' ';
-          if (textY > finalY + H - this.scale(20)) break; // Stop if we run out of space
-        } else {
-          line = testLine;
-        }
-      }
-      if (line.trim() && textY <= finalY + H - this.scale(20)) {
-        ctx.fillText(line.trim(), textX, textY);
-      }
-    }
     
     ctx.fillStyle = '#4b5563';
     ctx.font = this.getScaledFont(9);
-    ctx.fillText(this.follow ? 'Following (Esc to stop)' : 'Click to follow', textX, finalY + H - this.scale(8));
+    ctx.textAlign = 'left';
+    ctx.fillText(this.follow ? 'Following (Esc to stop)' : 'Click to follow', X + this.scale(16), finalY + H - this.scale(8));
     
     // Record panel rects for hit-testing (already in device pixels)
     this.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
     this.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
     ctx.restore();
+  }
+
+  drawBioTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    // Avatar section
+    const avatarSize = this.scale(64);
+    const ax = x + this.scale(8);
+    const ay = textY;
+    
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(ax, ay, avatarSize, avatarSize);
+    ctx.strokeStyle = '#1e293b';
+    ctx.strokeRect(ax + .5, ay + .5, avatarSize - 1, avatarSize - 1);
+    
+    // Draw colonist avatar
+    ctx.save();
+    ctx.translate(ax + avatarSize/2, ay + avatarSize/2);
+    ctx.scale(this.uiScale * 2, this.uiScale * 2);
+    drawColonistAvatar(ctx as any, 0, 0, c, 16, true);
+    ctx.restore();
+    
+    // Basic info next to avatar
+    const profile = c.profile;
+    const infoX = ax + avatarSize + this.scale(16);
+    let infoY = ay + this.scale(8);
+    
+    ctx.fillStyle = '#dbeafe';
+    ctx.font = this.getScaledFont(18, '700');
+    ctx.textAlign = 'left';
+    
+    if (profile) {
+      ctx.fillText(profile.name, infoX, infoY);
+      infoY += this.scale(22);
+      
+      ctx.font = this.getScaledFont(13, '400');
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(profile.background, infoX, infoY);
+      infoY += this.scale(16);
+      
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillText(`Age: ${Math.floor(Math.random() * 30) + 20}`, infoX, infoY);
+      infoY += this.scale(14);
+      
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, infoX, infoY);
+    } else {
+      ctx.fillText('Unnamed Colonist', infoX, infoY);
+      infoY += this.scale(22);
+      ctx.font = this.getScaledFont(13, '400');
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('No background available', infoX, infoY);
+    }
+    
+    textY = ay + avatarSize + this.scale(20);
+    
+    // Personality section
+    if (profile && profile.personality.length > 0) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Personality Traits', x, textY);
+      textY += this.scale(18);
+      
+      for (const trait of profile.personality) {
+        ctx.fillStyle = '#60a5fa';
+        ctx.font = this.getScaledFont(12, '400');
+        ctx.fillText(`• ${trait}`, x + this.scale(8), textY);
+        textY += this.scale(16);
+      }
+      textY += this.scale(8);
+    }
+    
+    // Backstory section
+    if (profile && profile.backstory) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Backstory', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(11, '400');
+      
+      // Word wrap the backstory
+      const words = profile.backstory.split(' ');
+      const maxWidth = w - this.scale(16);
+      let line = '';
+      
+      for (let word of words) {
+        const testLine = line + word + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && line !== '') {
+          ctx.fillText(line.trim(), x + this.scale(8), textY);
+          textY += this.scale(14);
+          line = word + ' ';
+          if (textY > y + h - this.scale(20)) break;
+        } else {
+          line = testLine;
+        }
+      }
+      if (line.trim() && textY <= y + h - this.scale(20)) {
+        ctx.fillText(line.trim(), x + this.scale(8), textY);
+      }
+    }
+  }
+
+  drawHealthTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    const hp = Math.max(0, Math.min(100, c.hp | 0));
+    const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
+    const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
+    const mood = getColonistMood(c);
+    
+    // Overall condition
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Overall Condition', x, textY);
+    textY += this.scale(24);
+    
+    // Health bars
+    const barSpacing = this.scale(22);
+    this.barRow(x, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
+    this.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
+    this.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
+    
+    textY += this.scale(16);
+    
+    // Mood section
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Mental State', x, textY);
+    textY += this.scale(18);
+    
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = this.getScaledFont(12, '400');
+    ctx.fillText(`Current Mood: ${mood}`, x + this.scale(8), textY);
+    textY += this.scale(16);
+    
+    // Status effects (placeholder)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Status Effects', x, textY);
+    textY += this.scale(18);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = this.getScaledFont(11, '400');
+    ctx.fillText('No active status effects', x + this.scale(8), textY);
+  }
+
+  drawGearTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Equipment & Apparel', x, textY);
+    textY += this.scale(24);
+    
+    // Equipment slots (placeholder)
+    const slots = [
+      { name: 'Head', item: 'None', color: '#6b7280' },
+      { name: 'Torso', item: 'Basic Shirt', color: '#60a5fa' },
+      { name: 'Legs', item: 'Basic Pants', color: '#60a5fa' },
+      { name: 'Feet', item: 'None', color: '#6b7280' },
+      { name: 'Weapon', item: c.carrying ? 'Tool' : 'None', color: c.carrying ? '#22c55e' : '#6b7280' }
+    ];
+    
+    for (const slot of slots) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(12, '500');
+      ctx.fillText(`${slot.name}:`, x, textY);
+      
+      ctx.fillStyle = slot.color;
+      ctx.font = this.getScaledFont(12, '400');
+      ctx.fillText(slot.item, x + this.scale(80), textY);
+      textY += this.scale(18);
+    }
+    
+    textY += this.scale(16);
+    
+    // Inventory (placeholder)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Inventory', x, textY);
+    textY += this.scale(18);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = this.getScaledFont(11, '400');
+    if (c.carrying) {
+      ctx.fillText(`Carrying: ${c.carrying.type || 'Item'}`, x + this.scale(8), textY);
+    } else {
+      ctx.fillText('No items carried', x + this.scale(8), textY);
+    }
+  }
+
+  drawSocialTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Social Relationships', x, textY);
+    textY += this.scale(24);
+    
+    // Social stats (placeholder)
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = this.getScaledFont(12, '400');
+    ctx.fillText('Social skill: Novice', x, textY);
+    textY += this.scale(16);
+    
+    textY += this.scale(16);
+    
+    // Relationships with other colonists
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Colony Relationships', x, textY);
+    textY += this.scale(18);
+    
+    const otherColonists = this.colonists.filter(col => col !== c && col.alive);
+    if (otherColonists.length > 0) {
+      for (let i = 0; i < Math.min(otherColonists.length, 3); i++) {
+        const other = otherColonists[i];
+        const relationship = ['Neutral', 'Friend', 'Good friend', 'Rival'][Math.floor(Math.random() * 4)];
+        const relationshipColor = relationship === 'Friend' || relationship === 'Good friend' ? '#22c55e' : 
+                                 relationship === 'Rival' ? '#ef4444' : '#94a3b8';
+        
+        ctx.fillStyle = '#dbeafe';
+        ctx.font = this.getScaledFont(11, '500');
+        ctx.fillText(other.profile?.name || 'Colonist', x + this.scale(8), textY);
+        
+        ctx.fillStyle = relationshipColor;
+        ctx.font = this.getScaledFont(11, '400');
+        ctx.fillText(relationship, x + this.scale(120), textY);
+        textY += this.scale(16);
+      }
+    } else {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText('No other colonists in colony', x + this.scale(8), textY);
+    }
+  }
+
+  drawStatsTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Skills & Abilities', x, textY);
+    textY += this.scale(24);
+    
+    // Core stats from profile
+    const profile = c.profile;
+    if (profile && profile.stats) {
+      const stats = [
+        { name: 'Work Speed', value: Math.round(profile.stats.workSpeed * 100), suffix: '%' },
+        { name: 'Social Bonus', value: Math.round(profile.stats.socialBonus * 100), suffix: '%' },
+        { name: 'Hunger Rate', value: Math.round(profile.stats.hungerRate * 100), suffix: '%' },
+        { name: 'Fatigue Rate', value: Math.round(profile.stats.fatigueRate * 100), suffix: '%' }
+      ];
+      
+      for (const stat of stats) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = this.getScaledFont(12, '500');
+        ctx.fillText(`${stat.name}:`, x, textY);
+        
+        ctx.fillStyle = '#dbeafe';
+        ctx.font = this.getScaledFont(12, '400');
+        ctx.fillText(`${stat.value}${stat.suffix}`, x + this.scale(120), textY);
+        textY += this.scale(18);
+      }
+    }
+    
+    textY += this.scale(16);
+    
+    // Skills (placeholder - expandable)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Skills', x, textY);
+    textY += this.scale(18);
+    
+    const skills = [
+      { name: 'Construction', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Farming', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Mining', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Research', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Combat', level: Math.floor(Math.random() * 10) + 1 }
+    ];
+    
+    for (const skill of skills) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText(`${skill.name}:`, x + this.scale(8), textY);
+      
+      const levelColor = skill.level >= 8 ? '#22c55e' : skill.level >= 5 ? '#eab308' : '#6b7280';
+      ctx.fillStyle = levelColor;
+      ctx.fillText(`Level ${skill.level}`, x + this.scale(100), textY);
+      textY += this.scale(16);
+    }
+  }
+
+  drawLogTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Activity Log', x, textY);
+    textY += this.scale(24);
+    
+    // Recent activities (placeholder)
+    const activities = [
+      { time: `Day ${this.day} 08:30`, action: 'Started construction work', type: 'work' },
+      { time: `Day ${this.day} 07:45`, action: 'Finished eating breakfast', type: 'need' },
+      { time: `Day ${this.day} 07:00`, action: 'Woke up', type: 'rest' },
+      { time: `Day ${this.day - 1} 22:30`, action: 'Went to sleep', type: 'rest' },
+      { time: `Day ${this.day - 1} 19:15`, action: 'Had dinner', type: 'need' }
+    ];
+    
+    for (const activity of activities) {
+      const activityColor = activity.type === 'work' ? '#60a5fa' : 
+                           activity.type === 'need' ? '#22c55e' : 
+                           activity.type === 'rest' ? '#a78bfa' : '#94a3b8';
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.font = this.getScaledFont(10, '400');
+      ctx.fillText(activity.time, x, textY);
+      
+      ctx.fillStyle = activityColor;
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText(activity.action, x + this.scale(100), textY);
+      textY += this.scale(16);
+      
+      if (textY > y + h - this.scale(20)) break;
+    }
   }
 
   barRow(x: number, y: number, label: string, val: number, color: string) {
