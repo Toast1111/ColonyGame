@@ -103,6 +103,29 @@ export class Game {
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'stats' | 'log' = 'bio';
   colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
+  
+  // Context menu system
+  contextMenu: {
+    visible: boolean;
+    x: number;
+    y: number;
+    target: Colonist | null;
+    items: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      enabled: boolean;
+      submenu?: Array<{ id: string; label: string; icon: string; enabled: boolean }>;
+    }>;
+    openSubmenu?: string; // Track which submenu is currently open
+  } | null = null;
+  contextMenuRects: Array<{ id: string; x: number; y: number; w: number; h: number; isSubmenu?: boolean; parentId?: string }> = [];
+  
+  // Long press support for mobile context menus
+  longPressTimer: number | null = null;
+  longPressStartPos: { x: number; y: number } | null = null;
+  longPressStartTime: number | null = null;
+  longPressTarget: Colonist | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -303,6 +326,46 @@ export class Game {
             return;
           }
         }
+        
+        // Check for context menu click
+        if (this.contextMenu) {
+          const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+          let clickedOnMenu = false;
+          
+          // Check if clicking on any context menu item
+          for (const rect of this.contextMenuRects) {
+            if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
+              if (this.contextMenu.target) {
+                // Check if this is a parent item with submenu
+                const parentItem = this.contextMenu.items.find(item => item.id === rect.id);
+                if (parentItem && parentItem.submenu) {
+                  // Toggle submenu visibility
+                  if (this.contextMenu.openSubmenu === rect.id) {
+                    this.contextMenu.openSubmenu = undefined; // Close submenu
+                  } else {
+                    this.contextMenu.openSubmenu = rect.id; // Open submenu
+                  }
+                  clickedOnMenu = true;
+                  return;
+                } else {
+                  // Execute action for regular items or submenu items
+                  this.handleContextMenuAction(rect.id, this.contextMenu.target);
+                  this.contextMenu = null;
+                  this.contextMenuRects = [];
+                  clickedOnMenu = true;
+                  return;
+                }
+              }
+            }
+          }
+          
+          if (!clickedOnMenu) {
+            // Click outside context menu - close it
+            this.contextMenu = null;
+            this.contextMenuRects = [];
+          }
+        }
+        
         if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
         if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); }
         else if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); }
@@ -316,6 +379,14 @@ export class Game {
       if ((e as MouseEvent).button === 2) {
         this.mouse.rdown = true;
         if (this.showBuildMenu) { this.showBuildMenu = false; return; }
+        
+        // Check for colonist context menu
+        const clickedColonist = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+        if (clickedColonist) {
+          this.showContextMenu(clickedColonist, this.mouse.x, this.mouse.y);
+          return;
+        }
+        
         this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
       }
     });
@@ -372,7 +443,37 @@ export class Game {
       this.isActuallyTouchDevice = true;
       if (e.touches.length === 1) {
         this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        
+        // Start long press timer for context menu
+        const rect = c.getBoundingClientRect();
+        const sx = e.touches[0].clientX - rect.left;
+        const sy = e.touches[0].clientY - rect.top;
+        const wpt = this.screenToWorld(sx, sy);
+        const clickedColonist = this.findColonistAt(wpt.x, wpt.y);
+        
+        if (clickedColonist) {
+          this.longPressStartPos = { x: sx, y: sy };
+          this.longPressStartTime = performance.now();
+          this.longPressTarget = clickedColonist;
+          
+          this.longPressTimer = window.setTimeout(() => {
+            this.showContextMenu(clickedColonist, sx, sy);
+            // Provide haptic feedback if available
+            if (navigator.vibrate) {
+              navigator.vibrate(50);
+            }
+            // Clear long press state
+            this.longPressStartTime = null;
+            this.longPressTarget = null;
+          }, 500); // 500ms long press
+        }
+        
       } else if (e.touches.length === 2) {
+        // Cancel long press timer when multi-touch
+        if (this.longPressTimer) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+        }
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         this.touchLastDist = Math.hypot(dx, dy);
@@ -382,6 +483,21 @@ export class Game {
     c.addEventListener('touchmove', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = true;
+      
+      // Cancel long press timer if finger moves too much
+      if (this.longPressTimer && this.longPressStartPos && e.touches.length === 1) {
+        const rect = c.getBoundingClientRect();
+        const sx = e.touches[0].clientX - rect.left;
+        const sy = e.touches[0].clientY - rect.top;
+        const distance = Math.hypot(sx - this.longPressStartPos.x, sy - this.longPressStartPos.y);
+        if (distance > 20) { // Cancel if moved more than 20 pixels
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+          this.longPressStartTime = null;
+          this.longPressTarget = null;
+        }
+      }
+      
       if (e.touches.length === 1 && this.touchLastPan) {
         // If adjusting a pending placement ghost, move it with the finger
         if (this.pendingPlacement) {
@@ -430,6 +546,16 @@ export class Game {
     c.addEventListener('touchend', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = true;
+      
+      // Cancel long press timer on touch end
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+      this.longPressStartPos = null;
+      this.longPressStartTime = null;
+      this.longPressTarget = null;
+      
       // Treat single-finger touchend as a tap/click if not panning
       if (e.changedTouches.length === 1 && e.touches.length === 0) {
         const rect = c.getBoundingClientRect();
@@ -516,6 +642,45 @@ export class Game {
         const key = this.hotbar[r.index];
         if (key) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); }
         return;
+      }
+    }
+    
+    // Check for context menu click
+    if (this.contextMenu) {
+      const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+      let clickedOnMenu = false;
+      
+      // Check if clicking on any context menu item
+      for (const rect of this.contextMenuRects) {
+        if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
+          if (this.contextMenu.target) {
+            // Check if this is a parent item with submenu
+            const parentItem = this.contextMenu.items.find(item => item.id === rect.id);
+            if (parentItem && parentItem.submenu) {
+              // Toggle submenu visibility
+              if (this.contextMenu.openSubmenu === rect.id) {
+                this.contextMenu.openSubmenu = undefined; // Close submenu
+              } else {
+                this.contextMenu.openSubmenu = rect.id; // Open submenu
+              }
+              clickedOnMenu = true;
+              return;
+            } else {
+              // Execute action for regular items or submenu items
+              this.handleContextMenuAction(rect.id, this.contextMenu.target);
+              this.contextMenu = null;
+              this.contextMenuRects = [];
+              clickedOnMenu = true;
+              return;
+            }
+          }
+        }
+      }
+      
+      if (!clickedOnMenu) {
+        // Click outside context menu - close it
+        this.contextMenu = null;
+        this.contextMenuRects = [];
       }
     }
 
@@ -1323,6 +1488,10 @@ export class Game {
       ctx.restore();
     }
   for (const c of this.colonists) { if (!c.inside && c.alive) drawColonistAvatar(ctx, c.x, c.y, c, c.r, this.selColonist === c); }
+  
+  // Draw long press progress circle
+  this.drawLongPressProgress();
+  
     if (this.debug.nav) {
       // draw nav solids
       ctx.save();
@@ -1560,6 +1729,7 @@ export class Game {
   else { this.colonistPanelRect = this.colonistPanelCloseRect = null; }
   if (this.showBuildMenu) this.drawBuildMenu();
   if (this.pendingPlacement) this.drawPlacementUI();
+  if (this.contextMenu) this.drawContextMenu();
   }
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }
@@ -2229,6 +2399,519 @@ export class Game {
       
       if (textY > y + h - this.scale(20)) break;
     }
+  }
+
+  // Context Menu System
+  showContextMenu(colonist: Colonist, screenX: number, screenY: number) {
+    const isIdle = !colonist.task || colonist.task === 'idle';
+    const hasTarget = !!colonist.target;
+    const isInjured = colonist.hp < 50;
+    const isHungry = (colonist.hunger || 0) > 60;
+    const isTired = (colonist.fatigue || 0) > 60;
+    
+    this.contextMenu = {
+      visible: true,
+      x: screenX,
+      y: screenY,
+      target: colonist,
+      openSubmenu: undefined,
+      items: [
+        {
+          id: 'prioritize',
+          label: 'Prioritize',
+          icon: '⚡',
+          enabled: true,
+          submenu: [
+            { id: 'prioritize_work', label: 'Work Tasks', icon: '🔨', enabled: true },
+            { id: 'prioritize_build', label: 'Construction', icon: '🏗️', enabled: true },
+            { id: 'prioritize_haul', label: 'Hauling', icon: '📦', enabled: true },
+            { id: 'prioritize_research', label: 'Research', icon: '🔬', enabled: true }
+          ]
+        },
+        {
+          id: 'force',
+          label: 'Force',
+          icon: '❗',
+          enabled: true,
+          submenu: [
+            { id: 'force_rest', label: 'Rest Now', icon: '😴', enabled: isTired },
+            { id: 'force_eat', label: 'Eat Now', icon: '🍽️', enabled: isHungry },
+            { id: 'force_work', label: 'Work', icon: '⚒️', enabled: isIdle },
+            { id: 'force_guard', label: 'Guard Area', icon: '🛡️', enabled: true }
+          ]
+        },
+        {
+          id: 'goto',
+          label: 'Go To',
+          icon: '🎯',
+          enabled: true,
+          submenu: [
+            { id: 'goto_hq', label: 'HQ', icon: '🏠', enabled: true },
+            { id: 'goto_safety', label: 'Safe Room', icon: '🛡️', enabled: true },
+            { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
+            { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true }
+          ]
+        },
+        {
+          id: 'medical',
+          label: 'Medical',
+          icon: '🏥',
+          enabled: isInjured,
+          submenu: [
+            { id: 'medical_treat', label: 'Treat Wounds', icon: '🩹', enabled: isInjured },
+            { id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: isInjured },
+            { id: 'medical_surgery', label: 'Surgery', icon: '⚕️', enabled: false }
+          ]
+        },
+        {
+          id: 'cancel',
+          label: 'Cancel Current Task',
+          icon: '❌',
+          enabled: hasTarget,
+        },
+        {
+          id: 'follow',
+          label: this.follow && this.selColonist === colonist ? 'Stop Following' : 'Follow',
+          icon: '👁️',
+          enabled: true,
+        }
+      ]
+    };
+  }
+
+  hideContextMenu() {
+    this.contextMenu = null;
+    this.contextMenuRects = [];
+  }
+
+  handleContextMenuAction(actionId: string, colonist: Colonist) {
+    console.log(`Context menu action: ${actionId} for colonist:`, colonist.profile?.name);
+    
+    switch (actionId) {
+      // Prioritize actions
+      case 'prioritize_work':
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing work tasks`, 'info');
+        break;
+      case 'prioritize_build':
+        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist));
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing construction`, 'info');
+        break;
+      case 'prioritize_haul':
+        // Future: implement hauling system
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing hauling`, 'info');
+        break;
+      case 'prioritize_research':
+        // Future: implement research system
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing research`, 'info');
+        break;
+        
+      // Force actions
+      case 'force_rest':
+        this.forceColonistToRest(colonist);
+        break;
+      case 'force_eat':
+        this.forceColonistToEat(colonist);
+        break;
+      case 'force_work':
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
+        this.msg(`${colonist.profile?.name || 'Colonist'} forced to work`, 'info');
+        break;
+      case 'force_guard':
+        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y });
+        this.msg(`${colonist.profile?.name || 'Colonist'} guarding area`, 'info');
+        break;
+        
+      // Go to actions
+      case 'goto_hq':
+        this.sendColonistToHQ(colonist);
+        break;
+      case 'goto_safety':
+        this.sendColonistToSafety(colonist);
+        break;
+      case 'goto_bed':
+        this.sendColonistToBed(colonist);
+        break;
+      case 'goto_food':
+        this.sendColonistToFood(colonist);
+        break;
+        
+      // Medical actions
+      case 'medical_treat':
+        this.treatColonist(colonist);
+        break;
+      case 'medical_rest':
+        this.forceColonistToRest(colonist);
+        this.msg(`${colonist.profile?.name || 'Colonist'} ordered to bed rest`, 'info');
+        break;
+        
+      // Basic actions
+      case 'cancel':
+        this.setTask(colonist, 'idle', { x: colonist.x, y: colonist.y });
+        this.msg(`${colonist.profile?.name || 'Colonist'} task cancelled`, 'info');
+        break;
+      case 'follow':
+        if (this.follow && this.selColonist === colonist) {
+          this.follow = false;
+          this.selColonist = null;
+          this.msg('Stopped following', 'info');
+        } else {
+          this.selColonist = colonist;
+          this.follow = true;
+          this.msg(`Following ${colonist.profile?.name || 'colonist'}`, 'info');
+        }
+        break;
+    }
+    
+    this.hideContextMenu();
+  }
+
+  // Helper functions for context menu actions
+  findNearestWorkTarget(colonist: Colonist) {
+    // Find nearest unfinished building
+    let nearest = null;
+    let minDist = Infinity;
+    
+    for (const building of this.buildings) {
+      if (!building.done) {
+        const dist = Math.hypot(colonist.x - (building.x + building.w/2), colonist.y - (building.y + building.h/2));
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = building;
+        }
+      }
+    }
+    
+    return nearest || { x: colonist.x + rand(-50, 50), y: colonist.y + rand(-50, 50) };
+  }
+
+  findNearestBuildTarget(colonist: Colonist) {
+    return this.findNearestWorkTarget(colonist);
+  }
+
+  forceColonistToRest(colonist: Colonist) {
+    // Find nearest house or tent
+    const restBuilding = this.buildings.find(b => 
+      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq') && 
+      b.done && 
+      this.buildingHasSpace(b)
+    );
+    
+    if (restBuilding) {
+      this.setTask(colonist, 'rest', restBuilding);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to rest`, 'info');
+    } else {
+      this.msg('No available sleeping quarters', 'warn');
+    }
+  }
+
+  forceColonistToEat(colonist: Colonist) {
+    if (this.RES.food > 0) {
+      // Simulate eating
+      colonist.hunger = Math.max(0, (colonist.hunger || 0) - 30);
+      this.RES.food = Math.max(0, this.RES.food - 1);
+      this.msg(`${colonist.profile?.name || 'Colonist'} eating food`, 'good');
+    } else {
+      this.msg('No food available', 'warn');
+    }
+  }
+
+  sendColonistToHQ(colonist: Colonist) {
+    const hq = this.buildings.find(b => b.kind === 'hq');
+    if (hq) {
+      const target = { x: hq.x + hq.w/2, y: hq.y + hq.h/2 };
+      this.setTask(colonist, 'goto', target);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to HQ`, 'info');
+    }
+  }
+
+  sendColonistToSafety(colonist: Colonist) {
+    // Find a building protected by turrets
+    for (const building of this.buildings) {
+      if (building.done && this.isProtectedByTurret(building) && this.buildingHasSpace(building)) {
+        this.setTask(colonist, 'goto', building);
+        this.msg(`${colonist.profile?.name || 'Colonist'} going to safety`, 'info');
+        return;
+      }
+    }
+    this.sendColonistToHQ(colonist);
+  }
+
+  sendColonistToBed(colonist: Colonist) {
+    const bed = this.buildings.find(b => 
+      (b.kind === 'house' || b.kind === 'tent') && 
+      b.done && 
+      this.buildingHasSpace(b)
+    );
+    
+    if (bed) {
+      this.setTask(colonist, 'rest', bed);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to bed`, 'info');
+    } else {
+      this.msg('No available beds', 'warn');
+    }
+  }
+
+  sendColonistToFood(colonist: Colonist) {
+    const storage = this.buildings.find(b => 
+      (b.kind === 'warehouse' || b.kind === 'hq') && b.done
+    );
+    
+    if (storage) {
+      const target = { x: storage.x + storage.w/2, y: storage.y + storage.h/2 };
+      this.setTask(colonist, 'goto', target);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to food storage`, 'info');
+    } else {
+      this.sendColonistToHQ(colonist);
+    }
+  }
+
+  treatColonist(colonist: Colonist) {
+    const infirmary = this.buildings.find(b => b.kind === 'infirmary' && b.done);
+    
+    if (infirmary) {
+      this.setTask(colonist, 'medical', infirmary);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going for medical treatment`, 'info');
+    } else {
+      // Basic field treatment
+      colonist.hp = Math.min(100, colonist.hp + 15);
+      this.msg(`${colonist.profile?.name || 'Colonist'} received basic treatment`, 'good');
+    }
+  }
+
+  drawContextMenu() {
+    if (!this.contextMenu || !this.contextMenu.visible) return;
+    
+    const ctx = this.ctx;
+    const menu = this.contextMenu;
+    
+    ctx.save();
+    
+    // Calculate menu dimensions
+    const itemHeight = this.scale(32); // Increased for mobile friendliness
+    const menuWidth = this.scale(220); // Increased width
+    const padding = this.scale(8);
+    const iconWidth = this.scale(24);
+    
+    // Count visible items
+    const visibleItems = menu.items.filter(item => item.enabled || true); // Show disabled items grayed out
+    const menuHeight = visibleItems.length * itemHeight + padding * 2;
+    
+    // Adjust position to keep menu on screen
+    let menuX = menu.x;
+    let menuY = menu.y;
+    
+    if (menuX + menuWidth > this.canvas.width) {
+      menuX = this.canvas.width - menuWidth - this.scale(10);
+    }
+    if (menuY + menuHeight > this.canvas.height) {
+      menuY = this.canvas.height - menuHeight - this.scale(10);
+    }
+    
+    // Draw menu background with shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(menuX + 3, menuY + 3, menuWidth, menuHeight);
+    
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(menuX, menuY, menuWidth, menuHeight);
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(menuX + 0.5, menuY + 0.5, menuWidth - 1, menuHeight - 1);
+    
+    this.contextMenuRects = [];
+    
+    // Draw menu items
+    let currentY = menuY + padding;
+    
+    for (let i = 0; i < visibleItems.length; i++) {
+      const item = visibleItems[i];
+      const itemY = currentY + i * itemHeight;
+      const isHovered = this.isPointInRect(this.mouse.x * this.DPR, this.mouse.y * this.DPR, {
+        x: menuX, y: itemY, w: menuWidth, h: itemHeight
+      });
+      
+      // Store rect for click detection
+      this.contextMenuRects.push({
+        id: item.id,
+        x: menuX,
+        y: itemY,
+        w: menuWidth,
+        h: itemHeight
+      });
+      
+      // Draw item background
+      if (isHovered && item.enabled) {
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
+      }
+      
+      // Highlight if submenu is open
+      if (item.submenu && menu.openSubmenu === item.id) {
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
+      }
+      
+      // Draw icon
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(16, '400'); // Larger icons for mobile
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.icon, menuX + padding, itemY + itemHeight / 2);
+      
+      // Draw label
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(14, '400'); // Larger text for mobile
+      ctx.fillText(item.label, menuX + padding + iconWidth, itemY + itemHeight / 2);
+      
+      // Draw submenu arrow if applicable
+      if (item.submenu) {
+        ctx.fillStyle = item.enabled ? '#9ca3af' : '#4b5563';
+        const arrow = menu.openSubmenu === item.id ? '▼' : '▶';
+        ctx.fillText(arrow, menuX + menuWidth - padding - this.scale(16), itemY + itemHeight / 2);
+      }
+      
+      // Draw submenu if open (click-based, not hover)
+      if (item.submenu && menu.openSubmenu === item.id) {
+        this.drawSubmenu(item, menuX + menuWidth + this.scale(5), itemY);
+      }
+    }
+    
+    ctx.restore();
+  }
+
+  drawSubmenu(parentItem: any, x: number, y: number) {
+    const ctx = this.ctx;
+    const submenu = parentItem.submenu;
+    
+    if (!submenu || submenu.length === 0) return;
+    
+    const itemHeight = this.scale(30); // Increased for mobile
+    const submenuWidth = this.scale(200); // Increased width
+    const padding = this.scale(8);
+    const iconWidth = this.scale(22);
+    
+    const submenuHeight = submenu.length * itemHeight + padding * 2;
+    
+    // Adjust position to keep submenu on screen
+    let submenuX = x;
+    let submenuY = y;
+    
+    if (submenuX + submenuWidth > this.canvas.width) {
+      submenuX = x - submenuWidth - this.scale(225); // Position to the left of main menu
+    }
+    if (submenuY + submenuHeight > this.canvas.height) {
+      submenuY = this.canvas.height - submenuHeight - this.scale(10);
+    }
+    
+    // Draw submenu background with shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(submenuX + 3, submenuY + 3, submenuWidth, submenuHeight);
+    
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(submenuX, submenuY, submenuWidth, submenuHeight);
+    ctx.strokeStyle = '#374151';
+    ctx.strokeRect(submenuX + 0.5, submenuY + 0.5, submenuWidth - 1, submenuHeight - 1);
+    
+    // Draw submenu items
+    for (let i = 0; i < submenu.length; i++) {
+      const item = submenu[i];
+      const itemY = submenuY + padding + i * itemHeight;
+      const isHovered = this.isPointInRect(this.mouse.x * this.DPR, this.mouse.y * this.DPR, {
+        x: submenuX, y: itemY, w: submenuWidth, h: itemHeight
+      });
+      
+      // Store rect for click detection
+      this.contextMenuRects.push({
+        id: item.id,
+        x: submenuX,
+        y: itemY,
+        w: submenuWidth,
+        h: itemHeight,
+        isSubmenu: true,
+        parentId: parentItem.id
+      });
+      
+      // Draw item background
+      if (isHovered && item.enabled) {
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(submenuX + 1, itemY, submenuWidth - 2, itemHeight);
+      }
+      
+      // Draw icon
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(14, '400'); // Larger icons
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.icon, submenuX + padding, itemY + itemHeight / 2);
+      
+      // Draw label
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(13, '400'); // Larger text
+      ctx.fillText(item.label, submenuX + padding + iconWidth, itemY + itemHeight / 2);
+    }
+  }
+
+  drawLongPressProgress() {
+    if (!this.longPressStartTime || !this.longPressTarget || !this.longPressStartPos) return;
+    
+    const ctx = this.ctx;
+    const currentTime = performance.now();
+    const elapsed = currentTime - this.longPressStartTime;
+    const progress = Math.min(elapsed / 500, 1); // 500ms total duration
+    
+    if (progress >= 1) return; // Don't draw when complete
+    
+    // Convert world position to screen position
+    const screenX = (this.longPressTarget.x - this.camera.x) * this.camera.zoom;
+    const screenY = (this.longPressTarget.y - this.camera.y) * this.camera.zoom;
+    
+    ctx.save();
+    
+    // Draw progress circle
+    const radius = this.scale(20);
+    const centerX = screenX;
+    const centerY = screenY;
+    
+    // Background circle
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = this.scale(3);
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Progress arc
+    ctx.strokeStyle = '#60a5fa'; // Blue color
+    ctx.lineWidth = this.scale(3);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const startAngle = -Math.PI / 2; // Start at top
+    const endAngle = startAngle + (progress * Math.PI * 2);
+    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+    ctx.stroke();
+    
+    // Inner pulse effect
+    if (progress > 0.3) {
+      const pulseAlpha = Math.sin((elapsed / 100) * Math.PI) * 0.3 + 0.1;
+      ctx.fillStyle = `rgba(96, 165, 250, ${pulseAlpha})`;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Context menu icon hint
+    if (progress > 0.5) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = this.getScaledFont(12, '600');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚙️', centerX, centerY);
+    }
+    
+    ctx.restore();
+  }
+
+  isPointInRect(x: number, y: number, rect: { x: number; y: number; w: number; h: number }): boolean {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
   }
 
   barRow(x: number, y: number, label: string, val: number, color: string) {
