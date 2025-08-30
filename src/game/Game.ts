@@ -1,3 +1,4 @@
+
 import { clamp, dist2, rand, randi } from "../core/utils";
 import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS, updateDirtySections } from "../core/pathfinding";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
@@ -878,9 +879,22 @@ export class Game {
     const tryPlace = (x: number, y: number) => {
       const wx = x * T + 1, wy = y * T + 1; // slight offset to choose the cell
       const b = makeBuilding('path' as any, wx, wy);
+      
       // Avoid duplicates on same tile
       const exists = this.buildings.some(pb => pb.kind === 'path' && pb.x === b.x && pb.y === b.y);
-      if (!exists && hasCost(this.RES, BUILD_TYPES['path'].cost)) { payCost(this.RES, BUILD_TYPES['path'].cost); this.buildings.push(b); }
+      if (exists) return;
+      
+      // Check for overlap with non-path buildings (prevent paths through buildings)
+      const overlapsBuilding = this.buildings.some(pb => {
+        if (pb.kind === 'path') return false; // Paths can overlap other paths
+        const overlap = !(b.x + b.w <= pb.x || b.x >= pb.x + pb.w || b.y + b.h <= pb.y || b.y >= pb.y + pb.h);
+        return overlap;
+      });
+      
+      if (!overlapsBuilding && hasCost(this.RES, BUILD_TYPES['path'].cost)) { 
+        payCost(this.RES, BUILD_TYPES['path'].cost); 
+        this.buildings.push(b); 
+      }
     };
     if (this.lastPaintCell == null) {
       tryPlace(gx, gy);
@@ -1066,7 +1080,7 @@ export class Game {
     }
     
     if (this.RES.wood < this.RES.stone) {
-      const tr = this.nearestCircle({ x: c.x, y: c.y }, availableTrees as any); 
+      const tr = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableTrees as any); 
       if (tr) { 
         if (Math.random() < 0.1) console.log('Assigning chop task');
         this.setTask(c, 'chop', tr); return; 
@@ -1074,7 +1088,7 @@ export class Game {
         if (Math.random() < 0.1) console.log('No trees available for chopping');
       }
     } else {
-      const rk = this.nearestCircle({ x: c.x, y: c.y }, availableRocks as any); 
+      const rk = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableRocks as any); 
       if (rk) { 
         if (Math.random() < 0.1) console.log('Assigning mine task to rock at:', rk);
         this.setTask(c, 'mine', rk); return; 
@@ -1087,6 +1101,40 @@ export class Game {
   }
   nearestCircle<T extends { x: number; y: number }>(p: { x: number; y: number }, arr: T[]): T | null {
     let best: T | null = null, bestD = 1e9; for (const o of arr) { const d = dist2(p as any, o as any); if (d < bestD) { bestD = d; best = o; } } return best;
+  }
+  
+  nearestSafeCircle<T extends { x: number; y: number }>(c: Colonist, p: { x: number; y: number }, arr: T[]): T | null {
+    // Filter out targets that are in dangerous areas based on colonist's danger memory
+    const safeTargets = arr.filter(target => {
+      const dangerMemory = (c as any).dangerMemory;
+      if (!dangerMemory || !Array.isArray(dangerMemory)) return true;
+      
+      // Check if target is in any remembered dangerous area
+      for (const mem of dangerMemory) {
+        const distanceToTarget = Math.hypot(target.x - mem.x, target.y - mem.y);
+        const timeSinceDanger = c.t - mem.time;
+        
+        // Gradually reduce danger radius over time (full avoidance for 5 seconds, then fade out over 15 more seconds)
+        const currentRadius = timeSinceDanger < 5 ? mem.radius : 
+                             timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
+        
+        if (distanceToTarget < currentRadius) {
+          if (Math.random() < 0.1) { // Log occasionally to avoid spam
+            console.log(`Danger memory: Avoiding target at (${target.x.toFixed(0)}, ${target.y.toFixed(0)}) due to danger memory at (${mem.x.toFixed(0)}, ${mem.y.toFixed(0)}), distance=${distanceToTarget.toFixed(0)}, radius=${currentRadius.toFixed(0)}`);
+          }
+          return false; // Target is in dangerous area
+        }
+      }
+      return true; // Target is safe
+    });
+    
+    // Log when danger memory filters out targets
+    if (safeTargets.length < arr.length && Math.random() < 0.2) {
+      console.log(`Danger memory: Filtered ${arr.length - safeTargets.length} dangerous targets out of ${arr.length} total`);
+    }
+    
+    // Use regular nearest selection on safe targets
+    return this.nearestCircle(p, safeTargets);
   }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
     // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
@@ -1578,6 +1626,59 @@ export class Game {
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.restore();
+        }
+      }
+      ctx.restore();
+      
+      // Draw danger memory visualization
+      ctx.save();
+      for (const c of this.colonists) {
+        if (c.inside || !c.alive) continue;
+        const dangerMemory = (c as any).dangerMemory;
+        if (!dangerMemory || !Array.isArray(dangerMemory)) continue;
+        
+        for (const mem of dangerMemory) {
+          const timeSinceDanger = c.t - mem.time;
+          // Skip very old memories that have faded completely
+          if (timeSinceDanger >= 20) continue;
+          
+          // Calculate current danger radius (same logic as in nearestSafeCircle)
+          const currentRadius = timeSinceDanger < 5 ? mem.radius : 
+                               timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
+          
+          if (currentRadius <= 0) continue;
+          
+          // Color and opacity based on how recent/strong the memory is
+          const alpha = timeSinceDanger < 5 ? 0.3 : 0.15 * (1 - (timeSinceDanger - 5) / 15);
+          const hue = timeSinceDanger < 5 ? 0 : 30; // Red to orange as it fades
+          
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+          ctx.strokeStyle = `hsl(${hue}, 100%, 30%)`;
+          ctx.lineWidth = 2;
+          
+          // Draw danger zone circle
+          ctx.beginPath();
+          ctx.arc(mem.x, mem.y, currentRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Draw small dot at danger center
+          ctx.globalAlpha = alpha * 2;
+          ctx.fillStyle = `hsl(${hue}, 100%, 20%)`;
+          ctx.beginPath();
+          ctx.arc(mem.x, mem.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Draw timer text
+          ctx.globalAlpha = 0.8;
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2;
+          ctx.font = '10px monospace';
+          const timeText = `${(20 - timeSinceDanger).toFixed(1)}s`;
+          ctx.strokeText(timeText, mem.x - 10, mem.y - currentRadius - 5);
+          ctx.fillText(timeText, mem.x - 10, mem.y - currentRadius - 5);
         }
       }
       ctx.restore();

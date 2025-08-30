@@ -232,7 +232,24 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     if (d2 <= range * range) { c.hp = Math.min(100, c.hp + rate * dt); }
   }
 
-  const danger = (game.enemies as Enemy[]).find(e => dist2(e as any, c as any) < 140 * 140);
+  // Danger detection with hysteresis to prevent rapid state flipping
+  // Enter flee mode at 140 pixels, but don't exit until 180 pixels away
+  const dangerEnterDistance = 140 * 140; // squared for performance
+  const dangerExitDistance = 180 * 180;
+  const currentDanger = (game.enemies as Enemy[]).find(e => dist2(e as any, c as any) < dangerEnterDistance);
+  
+  // Check if currently fleeing and still within exit distance
+  const fleeingFromDanger = c.state === 'flee' && (c as any).lastDanger && 
+                           dist2((c as any).lastDanger as any, c as any) < dangerExitDistance;
+  
+  const danger = currentDanger || (fleeingFromDanger ? (c as any).lastDanger : null);
+  
+  // Remember the danger we're fleeing from for hysteresis
+  if (currentDanger) {
+    (c as any).lastDanger = currentDanger;
+  } else if (!fleeingFromDanger) {
+    (c as any).lastDanger = null;
+  }
   c.lastHp = c.lastHp ?? c.hp;
   if (c.hp < c.lastHp) { c.hurt = 1.5; }
   c.lastHp = c.hp; c.hurt = Math.max(0, (c.hurt || 0) - dt);
@@ -273,6 +290,20 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       c.state = newState;
       c.stateSince = 0;
       (c as any).lastStateChangeReason = reason || '';
+      
+      // When fleeing from danger, remember the dangerous location
+      if (newState === 'flee' && danger) {
+        (c as any).dangerMemory = (c as any).dangerMemory || [];
+        (c as any).dangerMemory.push({
+          x: danger.x,
+          y: danger.y,
+          time: c.t,
+          radius: 180 // Avoid area within 180 pixels of where danger was
+        });
+        // Keep only recent danger memories (last 20 seconds)
+        (c as any).dangerMemory = (c as any).dangerMemory.filter((mem: any) => c.t - mem.time < 20);
+      }
+      
       // Apply a short soft-lock to reduce thrashing for some states
       if (newState === 'eat') c.softLockUntil = c.t + 1.5;
       else if (newState === 'goToSleep') c.softLockUntil = c.t + 2.0;
@@ -511,13 +542,14 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // Move toward the destination using pathfinding (faster when fleeing)
           game.moveAlongPath(c, dt, dest, 20);
         }
-      } else {
+      } else if (danger) {
+        // Move away from danger if it still exists
         const d = norm(sub(c as any, danger as any) as any); 
         // Update direction for flee movement
         c.direction = Math.atan2(d.y, d.x);
         c.x += d.x * (c.speed + 90) * dt; c.y += d.y * (c.speed + 90) * dt;
       }
-  if (!danger) { changeState('seekTask', 'no more danger'); }
+      if (!danger) { changeState('seekTask', 'no more danger'); }
       break;
     }
     case 'sleep': {
