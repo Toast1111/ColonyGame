@@ -1142,7 +1142,7 @@ export class Game {
     const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24); // Increased from 12 to 24
     // if (target && (goalChanged || c.repath == null || c.repath <= 0 || !c.path || c.pathIndex == null)) {
     if (target && (goalChanged || !c.path || c.pathIndex == null)) { // RE-ENABLED PATHINDEX CHECK, REPATH TIMER STILL DISABLED
-      const p = this.computePath(c.x, c.y, target.x, target.y);
+      const p = this.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
       if (p && p.length) { 
         c.path = p; 
         c.pathIndex = 0; // RE-ENABLED
@@ -1880,6 +1880,67 @@ export class Game {
   computePath(sx: number, sy: number, tx: number, ty: number) {
     return aStar(this.grid, sx, sy, tx, ty);
   }
+  
+  // Colonist-aware pathfinding that avoids dangerous areas from memory
+  computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
+    const dangerMemory = (c as any).dangerMemory;
+    if (!dangerMemory || !Array.isArray(dangerMemory) || dangerMemory.length === 0) {
+      // No danger memory, use normal pathfinding
+      return aStar(this.grid, sx, sy, tx, ty);
+    }
+    
+    // Temporarily modify grid costs to make dangerous areas expensive
+    const modifiedCosts: Array<{ idx: number; originalCost: number }> = [];
+    
+    for (const mem of dangerMemory) {
+      const timeSinceDanger = c.t - mem.time;
+      if (timeSinceDanger >= 20) continue; // Skip expired memories
+      
+      // Calculate current danger radius (same logic as in nearestSafeCircle)
+      const currentRadius = timeSinceDanger < 5 ? mem.radius : 
+                           timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
+      
+      if (currentRadius <= 0) continue;
+      
+      // Add high cost to grid cells within danger radius
+      const dangCost = 10.0; // Make dangerous areas very expensive to path through
+      const radiusInTiles = Math.ceil(currentRadius / T);
+      const centerGx = Math.floor(mem.x / T);
+      const centerGy = Math.floor(mem.y / T);
+      
+      for (let dy = -radiusInTiles; dy <= radiusInTiles; dy++) {
+        for (let dx = -radiusInTiles; dx <= radiusInTiles; dx++) {
+          const gx = centerGx + dx;
+          const gy = centerGy + dy;
+          
+          if (gx < 0 || gy < 0 || gx >= this.grid.cols || gy >= this.grid.rows) continue;
+          
+          // Check if this tile is within the danger radius
+          const tileWorldX = gx * T + T/2;
+          const tileWorldY = gy * T + T/2;
+          const distanceToTarget = Math.hypot(tileWorldX - mem.x, tileWorldY - mem.y);
+          
+          if (distanceToTarget <= currentRadius) {
+            const idx = gy * this.grid.cols + gx;
+            if (!this.grid.solid[idx]) { // Don't modify solid tiles
+              modifiedCosts.push({ idx, originalCost: this.grid.cost[idx] });
+              this.grid.cost[idx] = dangCost;
+            }
+          }
+        }
+      }
+    }
+    
+    // Compute path with modified costs
+    const path = aStar(this.grid, sx, sy, tx, ty);
+    
+    // Restore original costs
+    for (const mod of modifiedCosts) {
+      this.grid.cost[mod.idx] = mod.originalCost;
+    }
+    
+    return path;
+  }
 
   // Navigation helpers for AI
   private cellIndexAt(x: number, y: number) {
@@ -1960,7 +2021,7 @@ export class Game {
         const cx = gx * T + T / 2, cy = gy * T + T / 2;
         if (this.isBlocked(cx, cy)) continue;
 
-        const path = this.computePath(c.x, c.y, cx, cy);
+        const path = this.computePathWithDangerAvoidance(c, c.x, c.y, cx, cy);
         if (path) return { x: cx, y: cy };
       }
 
@@ -1983,7 +2044,7 @@ export class Game {
       if (evaluatedCandidates >= maxEvaluations) break;
       
       // Use A* to evaluate the actual path
-      const path = this.computePath(c.x, c.y, candidate.x, candidate.y);
+      const path = this.computePathWithDangerAvoidance(c, c.x, c.y, candidate.x, candidate.y);
       if (!path || path.length === 0) continue;
       
       evaluatedCandidates++;
