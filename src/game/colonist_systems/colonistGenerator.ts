@@ -11,12 +11,29 @@ import {
   type ColonistTraits
 } from './traits';
 
+// Enhanced interface with detailed personal information
 export interface ColonistProfile {
   name: string;
+  age: number;
+  seed: number; // Magic number for consistent generation
   background: string;
   personality: string[];
   favoriteFood: string;
   backstory: string;
+  detailedInfo: {
+    birthplace: string;
+    family: {
+      parents: string[];
+      siblings: string[];
+      spouse?: string;
+      children: string[];
+    };
+    lifeEvents: { age: number; event: string; impact: 'positive' | 'negative' | 'neutral' }[];
+    skills: string[];
+    fears: string[];
+    secrets: string[];
+    relationships: { name: string; type: string; status: 'good' | 'bad' | 'neutral' }[];
+  };
   avatar: {
     skinTone: string;
     hairColor: string;
@@ -37,6 +54,86 @@ export interface ColonistProfile {
   };
 }
 
+// Extended data for Prison Architect-style generation
+const BIRTHPLACES = [
+  'Millhaven', 'Riverside', 'Oakwood', 'Stonecrest', 'Greenfield', 'Ashford',
+  'Fairview', 'Brookside', 'Clearwater', 'Redwood', 'Silverdale', 'Goldcrest',
+  'Ironport', 'Copper Hills', 'Crystal Lake', 'Shadowvale', 'Brightwater', 'Darkwood'
+];
+
+const LIFE_EVENTS = [
+  { event: "Lost a parent at a young age", impact: 'negative' as const },
+  { event: "Won a local competition", impact: 'positive' as const },
+  { event: "Survived a natural disaster", impact: 'neutral' as const },
+  { event: "Fell in love and got heartbroken", impact: 'negative' as const },
+  { event: "Started their own small business", impact: 'positive' as const },
+  { event: "Served in the local militia", impact: 'neutral' as const },
+  { event: "Lost everything in a fire", impact: 'negative' as const },
+  { event: "Saved someone's life", impact: 'positive' as const },
+  { event: "Was betrayed by a close friend", impact: 'negative' as const },
+  { event: "Discovered a hidden talent", impact: 'positive' as const },
+  { event: "Moved frequently as a child", impact: 'neutral' as const },
+  { event: "Inherited property from a relative", impact: 'positive' as const }
+];
+
+const SKILLS = [
+  'Cooking', 'Carpentry', 'Gardening', 'Mechanics', 'First Aid', 'Hunting',
+  'Fishing', 'Sewing', 'Music', 'Art', 'Writing', 'Leadership', 'Animal Care'
+];
+
+const FEARS = [
+  'heights', 'darkness', 'water', 'crowds', 'spiders', 'failure', 'abandonment',
+  'confined spaces', 'loud noises', 'authority figures'
+];
+
+const SECRETS = [
+  "once stole food to feed a starving family",
+  "has a photographic memory but hides it",
+  "is secretly afraid of butterflies",
+  "wrote anonymous love letters for years",
+  "saved someone's life and never told anyone",
+  "knows the location of hidden treasure",
+  "can't read but has never admitted it",
+  "has recurring dreams about flying"
+];
+
+// Seeded random generator for consistent results
+class SeededRandom {
+  private seed: number;
+
+  constructor(seed: number) {
+    this.seed = seed;
+  }
+
+  next(): number {
+    this.seed = (this.seed * 9301 + 49297) % 233280;
+    return this.seed / 233280;
+  }
+
+  choice<T>(array: T[]): T {
+    return array[Math.floor(this.next() * array.length)];
+  }
+
+  choices<T>(array: T[], count: number): T[] {
+    const shuffled = [...array].sort(() => this.next() - 0.5);
+    return shuffled.slice(0, count);
+  }
+
+  range(min: number, max: number): number {
+    return min + Math.floor(this.next() * (max - min + 1));
+  }
+}
+
+function hashStringToNumber(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+}
+
 function generateStats(): ColonistProfile['stats'] {
   // Generate stats with slight variations to make colonists unique
   const baseVariation = () => 0.9 + Math.random() * 0.2; // 0.9 to 1.1
@@ -49,15 +146,144 @@ function generateStats(): ColonistProfile['stats'] {
   };
 }
 
+function generateDetailedInfo(rng: SeededRandom, age: number, name: string): ColonistProfile['detailedInfo'] {
+  const birthplace = rng.choice(BIRTHPLACES);
+  
+  // Generate family
+  const hasParents = rng.next() > 0.1; // 90% have known parents
+  const parents = [];
+  if (hasParents) {
+    if (rng.next() > 0.2) parents.push(`${rng.choice(NAMES.FIRST)} ${name.split(' ')[1]} (Father)`);
+    if (rng.next() > 0.1) parents.push(`${rng.choice(NAMES.FIRST)} ${rng.choice(NAMES.LAST)} (Mother)`);
+  }
+  
+  const siblingCount = rng.next() > 0.6 ? rng.range(1, 3) : 0;
+  const siblings = [];
+  for (let i = 0; i < siblingCount; i++) {
+    const siblingName = rng.choice(NAMES.FIRST);
+    const relationship = rng.choice(['Brother', 'Sister']);
+    siblings.push(`${siblingName} ${name.split(' ')[1]} (${relationship})`);
+  }
+  
+  const spouse = age > 25 && rng.next() > 0.6 ? `${rng.choice(NAMES.FIRST)} ${rng.choice(NAMES.LAST)}` : undefined;
+  
+  const childCount = spouse && rng.next() > 0.7 ? rng.range(1, 2) : 0;
+  const children = [];
+  for (let i = 0; i < childCount; i++) {
+    const childName = rng.choice(NAMES.FIRST);
+    const gender = rng.choice(['Son', 'Daughter']);
+    children.push(`${childName} (${gender})`);
+  }
+  
+  // Generate life events based on age
+  const eventCount = Math.min(rng.range(2, 5), Math.floor(age / 8));
+  const lifeEvents = [];
+  for (let i = 0; i < eventCount; i++) {
+    const event = rng.choice(LIFE_EVENTS);
+    const eventAge = rng.range(8, age - 2);
+    lifeEvents.push({ age: eventAge, ...event });
+  }
+  lifeEvents.sort((a, b) => a.age - b.age);
+  
+  // Generate skills, fears, secrets
+  const skills = rng.choices(SKILLS, rng.range(2, 4));
+  const fears = rng.choices(FEARS, rng.range(1, 2));
+  const secrets = rng.next() > 0.7 ? [rng.choice(SECRETS)] : [];
+  
+  // Generate relationships
+  const relationshipCount = Math.min(rng.range(1, 3), Math.floor(age / 12));
+  const relationships = [];
+  const relationshipTypes = ['Childhood Friend', 'Former Colleague', 'Neighbor', 'Mentor', 'Rival'];
+  for (let i = 0; i < relationshipCount; i++) {
+    const relName = `${rng.choice(NAMES.FIRST)} ${rng.choice(NAMES.LAST)}`;
+    const type = rng.choice(relationshipTypes);
+    const status = rng.choice(['good', 'bad', 'neutral'] as const);
+    relationships.push({ name: relName, type, status });
+  }
+  
+  return {
+    birthplace,
+    family: { parents, siblings, spouse, children },
+    lifeEvents,
+    skills,
+    fears,
+    secrets,
+    relationships
+  };
+}
+
+function createRichBackstory(profile: Partial<ColonistProfile>): string {
+  const { name, age, detailedInfo, background } = profile;
+  if (!detailedInfo) return "A mysterious person with an unknown past.";
+  
+  let story = `${name} is ${age} years old and was born in ${detailedInfo.birthplace}. `;
+  
+  // Family background
+  if (detailedInfo.family.parents.length > 0) {
+    story += `Raised by ${detailedInfo.family.parents.join(' and ')}, `;
+  } else {
+    story += `Growing up without parents, `;
+  }
+  
+  if (detailedInfo.family.siblings.length > 0) {
+    story += `they have ${detailedInfo.family.siblings.length} sibling${detailedInfo.family.siblings.length > 1 ? 's' : ''}. `;
+  } else {
+    story += `they were an only child. `;
+  }
+  
+  // Major life events
+  if (detailedInfo.lifeEvents.length > 0) {
+    const majorEvents = detailedInfo.lifeEvents.filter(e => e.impact !== 'neutral').slice(0, 2);
+    if (majorEvents.length > 0) {
+      story += `Key moments in their life include: `;
+      story += majorEvents.map(e => `at age ${e.age}, ${e.event.toLowerCase()}`).join('; ') + '. ';
+    }
+  }
+  
+  // Current family situation
+  if (detailedInfo.family.spouse) {
+    story += `They are married to ${detailedInfo.family.spouse}`;
+    if (detailedInfo.family.children.length > 0) {
+      story += ` and have ${detailedInfo.family.children.length} child${detailedInfo.family.children.length > 1 ? 'ren' : ''}: ${detailedInfo.family.children.join(', ')}`;
+    }
+    story += '. ';
+  }
+  
+  // Skills and personality
+  if (detailedInfo.skills.length > 0) {
+    story += `They are skilled in ${detailedInfo.skills.slice(0, 2).join(' and ')}. `;
+  }
+  
+  // Fears
+  if (detailedInfo.fears.length > 0) {
+    story += `Despite their strengths, they have a deep fear of ${detailedInfo.fears[0]}. `;
+  }
+  
+  // Secrets
+  if (detailedInfo.secrets.length > 0) {
+    story += `What few know is that they ${detailedInfo.secrets[0]}.`;
+  }
+  
+  return story;
+}
+
 export function generateColonistProfile(): ColonistProfile {
   console.log('DEBUG: Generating new colonist profile...');
   const firstName = randomChoice(NAMES.FIRST);
   const lastName = randomChoice(NAMES.LAST);
   const name = `${firstName} ${lastName}`;
   
+  // Generate consistent seed from name for reproducible results
+  const seed = hashStringToNumber(name);
+  const rng = new SeededRandom(seed);
+  const age = rng.range(20, 55);
+  
   // Generate traits using the new modular system
   const traits = generateCompleteTraitSet();
   console.log('DEBUG: Generated traits:', traits);
+  
+  // Generate detailed personal information
+  const detailedInfo = generateDetailedInfo(rng, age, name);
   
   const favoriteFood = randomChoice(FAVORITE_FOODS);
   
@@ -65,8 +291,8 @@ export function generateColonistProfile(): ColonistProfile {
     skinTone: traits.appearance.skinTone.hex,
     hairColor: traits.appearance.hairColor.hex,
     eyeColor: traits.appearance.eyeColor.hex,
-  // Use weighted clothing color selection from appearance traits
-  clothing: getRandomColor(CLOTHING_COLORS).hex,
+    // Use weighted clothing color selection from appearance traits
+    clothing: getRandomColor(CLOTHING_COLORS).hex,
     sprites: {
       headType: randomChoice(ImageAssets.getInstance().getAvailableHeadTypes()),
       bodyType: traits.appearance.bodyType,
@@ -77,15 +303,23 @@ export function generateColonistProfile(): ColonistProfile {
   
   const stats = generateStats();
   
-  return {
+  const profile: ColonistProfile = {
     name,
+    age,
+    seed,
     background: traits.background.name,
     personality: traits.passiveTraits.map(trait => trait.name),
     favoriteFood,
-    backstory: traits.originStory,
+    backstory: '', // Will be generated next
+    detailedInfo,
     avatar,
     stats
   };
+  
+  // Generate rich backstory using all the detailed information
+  profile.backstory = createRichBackstory(profile);
+  
+  return profile;
 }
 
 // Helper function to get a short description of a colonist

@@ -1,3 +1,4 @@
+
 import { clamp, dist2, rand, randi } from "../core/utils";
 import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS, updateDirtySections } from "../core/pathfinding";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
@@ -101,6 +102,31 @@ export class Game {
   // UI hit regions for colonist panel
   colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
+  colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'stats' | 'log' = 'bio';
+  colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
+  
+  // Context menu system
+  contextMenu: {
+    visible: boolean;
+    x: number;
+    y: number;
+    target: Colonist | null;
+    items: Array<{
+      id: string;
+      label: string;
+      icon: string;
+      enabled: boolean;
+      submenu?: Array<{ id: string; label: string; icon: string; enabled: boolean }>;
+    }>;
+    openSubmenu?: string; // Track which submenu is currently open
+  } | null = null;
+  contextMenuRects: Array<{ id: string; x: number; y: number; w: number; h: number; isSubmenu?: boolean; parentId?: string }> = [];
+  
+  // Long press support for mobile context menus
+  longPressTimer: number | null = null;
+  longPressStartPos: { x: number; y: number } | null = null;
+  longPressStartTime: number | null = null;
+  longPressTarget: Colonist | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -241,6 +267,15 @@ export class Game {
               this.selColonist = null; this.follow = false; return;
             }
           }
+          // Check for tab clicks
+          if (this.colonistTabRects) {
+            for (const tabRect of this.colonistTabRects) {
+              if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
+                this.colonistProfileTab = tabRect.tab as any;
+                return;
+              }
+            }
+          }
           if (this.colonistPanelRect) {
             const r = this.colonistPanelRect;
             const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
@@ -292,7 +327,55 @@ export class Game {
             return;
           }
         }
+        
+        // Check for context menu click
+        if (this.contextMenu) {
+          const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+          let clickedOnMenu = false;
+          
+          // Check if clicking on any context menu item
+          for (const rect of this.contextMenuRects) {
+            if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
+              if (this.contextMenu.target) {
+                // Check if this is a parent item with submenu
+                const parentItem = this.contextMenu.items.find(item => item.id === rect.id);
+                if (parentItem && parentItem.submenu) {
+                  // Toggle submenu visibility
+                  if (this.contextMenu.openSubmenu === rect.id) {
+                    this.contextMenu.openSubmenu = undefined; // Close submenu
+                  } else {
+                    this.contextMenu.openSubmenu = rect.id; // Open submenu
+                  }
+                  clickedOnMenu = true;
+                  return;
+                } else {
+                  // Execute action for regular items or submenu items
+                  this.handleContextMenuAction(rect.id, this.contextMenu.target);
+                  this.contextMenu = null;
+                  this.contextMenuRects = [];
+                  clickedOnMenu = true;
+                  return;
+                }
+              }
+            }
+          }
+          
+          if (!clickedOnMenu) {
+            // Click outside context menu - close it
+            this.contextMenu = null;
+            this.contextMenuRects = [];
+          }
+        }
+        
         if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+        
+        // Check for erase mode (set by mobile erase button)
+        if ((window as any)._eraseOnce) {
+          (window as any)._eraseOnce = false; // Consume the flag
+          this.cancelOrErase();
+          return;
+        }
+        
         if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); }
         else if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); }
         else {
@@ -305,6 +388,14 @@ export class Game {
       if ((e as MouseEvent).button === 2) {
         this.mouse.rdown = true;
         if (this.showBuildMenu) { this.showBuildMenu = false; return; }
+        
+        // Check for colonist context menu
+        const clickedColonist = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+        if (clickedColonist) {
+          this.showContextMenu(clickedColonist, this.mouse.x, this.mouse.y);
+          return;
+        }
+        
         this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
       }
     });
@@ -361,7 +452,37 @@ export class Game {
       this.isActuallyTouchDevice = true;
       if (e.touches.length === 1) {
         this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        
+        // Start long press timer for context menu
+        const rect = c.getBoundingClientRect();
+        const sx = e.touches[0].clientX - rect.left;
+        const sy = e.touches[0].clientY - rect.top;
+        const wpt = this.screenToWorld(sx, sy);
+        const clickedColonist = this.findColonistAt(wpt.x, wpt.y);
+        
+        if (clickedColonist) {
+          this.longPressStartPos = { x: sx, y: sy };
+          this.longPressStartTime = performance.now();
+          this.longPressTarget = clickedColonist;
+          
+          this.longPressTimer = window.setTimeout(() => {
+            this.showContextMenu(clickedColonist, sx, sy);
+            // Provide haptic feedback if available
+            if (navigator.vibrate) {
+              navigator.vibrate(50);
+            }
+            // Clear long press state
+            this.longPressStartTime = null;
+            this.longPressTarget = null;
+          }, 500); // 500ms long press
+        }
+        
       } else if (e.touches.length === 2) {
+        // Cancel long press timer when multi-touch
+        if (this.longPressTimer) {
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+        }
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         this.touchLastDist = Math.hypot(dx, dy);
@@ -371,6 +492,21 @@ export class Game {
     c.addEventListener('touchmove', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = true;
+      
+      // Cancel long press timer if finger moves too much
+      if (this.longPressTimer && this.longPressStartPos && e.touches.length === 1) {
+        const rect = c.getBoundingClientRect();
+        const sx = e.touches[0].clientX - rect.left;
+        const sy = e.touches[0].clientY - rect.top;
+        const distance = Math.hypot(sx - this.longPressStartPos.x, sy - this.longPressStartPos.y);
+        if (distance > 20) { // Cancel if moved more than 20 pixels
+          clearTimeout(this.longPressTimer);
+          this.longPressTimer = null;
+          this.longPressStartTime = null;
+          this.longPressTarget = null;
+        }
+      }
+      
       if (e.touches.length === 1 && this.touchLastPan) {
         // If adjusting a pending placement ghost, move it with the finger
         if (this.pendingPlacement) {
@@ -419,6 +555,16 @@ export class Game {
     c.addEventListener('touchend', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = true;
+      
+      // Cancel long press timer on touch end
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+      this.longPressStartPos = null;
+      this.longPressStartTime = null;
+      this.longPressTarget = null;
+      
       // Treat single-finger touchend as a tap/click if not panning
       if (e.changedTouches.length === 1 && e.touches.length === 0) {
         const rect = c.getBoundingClientRect();
@@ -482,6 +628,15 @@ export class Game {
           this.selColonist = null; this.follow = false; return;
         }
       }
+      // Check for tab clicks
+      if (this.colonistTabRects) {
+        for (const tabRect of this.colonistTabRects) {
+          if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
+            this.colonistProfileTab = tabRect.tab as any;
+            return;
+          }
+        }
+      }
       if (this.isTouch && this.colonistPanelRect) {
         const r = this.colonistPanelRect;
         const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
@@ -498,9 +653,55 @@ export class Game {
         return;
       }
     }
+    
+    // Check for context menu click
+    if (this.contextMenu) {
+      const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+      let clickedOnMenu = false;
+      
+      // Check if clicking on any context menu item
+      for (const rect of this.contextMenuRects) {
+        if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
+          if (this.contextMenu.target) {
+            // Check if this is a parent item with submenu
+            const parentItem = this.contextMenu.items.find(item => item.id === rect.id);
+            if (parentItem && parentItem.submenu) {
+              // Toggle submenu visibility
+              if (this.contextMenu.openSubmenu === rect.id) {
+                this.contextMenu.openSubmenu = undefined; // Close submenu
+              } else {
+                this.contextMenu.openSubmenu = rect.id; // Open submenu
+              }
+              clickedOnMenu = true;
+              return;
+            } else {
+              // Execute action for regular items or submenu items
+              this.handleContextMenuAction(rect.id, this.contextMenu.target);
+              this.contextMenu = null;
+              this.contextMenuRects = [];
+              clickedOnMenu = true;
+              return;
+            }
+          }
+        }
+      }
+      
+      if (!clickedOnMenu) {
+        // Click outside context menu - close it
+        this.contextMenu = null;
+        this.contextMenuRects = [];
+      }
+    }
 
     // Build menu click
     if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+
+    // Check for erase mode (set by mobile erase button)
+    if ((window as any)._eraseOnce) {
+      (window as any)._eraseOnce = false; // Consume the flag
+      this.cancelOrErase();
+      return;
+    }
 
     // Building/selection logic
   if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
@@ -693,9 +894,22 @@ export class Game {
     const tryPlace = (x: number, y: number) => {
       const wx = x * T + 1, wy = y * T + 1; // slight offset to choose the cell
       const b = makeBuilding('path' as any, wx, wy);
+      
       // Avoid duplicates on same tile
       const exists = this.buildings.some(pb => pb.kind === 'path' && pb.x === b.x && pb.y === b.y);
-      if (!exists && hasCost(this.RES, BUILD_TYPES['path'].cost)) { payCost(this.RES, BUILD_TYPES['path'].cost); this.buildings.push(b); }
+      if (exists) return;
+      
+      // Check for overlap with non-path buildings (prevent paths through buildings)
+      const overlapsBuilding = this.buildings.some(pb => {
+        if (pb.kind === 'path') return false; // Paths can overlap other paths
+        const overlap = !(b.x + b.w <= pb.x || b.x >= pb.x + pb.w || b.y + b.h <= pb.y || b.y >= pb.y + pb.h);
+        return overlap;
+      });
+      
+      if (!overlapsBuilding && hasCost(this.RES, BUILD_TYPES['path'].cost)) { 
+        payCost(this.RES, BUILD_TYPES['path'].cost); 
+        this.buildings.push(b); 
+      }
     };
     if (this.lastPaintCell == null) {
       tryPlace(gx, gy);
@@ -881,7 +1095,7 @@ export class Game {
     }
     
     if (this.RES.wood < this.RES.stone) {
-      const tr = this.nearestCircle({ x: c.x, y: c.y }, availableTrees as any); 
+      const tr = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableTrees as any); 
       if (tr) { 
         if (Math.random() < 0.1) console.log('Assigning chop task');
         this.setTask(c, 'chop', tr); return; 
@@ -889,7 +1103,7 @@ export class Game {
         if (Math.random() < 0.1) console.log('No trees available for chopping');
       }
     } else {
-      const rk = this.nearestCircle({ x: c.x, y: c.y }, availableRocks as any); 
+      const rk = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableRocks as any); 
       if (rk) { 
         if (Math.random() < 0.1) console.log('Assigning mine task to rock at:', rk);
         this.setTask(c, 'mine', rk); return; 
@@ -903,13 +1117,47 @@ export class Game {
   nearestCircle<T extends { x: number; y: number }>(p: { x: number; y: number }, arr: T[]): T | null {
     let best: T | null = null, bestD = 1e9; for (const o of arr) { const d = dist2(p as any, o as any); if (d < bestD) { bestD = d; best = o; } } return best;
   }
+  
+  nearestSafeCircle<T extends { x: number; y: number }>(c: Colonist, p: { x: number; y: number }, arr: T[]): T | null {
+    // Filter out targets that are in dangerous areas based on colonist's danger memory
+    const safeTargets = arr.filter(target => {
+      const dangerMemory = (c as any).dangerMemory;
+      if (!dangerMemory || !Array.isArray(dangerMemory)) return true;
+      
+      // Check if target is in any remembered dangerous area
+      for (const mem of dangerMemory) {
+        const distanceToTarget = Math.hypot(target.x - mem.x, target.y - mem.y);
+        const timeSinceDanger = c.t - mem.time;
+        
+        // Gradually reduce danger radius over time (full avoidance for 5 seconds, then fade out over 15 more seconds)
+        const currentRadius = timeSinceDanger < 5 ? mem.radius : 
+                             timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
+        
+        if (distanceToTarget < currentRadius) {
+          if (Math.random() < 0.1) { // Log occasionally to avoid spam
+            console.log(`Danger memory: Avoiding target at (${target.x.toFixed(0)}, ${target.y.toFixed(0)}) due to danger memory at (${mem.x.toFixed(0)}, ${mem.y.toFixed(0)}), distance=${distanceToTarget.toFixed(0)}, radius=${currentRadius.toFixed(0)}`);
+          }
+          return false; // Target is in dangerous area
+        }
+      }
+      return true; // Target is safe
+    });
+    
+    // Log when danger memory filters out targets
+    if (safeTargets.length < arr.length && Math.random() < 0.2) {
+      console.log(`Danger memory: Filtered ${arr.length - safeTargets.length} dangerous targets out of ${arr.length} total`);
+    }
+    
+    // Use regular nearest selection on safe targets
+    return this.nearestCircle(p, safeTargets);
+  }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
     // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
     // c.repath = (c.repath || 0) - dt; // TEMPORARILY DISABLED
     const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24); // Increased from 12 to 24
     // if (target && (goalChanged || c.repath == null || c.repath <= 0 || !c.path || c.pathIndex == null)) {
     if (target && (goalChanged || !c.path || c.pathIndex == null)) { // RE-ENABLED PATHINDEX CHECK, REPATH TIMER STILL DISABLED
-      const p = this.computePath(c.x, c.y, target.x, target.y);
+      const p = this.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
       if (p && p.length) { 
         c.path = p; 
         c.pathIndex = 0; // RE-ENABLED
@@ -1303,6 +1551,10 @@ export class Game {
       ctx.restore();
     }
   for (const c of this.colonists) { if (!c.inside && c.alive) drawColonistAvatar(ctx, c.x, c.y, c, c.r, this.selColonist === c); }
+  
+  // Draw long press progress circle
+  this.drawLongPressProgress();
+  
     if (this.debug.nav) {
       // draw nav solids
       ctx.save();
@@ -1389,6 +1641,59 @@ export class Game {
           ctx.stroke();
           ctx.setLineDash([]);
           ctx.restore();
+        }
+      }
+      ctx.restore();
+      
+      // Draw danger memory visualization
+      ctx.save();
+      for (const c of this.colonists) {
+        if (c.inside || !c.alive) continue;
+        const dangerMemory = (c as any).dangerMemory;
+        if (!dangerMemory || !Array.isArray(dangerMemory)) continue;
+        
+        for (const mem of dangerMemory) {
+          const timeSinceDanger = c.t - mem.time;
+          // Skip very old memories that have faded completely
+          if (timeSinceDanger >= 20) continue;
+          
+          // Calculate current danger radius (same logic as in nearestSafeCircle)
+          const currentRadius = timeSinceDanger < 5 ? mem.radius : 
+                               timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
+          
+          if (currentRadius <= 0) continue;
+          
+          // Color and opacity based on how recent/strong the memory is
+          const alpha = timeSinceDanger < 5 ? 0.3 : 0.15 * (1 - (timeSinceDanger - 5) / 15);
+          const hue = timeSinceDanger < 5 ? 0 : 30; // Red to orange as it fades
+          
+          ctx.globalAlpha = alpha;
+          ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+          ctx.strokeStyle = `hsl(${hue}, 100%, 30%)`;
+          ctx.lineWidth = 2;
+          
+          // Draw danger zone circle
+          ctx.beginPath();
+          ctx.arc(mem.x, mem.y, currentRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          
+          // Draw small dot at danger center
+          ctx.globalAlpha = alpha * 2;
+          ctx.fillStyle = `hsl(${hue}, 100%, 20%)`;
+          ctx.beginPath();
+          ctx.arc(mem.x, mem.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Draw timer text
+          ctx.globalAlpha = 0.8;
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2;
+          ctx.font = '10px monospace';
+          const timeText = `${(20 - timeSinceDanger).toFixed(1)}s`;
+          ctx.strokeText(timeText, mem.x - 10, mem.y - currentRadius - 5);
+          ctx.fillText(timeText, mem.x - 10, mem.y - currentRadius - 5);
         }
       }
       ctx.restore();
@@ -1540,6 +1845,7 @@ export class Game {
   else { this.colonistPanelRect = this.colonistPanelCloseRect = null; }
   if (this.showBuildMenu) this.drawBuildMenu();
   if (this.pendingPlacement) this.drawPlacementUI();
+  if (this.contextMenu) this.drawContextMenu();
   }
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }
@@ -1588,6 +1894,67 @@ export class Game {
   }
   computePath(sx: number, sy: number, tx: number, ty: number) {
     return aStar(this.grid, sx, sy, tx, ty);
+  }
+  
+  // Colonist-aware pathfinding that avoids dangerous areas from memory
+  computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
+    const dangerMemory = (c as any).dangerMemory;
+    if (!dangerMemory || !Array.isArray(dangerMemory) || dangerMemory.length === 0) {
+      // No danger memory, use normal pathfinding
+      return aStar(this.grid, sx, sy, tx, ty);
+    }
+    
+    // Temporarily modify grid costs to make dangerous areas expensive
+    const modifiedCosts: Array<{ idx: number; originalCost: number }> = [];
+    
+    for (const mem of dangerMemory) {
+      const timeSinceDanger = c.t - mem.time;
+      if (timeSinceDanger >= 20) continue; // Skip expired memories
+      
+      // Calculate current danger radius (same logic as in nearestSafeCircle)
+      const currentRadius = timeSinceDanger < 5 ? mem.radius : 
+                           timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
+      
+      if (currentRadius <= 0) continue;
+      
+      // Add high cost to grid cells within danger radius
+      const dangCost = 10.0; // Make dangerous areas very expensive to path through
+      const radiusInTiles = Math.ceil(currentRadius / T);
+      const centerGx = Math.floor(mem.x / T);
+      const centerGy = Math.floor(mem.y / T);
+      
+      for (let dy = -radiusInTiles; dy <= radiusInTiles; dy++) {
+        for (let dx = -radiusInTiles; dx <= radiusInTiles; dx++) {
+          const gx = centerGx + dx;
+          const gy = centerGy + dy;
+          
+          if (gx < 0 || gy < 0 || gx >= this.grid.cols || gy >= this.grid.rows) continue;
+          
+          // Check if this tile is within the danger radius
+          const tileWorldX = gx * T + T/2;
+          const tileWorldY = gy * T + T/2;
+          const distanceToTarget = Math.hypot(tileWorldX - mem.x, tileWorldY - mem.y);
+          
+          if (distanceToTarget <= currentRadius) {
+            const idx = gy * this.grid.cols + gx;
+            if (!this.grid.solid[idx]) { // Don't modify solid tiles
+              modifiedCosts.push({ idx, originalCost: this.grid.cost[idx] });
+              this.grid.cost[idx] = dangCost;
+            }
+          }
+        }
+      }
+    }
+    
+    // Compute path with modified costs
+    const path = aStar(this.grid, sx, sy, tx, ty);
+    
+    // Restore original costs
+    for (const mod of modifiedCosts) {
+      this.grid.cost[mod.idx] = mod.originalCost;
+    }
+    
+    return path;
   }
 
   // Navigation helpers for AI
@@ -1669,7 +2036,7 @@ export class Game {
         const cx = gx * T + T / 2, cy = gy * T + T / 2;
         if (this.isBlocked(cx, cy)) continue;
 
-        const path = this.computePath(c.x, c.y, cx, cy);
+        const path = this.computePathWithDangerAvoidance(c, c.x, c.y, cx, cy);
         if (path) return { x: cx, y: cy };
       }
 
@@ -1692,7 +2059,7 @@ export class Game {
       if (evaluatedCandidates >= maxEvaluations) break;
       
       // Use A* to evaluate the actual path
-      const path = this.computePath(c.x, c.y, candidate.x, candidate.y);
+      const path = this.computePathWithDangerAvoidance(c, c.x, c.y, candidate.x, candidate.y);
       if (!path || path.length === 0) continue;
       
       evaluatedCandidates++;
@@ -1745,16 +2112,17 @@ export class Game {
   }
 
   // UI: colonist profile panel
+  // UI: colonist profile panel
   drawColonistProfile(c: Colonist) {
     const ctx = this.ctx; 
     const cw = this.canvas.width; 
     const ch = this.canvas.height; 
     
-    // Responsive sizing - make it larger to fit personality info
-    const W = Math.min(this.scale(450), cw * 0.55); // Increased width for personality content
-    const H = Math.min(this.scale(380), ch * 0.55); // Increased height for backstory text
+    // Responsive sizing - larger to accommodate tabs
+    const W = Math.min(this.scale(550), cw * 0.65);
+    const H = Math.min(this.scale(450), ch * 0.7);
     const PAD = this.scale(12);
-    const X = cw - W - PAD;
+    const X = PAD; // Move to left side instead of right (was: cw - W - PAD)
     const Y = this.scale(54);
     
     // Ensure panel doesn't go off screen
@@ -1780,111 +2148,999 @@ export class Game {
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + this.scale(1));
     
-    // avatar box - smaller since we need more space for text
-    const avatarSize = this.scale(50);
-    const ax = X + this.scale(18); 
-    const ay = finalY + this.scale(26); 
-    ctx.fillStyle = '#0f172a'; 
-    ctx.fillRect(ax, ay, avatarSize, avatarSize); 
-    ctx.strokeStyle = '#1e293b'; 
-    ctx.strokeRect(ax + .5, ay + .5, avatarSize - 1, avatarSize - 1);
+    // Tab navigation
+    const tabHeight = this.scale(32);
+    const tabY = finalY + this.scale(12);
+    const tabs = [
+      { id: 'bio', label: 'Bio', icon: '👤' },
+      { id: 'health', label: 'Health', icon: '❤️' },
+      { id: 'gear', label: 'Gear', icon: '🎒' },
+      { id: 'social', label: 'Social', icon: '👥' },
+      { id: 'stats', label: 'Stats', icon: '📊' },
+      { id: 'log', label: 'Log', icon: '📜' }
+    ];
     
-    // Draw the custom colonist avatar
-    ctx.save(); 
-    ctx.translate(ax + avatarSize/2, ay + avatarSize/2); 
-    ctx.scale(this.uiScale * 1.5, this.uiScale * 1.5); 
-    drawColonistAvatar(ctx as any, 0, 0, c, 12, true); 
+    this.colonistTabRects = [];
+    const tabWidth = (W - this.scale(32)) / tabs.length;
+    
+    for (let i = 0; i < tabs.length; i++) {
+      const tab = tabs[i];
+      const tabX = X + this.scale(16) + i * tabWidth;
+      const isActive = this.colonistProfileTab === tab.id;
+      
+      // Tab background
+      ctx.fillStyle = isActive ? '#1e293b' : '#0f172a';
+      ctx.fillRect(tabX, tabY, tabWidth, tabHeight);
+      ctx.strokeStyle = isActive ? '#3b82f6' : '#1e293b';
+      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
+      
+      // Tab label
+      ctx.fillStyle = isActive ? '#60a5fa' : '#9ca3af';
+      ctx.font = this.getScaledFont(10, '600');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const textY = tabY + tabHeight / 2;
+      ctx.fillText(`${tab.icon} ${tab.label}`, tabX + tabWidth / 2, textY);
+      
+      // Store for hit testing
+      this.colonistTabRects.push({
+        tab: tab.id,
+        x: tabX,
+        y: tabY,
+        w: tabWidth,
+        h: tabHeight
+      });
+    }
+    
+    // Content area
+    const contentY = tabY + tabHeight + this.scale(8);
+    const contentH = H - (contentY - finalY) - this.scale(16);
+    
+    // Draw content based on active tab
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(X + this.scale(8), contentY, W - this.scale(16), contentH);
+    ctx.clip();
+    
+    switch (this.colonistProfileTab) {
+      case 'bio':
+        this.drawBioTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'health':
+        this.drawHealthTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'gear':
+        this.drawGearTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'social':
+        this.drawSocialTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'stats':
+        this.drawStatsTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+      case 'log':
+        this.drawLogTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
+        break;
+    }
+    
     ctx.restore();
-    
-    const profile = c.profile;
-    const textX = X + avatarSize + this.scale(24);
-    let textY = finalY + this.scale(22);
-    
-    // Name and background
-    ctx.fillStyle = '#dbeafe'; 
-    ctx.font = this.getScaledFont(16, '700'); 
-    ctx.textAlign = 'left';
-    if (profile) {
-      ctx.fillText(profile.name, textX, textY);
-      textY += this.scale(18);
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(profile.background, textX, textY);
-      textY += this.scale(16);
-      
-      // Personality traits
-      ctx.fillStyle = '#60a5fa';
-      ctx.fillText(`Personality: ${profile.personality.join(', ')}`, textX, textY);
-      textY += this.scale(16);
-      
-      // Favorite food
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, textX, textY);
-      textY += this.scale(20);
-    } else {
-      ctx.fillText('Unnamed Colonist', textX, textY);
-      textY += this.scale(18);
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText('No background available', textX, textY);
-      textY += this.scale(36);
-    }
-    
-    // Current status
-    const task = c.inside ? 'Resting' : (c.task ? c.task : 'Idle');
-    const hp = Math.max(0, Math.min(100, c.hp | 0));
-    const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
-    const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
-    const mood = getColonistMood(c);
-    
-    // Health bars in a more compact format
-    const barSpacing = this.scale(18);
-    this.barRow(textX, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
-    this.barRow(textX, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
-    this.barRow(textX, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
-    
-    // Status info
-    ctx.fillStyle = '#9fb3c8';
-    ctx.font = this.getScaledFont(11);
-    textY += this.scale(8);
-    ctx.fillText(`Currently: ${task}`, textX, textY); textY += this.scale(14);
-    ctx.fillText(`Mood: ${mood}`, textX, textY); textY += this.scale(14);
-    ctx.fillText(`Position: ${c.x | 0}, ${c.y | 0}`, textX, textY); textY += this.scale(14);
-    
-    // Backstory at the bottom if there's space
-    if (profile && profile.backstory && textY < finalY + H - this.scale(40)) {
-      ctx.fillStyle = '#6b7280';
-      ctx.font = this.getScaledFont(10, '400');
-      const words = profile.backstory.split(' ');
-      const maxWidth = W - this.scale(40);
-      let line = '';
-      textY += this.scale(8);
-      
-      for (let word of words) {
-        const testLine = line + word + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && line !== '') {
-          ctx.fillText(line.trim(), textX, textY);
-          textY += this.scale(12);
-          line = word + ' ';
-          if (textY > finalY + H - this.scale(20)) break; // Stop if we run out of space
-        } else {
-          line = testLine;
-        }
-      }
-      if (line.trim() && textY <= finalY + H - this.scale(20)) {
-        ctx.fillText(line.trim(), textX, textY);
-      }
-    }
     
     ctx.fillStyle = '#4b5563';
     ctx.font = this.getScaledFont(9);
-    ctx.fillText(this.follow ? 'Following (Esc to stop)' : 'Click to follow', textX, finalY + H - this.scale(8));
+    ctx.textAlign = 'left';
+    ctx.fillText(this.follow ? 'Following (Esc to stop)' : 'Click to follow', X + this.scale(16), finalY + H - this.scale(8));
     
     // Record panel rects for hit-testing (already in device pixels)
     this.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
     this.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
     ctx.restore();
+  }
+
+  drawBioTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    // Avatar section
+    const avatarSize = this.scale(64);
+    const ax = x + this.scale(8);
+    const ay = textY;
+    
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(ax, ay, avatarSize, avatarSize);
+    ctx.strokeStyle = '#1e293b';
+    ctx.strokeRect(ax + .5, ay + .5, avatarSize - 1, avatarSize - 1);
+    
+    // Draw colonist avatar
+    ctx.save();
+    ctx.translate(ax + avatarSize/2, ay + avatarSize/2);
+    ctx.scale(this.uiScale * 2, this.uiScale * 2);
+    drawColonistAvatar(ctx as any, 0, 0, c, 16, true);
+    ctx.restore();
+    
+    // Basic info next to avatar
+    const profile = c.profile;
+    const infoX = ax + avatarSize + this.scale(16);
+    let infoY = ay + this.scale(8);
+    
+    ctx.fillStyle = '#dbeafe';
+    ctx.font = this.getScaledFont(18, '700');
+    ctx.textAlign = 'left';
+    
+    if (profile) {
+      ctx.fillText(profile.name, infoX, infoY);
+      infoY += this.scale(22);
+      
+      ctx.font = this.getScaledFont(13, '400');
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText(profile.background, infoX, infoY);
+      infoY += this.scale(16);
+      
+      ctx.fillStyle = '#60a5fa';
+      // Use consistent age from profile if available, otherwise fallback to random
+      const age = (profile as any).age || Math.floor(Math.random() * 30) + 20;
+      ctx.fillText(`Age: ${age}`, infoX, infoY);
+      infoY += this.scale(14);
+      
+      // Show birthplace if available
+      if ((profile as any).detailedInfo?.birthplace) {
+        ctx.fillStyle = '#a78bfa';
+        ctx.fillText(`From: ${(profile as any).detailedInfo.birthplace}`, infoX, infoY);
+        infoY += this.scale(14);
+      }
+      
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, infoX, infoY);
+    } else {
+      ctx.fillText('Unnamed Colonist', infoX, infoY);
+      infoY += this.scale(22);
+      ctx.font = this.getScaledFont(13, '400');
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('No background available', infoX, infoY);
+    }
+    
+    textY = ay + avatarSize + this.scale(20);
+    
+    // Personality section
+    if (profile && profile.personality.length > 0) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Personality Traits', x, textY);
+      textY += this.scale(18);
+      
+      for (const trait of profile.personality) {
+        ctx.fillStyle = '#60a5fa';
+        ctx.font = this.getScaledFont(12, '400');
+        ctx.fillText(`• ${trait}`, x + this.scale(8), textY);
+        textY += this.scale(16);
+      }
+      textY += this.scale(8);
+    }
+
+    // Family section (if detailed info available)
+    const detailedInfo = (profile as any)?.detailedInfo;
+    if (detailedInfo && detailedInfo.family) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Family', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#10b981';
+      ctx.font = this.getScaledFont(11, '400');
+      
+      if (detailedInfo.family.parents.length > 0) {
+        ctx.fillText(`Parents: ${detailedInfo.family.parents.join(', ')}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      if (detailedInfo.family.siblings.length > 0) {
+        ctx.fillText(`Siblings: ${detailedInfo.family.siblings.join(', ')}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      if (detailedInfo.family.spouse) {
+        ctx.fillText(`Spouse: ${detailedInfo.family.spouse}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      if (detailedInfo.family.children.length > 0) {
+        ctx.fillText(`Children: ${detailedInfo.family.children.join(', ')}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      textY += this.scale(8);
+    }
+
+    // Skills section (if detailed info available)
+    if (detailedInfo && detailedInfo.skills && detailedInfo.skills.length > 0) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Skills', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText(`• ${detailedInfo.skills.join(', ')}`, x + this.scale(8), textY);
+      textY += this.scale(16);
+    }
+
+    // Backstory section
+    if (profile && profile.backstory) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Backstory', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(11, '400');
+      
+      // Word wrap the backstory
+      const words = profile.backstory.split(' ');
+      const maxWidth = w - this.scale(16);
+      let line = '';
+      
+      for (let word of words) {
+        const testLine = line + word + ' ';
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxWidth && line !== '') {
+          ctx.fillText(line.trim(), x + this.scale(8), textY);
+          textY += this.scale(14);
+          line = word + ' ';
+          if (textY > y + h - this.scale(20)) break;
+        } else {
+          line = testLine;
+        }
+      }
+      if (line.trim() && textY <= y + h - this.scale(20)) {
+        ctx.fillText(line.trim(), x + this.scale(8), textY);
+      }
+    }
+  }
+
+  drawHealthTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    const hp = Math.max(0, Math.min(100, c.hp | 0));
+    const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
+    const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
+    const mood = getColonistMood(c);
+    
+    // Overall condition
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Overall Condition', x, textY);
+    textY += this.scale(24);
+    
+    // Health bars
+    const barSpacing = this.scale(22);
+    this.barRow(x, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
+    this.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
+    this.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
+    
+    textY += this.scale(16);
+    
+    // Mood section
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Mental State', x, textY);
+    textY += this.scale(18);
+    
+    ctx.fillStyle = '#9fb3c8';
+    ctx.font = this.getScaledFont(12, '400');
+    ctx.fillText(`Current Mood: ${mood}`, x + this.scale(8), textY);
+    textY += this.scale(16);
+    
+    // Status effects (placeholder)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Status Effects', x, textY);
+    textY += this.scale(18);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = this.getScaledFont(11, '400');
+    ctx.fillText('No active status effects', x + this.scale(8), textY);
+  }
+
+  drawGearTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Equipment & Apparel', x, textY);
+    textY += this.scale(24);
+    
+    // Equipment slots (placeholder)
+    const slots = [
+      { name: 'Head', item: 'None', color: '#6b7280' },
+      { name: 'Torso', item: 'Basic Shirt', color: '#60a5fa' },
+      { name: 'Legs', item: 'Basic Pants', color: '#60a5fa' },
+      { name: 'Feet', item: 'None', color: '#6b7280' },
+      { name: 'Weapon', item: c.carrying ? 'Tool' : 'None', color: c.carrying ? '#22c55e' : '#6b7280' }
+    ];
+    
+    for (const slot of slots) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(12, '500');
+      ctx.fillText(`${slot.name}:`, x, textY);
+      
+      ctx.fillStyle = slot.color;
+      ctx.font = this.getScaledFont(12, '400');
+      ctx.fillText(slot.item, x + this.scale(80), textY);
+      textY += this.scale(18);
+    }
+    
+    textY += this.scale(16);
+    
+    // Inventory (placeholder)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Inventory', x, textY);
+    textY += this.scale(18);
+    
+    ctx.fillStyle = '#6b7280';
+    ctx.font = this.getScaledFont(11, '400');
+    if (c.carrying) {
+      ctx.fillText(`Carrying: ${c.carrying.type || 'Item'}`, x + this.scale(8), textY);
+    } else {
+      ctx.fillText('No items carried', x + this.scale(8), textY);
+    }
+  }
+
+  drawSocialTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Social Relationships', x, textY);
+    textY += this.scale(24);
+    
+    // Social stats (placeholder)
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = this.getScaledFont(12, '400');
+    ctx.fillText('Social skill: Novice', x, textY);
+    textY += this.scale(16);
+    
+    textY += this.scale(16);
+    
+    // Relationships with other colonists
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Colony Relationships', x, textY);
+    textY += this.scale(18);
+    
+    const otherColonists = this.colonists.filter(col => col !== c && col.alive);
+    if (otherColonists.length > 0) {
+      for (let i = 0; i < Math.min(otherColonists.length, 3); i++) {
+        const other = otherColonists[i];
+        const relationship = ['Neutral', 'Friend', 'Good friend', 'Rival'][Math.floor(Math.random() * 4)];
+        const relationshipColor = relationship === 'Friend' || relationship === 'Good friend' ? '#22c55e' : 
+                                 relationship === 'Rival' ? '#ef4444' : '#94a3b8';
+        
+        ctx.fillStyle = '#dbeafe';
+        ctx.font = this.getScaledFont(11, '500');
+        ctx.fillText(other.profile?.name || 'Colonist', x + this.scale(8), textY);
+        
+        ctx.fillStyle = relationshipColor;
+        ctx.font = this.getScaledFont(11, '400');
+        ctx.fillText(relationship, x + this.scale(120), textY);
+        textY += this.scale(16);
+      }
+    } else {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText('No other colonists in colony', x + this.scale(8), textY);
+    }
+  }
+
+  drawStatsTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Skills & Abilities', x, textY);
+    textY += this.scale(24);
+    
+    // Core stats from profile
+    const profile = c.profile;
+    if (profile && profile.stats) {
+      const stats = [
+        { name: 'Work Speed', value: Math.round(profile.stats.workSpeed * 100), suffix: '%' },
+        { name: 'Social Bonus', value: Math.round(profile.stats.socialBonus * 100), suffix: '%' },
+        { name: 'Hunger Rate', value: Math.round(profile.stats.hungerRate * 100), suffix: '%' },
+        { name: 'Fatigue Rate', value: Math.round(profile.stats.fatigueRate * 100), suffix: '%' }
+      ];
+      
+      for (const stat of stats) {
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = this.getScaledFont(12, '500');
+        ctx.fillText(`${stat.name}:`, x, textY);
+        
+        ctx.fillStyle = '#dbeafe';
+        ctx.font = this.getScaledFont(12, '400');
+        ctx.fillText(`${stat.value}${stat.suffix}`, x + this.scale(120), textY);
+        textY += this.scale(18);
+      }
+    }
+    
+    textY += this.scale(16);
+    
+    // Skills (placeholder - expandable)
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Skills', x, textY);
+    textY += this.scale(18);
+    
+    const skills = [
+      { name: 'Construction', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Farming', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Mining', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Research', level: Math.floor(Math.random() * 10) + 1 },
+      { name: 'Combat', level: Math.floor(Math.random() * 10) + 1 }
+    ];
+    
+    for (const skill of skills) {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText(`${skill.name}:`, x + this.scale(8), textY);
+      
+      const levelColor = skill.level >= 8 ? '#22c55e' : skill.level >= 5 ? '#eab308' : '#6b7280';
+      ctx.fillStyle = levelColor;
+      ctx.fillText(`Level ${skill.level}`, x + this.scale(100), textY);
+      textY += this.scale(16);
+    }
+  }
+
+  drawLogTab(c: Colonist, x: number, y: number, w: number, h: number) {
+    const ctx = this.ctx;
+    let textY = y + this.scale(8);
+    
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(16, '600');
+    ctx.textAlign = 'left';
+    ctx.fillText('Activity Log', x, textY);
+    textY += this.scale(24);
+    
+    // Recent activities (placeholder)
+    const activities = [
+      { time: `Day ${this.day} 08:30`, action: 'Started construction work', type: 'work' },
+      { time: `Day ${this.day} 07:45`, action: 'Finished eating breakfast', type: 'need' },
+      { time: `Day ${this.day} 07:00`, action: 'Woke up', type: 'rest' },
+      { time: `Day ${this.day - 1} 22:30`, action: 'Went to sleep', type: 'rest' },
+      { time: `Day ${this.day - 1} 19:15`, action: 'Had dinner', type: 'need' }
+    ];
+    
+    for (const activity of activities) {
+      const activityColor = activity.type === 'work' ? '#60a5fa' : 
+                           activity.type === 'need' ? '#22c55e' : 
+                           activity.type === 'rest' ? '#a78bfa' : '#94a3b8';
+      
+      ctx.fillStyle = '#6b7280';
+      ctx.font = this.getScaledFont(10, '400');
+      ctx.fillText(activity.time, x, textY);
+      
+      ctx.fillStyle = activityColor;
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText(activity.action, x + this.scale(100), textY);
+      textY += this.scale(16);
+      
+      if (textY > y + h - this.scale(20)) break;
+    }
+  }
+
+  // Context Menu System
+  showContextMenu(colonist: Colonist, screenX: number, screenY: number) {
+    const isIdle = !colonist.task || colonist.task === 'idle';
+    const hasTarget = !!colonist.target;
+    const isInjured = colonist.hp < 50;
+    const isHungry = (colonist.hunger || 0) > 60;
+    const isTired = (colonist.fatigue || 0) > 60;
+    
+    this.contextMenu = {
+      visible: true,
+      x: screenX,
+      y: screenY,
+      target: colonist,
+      openSubmenu: undefined,
+      items: [
+        {
+          id: 'prioritize',
+          label: 'Prioritize',
+          icon: '⚡',
+          enabled: true,
+          submenu: [
+            { id: 'prioritize_work', label: 'Work Tasks', icon: '🔨', enabled: true },
+            { id: 'prioritize_build', label: 'Construction', icon: '🏗️', enabled: true },
+            { id: 'prioritize_haul', label: 'Hauling', icon: '📦', enabled: true },
+            { id: 'prioritize_research', label: 'Research', icon: '🔬', enabled: true }
+          ]
+        },
+        {
+          id: 'force',
+          label: 'Force',
+          icon: '❗',
+          enabled: true,
+          submenu: [
+            { id: 'force_rest', label: 'Rest Now', icon: '😴', enabled: isTired },
+            { id: 'force_eat', label: 'Eat Now', icon: '🍽️', enabled: isHungry },
+            { id: 'force_work', label: 'Work', icon: '⚒️', enabled: isIdle },
+            { id: 'force_guard', label: 'Guard Area', icon: '🛡️', enabled: true }
+          ]
+        },
+        {
+          id: 'goto',
+          label: 'Go To',
+          icon: '🎯',
+          enabled: true,
+          submenu: [
+            { id: 'goto_hq', label: 'HQ', icon: '🏠', enabled: true },
+            { id: 'goto_safety', label: 'Safe Room', icon: '🛡️', enabled: true },
+            { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
+            { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true }
+          ]
+        },
+        {
+          id: 'medical',
+          label: 'Medical',
+          icon: '🏥',
+          enabled: isInjured,
+          submenu: [
+            { id: 'medical_treat', label: 'Treat Wounds', icon: '🩹', enabled: isInjured },
+            { id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: isInjured },
+            { id: 'medical_surgery', label: 'Surgery', icon: '⚕️', enabled: false }
+          ]
+        },
+        {
+          id: 'cancel',
+          label: 'Cancel Current Task',
+          icon: '❌',
+          enabled: hasTarget,
+        },
+        {
+          id: 'follow',
+          label: this.follow && this.selColonist === colonist ? 'Stop Following' : 'Follow',
+          icon: '👁️',
+          enabled: true,
+        }
+      ]
+    };
+  }
+
+  hideContextMenu() {
+    this.contextMenu = null;
+    this.contextMenuRects = [];
+  }
+
+  handleContextMenuAction(actionId: string, colonist: Colonist) {
+    console.log(`Context menu action: ${actionId} for colonist:`, colonist.profile?.name);
+    
+    switch (actionId) {
+      // Prioritize actions
+      case 'prioritize_work':
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing work tasks`, 'info');
+        break;
+      case 'prioritize_build':
+        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist));
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing construction`, 'info');
+        break;
+      case 'prioritize_haul':
+        // Future: implement hauling system
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing hauling`, 'info');
+        break;
+      case 'prioritize_research':
+        // Future: implement research system
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing research`, 'info');
+        break;
+        
+      // Force actions
+      case 'force_rest':
+        this.forceColonistToRest(colonist);
+        break;
+      case 'force_eat':
+        this.forceColonistToEat(colonist);
+        break;
+      case 'force_work':
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
+        this.msg(`${colonist.profile?.name || 'Colonist'} forced to work`, 'info');
+        break;
+      case 'force_guard':
+        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y });
+        this.msg(`${colonist.profile?.name || 'Colonist'} guarding area`, 'info');
+        break;
+        
+      // Go to actions
+      case 'goto_hq':
+        this.sendColonistToHQ(colonist);
+        break;
+      case 'goto_safety':
+        this.sendColonistToSafety(colonist);
+        break;
+      case 'goto_bed':
+        this.sendColonistToBed(colonist);
+        break;
+      case 'goto_food':
+        this.sendColonistToFood(colonist);
+        break;
+        
+      // Medical actions
+      case 'medical_treat':
+        this.treatColonist(colonist);
+        break;
+      case 'medical_rest':
+        this.forceColonistToRest(colonist);
+        this.msg(`${colonist.profile?.name || 'Colonist'} ordered to bed rest`, 'info');
+        break;
+        
+      // Basic actions
+      case 'cancel':
+        this.setTask(colonist, 'idle', { x: colonist.x, y: colonist.y });
+        this.msg(`${colonist.profile?.name || 'Colonist'} task cancelled`, 'info');
+        break;
+      case 'follow':
+        if (this.follow && this.selColonist === colonist) {
+          this.follow = false;
+          this.selColonist = null;
+          this.msg('Stopped following', 'info');
+        } else {
+          this.selColonist = colonist;
+          this.follow = true;
+          this.msg(`Following ${colonist.profile?.name || 'colonist'}`, 'info');
+        }
+        break;
+    }
+    
+    this.hideContextMenu();
+  }
+
+  // Helper functions for context menu actions
+  findNearestWorkTarget(colonist: Colonist) {
+    // Find nearest unfinished building
+    let nearest = null;
+    let minDist = Infinity;
+    
+    for (const building of this.buildings) {
+      if (!building.done) {
+        const dist = Math.hypot(colonist.x - (building.x + building.w/2), colonist.y - (building.y + building.h/2));
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = building;
+        }
+      }
+    }
+    
+    return nearest || { x: colonist.x + rand(-50, 50), y: colonist.y + rand(-50, 50) };
+  }
+
+  findNearestBuildTarget(colonist: Colonist) {
+    return this.findNearestWorkTarget(colonist);
+  }
+
+  forceColonistToRest(colonist: Colonist) {
+    // Find nearest house or tent
+    const restBuilding = this.buildings.find(b => 
+      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq') && 
+      b.done && 
+      this.buildingHasSpace(b)
+    );
+    
+    if (restBuilding) {
+      this.setTask(colonist, 'rest', restBuilding);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to rest`, 'info');
+    } else {
+      this.msg('No available sleeping quarters', 'warn');
+    }
+  }
+
+  forceColonistToEat(colonist: Colonist) {
+    if (this.RES.food > 0) {
+      // Simulate eating
+      colonist.hunger = Math.max(0, (colonist.hunger || 0) - 30);
+      this.RES.food = Math.max(0, this.RES.food - 1);
+      this.msg(`${colonist.profile?.name || 'Colonist'} eating food`, 'good');
+    } else {
+      this.msg('No food available', 'warn');
+    }
+  }
+
+  sendColonistToHQ(colonist: Colonist) {
+    const hq = this.buildings.find(b => b.kind === 'hq');
+    if (hq) {
+      const target = { x: hq.x + hq.w/2, y: hq.y + hq.h/2 };
+      this.setTask(colonist, 'goto', target);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to HQ`, 'info');
+    }
+  }
+
+  sendColonistToSafety(colonist: Colonist) {
+    // Find a building protected by turrets
+    for (const building of this.buildings) {
+      if (building.done && this.isProtectedByTurret(building) && this.buildingHasSpace(building)) {
+        this.setTask(colonist, 'goto', building);
+        this.msg(`${colonist.profile?.name || 'Colonist'} going to safety`, 'info');
+        return;
+      }
+    }
+    this.sendColonistToHQ(colonist);
+  }
+
+  sendColonistToBed(colonist: Colonist) {
+    const bed = this.buildings.find(b => 
+      (b.kind === 'house' || b.kind === 'tent') && 
+      b.done && 
+      this.buildingHasSpace(b)
+    );
+    
+    if (bed) {
+      this.setTask(colonist, 'rest', bed);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to bed`, 'info');
+    } else {
+      this.msg('No available beds', 'warn');
+    }
+  }
+
+  sendColonistToFood(colonist: Colonist) {
+    const storage = this.buildings.find(b => 
+      (b.kind === 'warehouse' || b.kind === 'hq') && b.done
+    );
+    
+    if (storage) {
+      const target = { x: storage.x + storage.w/2, y: storage.y + storage.h/2 };
+      this.setTask(colonist, 'goto', target);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to food storage`, 'info');
+    } else {
+      this.sendColonistToHQ(colonist);
+    }
+  }
+
+  treatColonist(colonist: Colonist) {
+    const infirmary = this.buildings.find(b => b.kind === 'infirmary' && b.done);
+    
+    if (infirmary) {
+      this.setTask(colonist, 'medical', infirmary);
+      this.msg(`${colonist.profile?.name || 'Colonist'} going for medical treatment`, 'info');
+    } else {
+      // Basic field treatment
+      colonist.hp = Math.min(100, colonist.hp + 15);
+      this.msg(`${colonist.profile?.name || 'Colonist'} received basic treatment`, 'good');
+    }
+  }
+
+  drawContextMenu() {
+    if (!this.contextMenu || !this.contextMenu.visible) return;
+    
+    const ctx = this.ctx;
+    const menu = this.contextMenu;
+    
+    ctx.save();
+    
+    // Calculate menu dimensions
+    const itemHeight = this.scale(32); // Increased for mobile friendliness
+    const menuWidth = this.scale(220); // Increased width
+    const padding = this.scale(8);
+    const iconWidth = this.scale(24);
+    
+    // Count visible items
+    const visibleItems = menu.items.filter(item => item.enabled || true); // Show disabled items grayed out
+    const menuHeight = visibleItems.length * itemHeight + padding * 2;
+    
+    // Adjust position to keep menu on screen
+    let menuX = menu.x;
+    let menuY = menu.y;
+    
+    if (menuX + menuWidth > this.canvas.width) {
+      menuX = this.canvas.width - menuWidth - this.scale(10);
+    }
+    if (menuY + menuHeight > this.canvas.height) {
+      menuY = this.canvas.height - menuHeight - this.scale(10);
+    }
+    
+    // Draw menu background with shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(menuX + 3, menuY + 3, menuWidth, menuHeight);
+    
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(menuX, menuY, menuWidth, menuHeight);
+    ctx.strokeStyle = '#374151';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(menuX + 0.5, menuY + 0.5, menuWidth - 1, menuHeight - 1);
+    
+    this.contextMenuRects = [];
+    
+    // Draw menu items
+    let currentY = menuY + padding;
+    
+    for (let i = 0; i < visibleItems.length; i++) {
+      const item = visibleItems[i];
+      const itemY = currentY + i * itemHeight;
+      const isHovered = this.isPointInRect(this.mouse.x * this.DPR, this.mouse.y * this.DPR, {
+        x: menuX, y: itemY, w: menuWidth, h: itemHeight
+      });
+      
+      // Store rect for click detection
+      this.contextMenuRects.push({
+        id: item.id,
+        x: menuX,
+        y: itemY,
+        w: menuWidth,
+        h: itemHeight
+      });
+      
+      // Draw item background
+      if (isHovered && item.enabled) {
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
+      }
+      
+      // Highlight if submenu is open
+      if (item.submenu && menu.openSubmenu === item.id) {
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
+      }
+      
+      // Draw icon
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(16, '400'); // Larger icons for mobile
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.icon, menuX + padding, itemY + itemHeight / 2);
+      
+      // Draw label
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(14, '400'); // Larger text for mobile
+      ctx.fillText(item.label, menuX + padding + iconWidth, itemY + itemHeight / 2);
+      
+      // Draw submenu arrow if applicable
+      if (item.submenu) {
+        ctx.fillStyle = item.enabled ? '#9ca3af' : '#4b5563';
+        const arrow = menu.openSubmenu === item.id ? '▼' : '▶';
+        ctx.fillText(arrow, menuX + menuWidth - padding - this.scale(16), itemY + itemHeight / 2);
+      }
+      
+      // Draw submenu if open (click-based, not hover)
+      if (item.submenu && menu.openSubmenu === item.id) {
+        this.drawSubmenu(item, menuX + menuWidth + this.scale(5), itemY);
+      }
+    }
+    
+    ctx.restore();
+  }
+
+  drawSubmenu(parentItem: any, x: number, y: number) {
+    const ctx = this.ctx;
+    const submenu = parentItem.submenu;
+    
+    if (!submenu || submenu.length === 0) return;
+    
+    const itemHeight = this.scale(30); // Increased for mobile
+    const submenuWidth = this.scale(200); // Increased width
+    const padding = this.scale(8);
+    const iconWidth = this.scale(22);
+    
+    const submenuHeight = submenu.length * itemHeight + padding * 2;
+    
+    // Adjust position to keep submenu on screen
+    let submenuX = x;
+    let submenuY = y;
+    
+    if (submenuX + submenuWidth > this.canvas.width) {
+      submenuX = x - submenuWidth - this.scale(225); // Position to the left of main menu
+    }
+    if (submenuY + submenuHeight > this.canvas.height) {
+      submenuY = this.canvas.height - submenuHeight - this.scale(10);
+    }
+    
+    // Draw submenu background with shadow
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillRect(submenuX + 3, submenuY + 3, submenuWidth, submenuHeight);
+    
+    ctx.fillStyle = '#1e293b';
+    ctx.fillRect(submenuX, submenuY, submenuWidth, submenuHeight);
+    ctx.strokeStyle = '#374151';
+    ctx.strokeRect(submenuX + 0.5, submenuY + 0.5, submenuWidth - 1, submenuHeight - 1);
+    
+    // Draw submenu items
+    for (let i = 0; i < submenu.length; i++) {
+      const item = submenu[i];
+      const itemY = submenuY + padding + i * itemHeight;
+      const isHovered = this.isPointInRect(this.mouse.x * this.DPR, this.mouse.y * this.DPR, {
+        x: submenuX, y: itemY, w: submenuWidth, h: itemHeight
+      });
+      
+      // Store rect for click detection
+      this.contextMenuRects.push({
+        id: item.id,
+        x: submenuX,
+        y: itemY,
+        w: submenuWidth,
+        h: itemHeight,
+        isSubmenu: true,
+        parentId: parentItem.id
+      });
+      
+      // Draw item background
+      if (isHovered && item.enabled) {
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(submenuX + 1, itemY, submenuWidth - 2, itemHeight);
+      }
+      
+      // Draw icon
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(14, '400'); // Larger icons
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.icon, submenuX + padding, itemY + itemHeight / 2);
+      
+      // Draw label
+      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
+      ctx.font = this.getScaledFont(13, '400'); // Larger text
+      ctx.fillText(item.label, submenuX + padding + iconWidth, itemY + itemHeight / 2);
+    }
+  }
+
+  drawLongPressProgress() {
+    if (!this.longPressStartTime || !this.longPressTarget || !this.longPressStartPos) return;
+    
+    const ctx = this.ctx;
+    const currentTime = performance.now();
+    const elapsed = currentTime - this.longPressStartTime;
+    const progress = Math.min(elapsed / 500, 1); // 500ms total duration
+    
+    if (progress >= 1) return; // Don't draw when complete
+    
+    // Convert world position to screen position
+    const screenX = (this.longPressTarget.x - this.camera.x) * this.camera.zoom;
+    const screenY = (this.longPressTarget.y - this.camera.y) * this.camera.zoom;
+    
+    ctx.save();
+    
+    // Draw progress circle
+    const radius = this.scale(20);
+    const centerX = screenX;
+    const centerY = screenY;
+    
+    // Background circle
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = this.scale(3);
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Progress arc
+    ctx.strokeStyle = '#60a5fa'; // Blue color
+    ctx.lineWidth = this.scale(3);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    const startAngle = -Math.PI / 2; // Start at top
+    const endAngle = startAngle + (progress * Math.PI * 2);
+    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+    ctx.stroke();
+    
+    // Inner pulse effect
+    if (progress > 0.3) {
+      const pulseAlpha = Math.sin((elapsed / 100) * Math.PI) * 0.3 + 0.1;
+      ctx.fillStyle = `rgba(96, 165, 250, ${pulseAlpha})`;
+      ctx.beginPath();
+      ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // Context menu icon hint
+    if (progress > 0.5) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = this.getScaledFont(12, '600');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚙️', centerX, centerY);
+    }
+    
+    ctx.restore();
+  }
+
+  isPointInRect(x: number, y: number, rect: { x: number; y: number; w: number; h: number }): boolean {
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
   }
 
   barRow(x: number, y: number, label: string, val: number, color: string) {
