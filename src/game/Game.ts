@@ -2122,7 +2122,7 @@ export class Game {
     const W = Math.min(this.scale(550), cw * 0.65);
     const H = Math.min(this.scale(450), ch * 0.7);
     const PAD = this.scale(12);
-    const X = cw - W - PAD;
+    const X = PAD; // Move to left side instead of right (was: cw - W - PAD)
     const Y = this.scale(54);
     
     // Ensure panel doesn't go off screen
@@ -2276,8 +2276,17 @@ export class Game {
       infoY += this.scale(16);
       
       ctx.fillStyle = '#60a5fa';
-      ctx.fillText(`Age: ${Math.floor(Math.random() * 30) + 20}`, infoX, infoY);
+      // Use consistent age from profile if available, otherwise fallback to random
+      const age = (profile as any).age || Math.floor(Math.random() * 30) + 20;
+      ctx.fillText(`Age: ${age}`, infoX, infoY);
       infoY += this.scale(14);
+      
+      // Show birthplace if available
+      if ((profile as any).detailedInfo?.birthplace) {
+        ctx.fillStyle = '#a78bfa';
+        ctx.fillText(`From: ${(profile as any).detailedInfo.birthplace}`, infoX, infoY);
+        infoY += this.scale(14);
+      }
       
       ctx.fillStyle = '#fbbf24';
       ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, infoX, infoY);
@@ -2306,7 +2315,50 @@ export class Game {
       }
       textY += this.scale(8);
     }
-    
+
+    // Family section (if detailed info available)
+    const detailedInfo = (profile as any)?.detailedInfo;
+    if (detailedInfo && detailedInfo.family) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Family', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#10b981';
+      ctx.font = this.getScaledFont(11, '400');
+      
+      if (detailedInfo.family.parents.length > 0) {
+        ctx.fillText(`Parents: ${detailedInfo.family.parents.join(', ')}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      if (detailedInfo.family.siblings.length > 0) {
+        ctx.fillText(`Siblings: ${detailedInfo.family.siblings.join(', ')}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      if (detailedInfo.family.spouse) {
+        ctx.fillText(`Spouse: ${detailedInfo.family.spouse}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      if (detailedInfo.family.children.length > 0) {
+        ctx.fillText(`Children: ${detailedInfo.family.children.join(', ')}`, x + this.scale(8), textY);
+        textY += this.scale(14);
+      }
+      textY += this.scale(8);
+    }
+
+    // Skills section (if detailed info available)
+    if (detailedInfo && detailedInfo.skills && detailedInfo.skills.length > 0) {
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Skills', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = this.getScaledFont(11, '400');
+      ctx.fillText(`• ${detailedInfo.skills.join(', ')}`, x + this.scale(8), textY);
+      textY += this.scale(16);
+    }
+
     // Backstory section
     if (profile && profile.backstory) {
       ctx.fillStyle = '#f1f5f9';
