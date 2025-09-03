@@ -150,6 +150,100 @@ export class Game {
     
     requestAnimationFrame(this.frame);
   }
+
+  // ===== Inventory & Item Helpers =====
+  // Aggregate equipped items
+  private getEquippedItems(c: Colonist) {
+    const eq = c.inventory?.equipment || {} as any;
+    return [eq.helmet, eq.armor, eq.weapon, eq.tool, eq.accessory].filter(Boolean) as any[];
+  }
+
+  // Movement speed multiplier from equipment (armor penalties etc.)
+  getMoveSpeedMultiplier(c: Colonist): number {
+    let penalty = 0;
+    for (const it of this.getEquippedItems(c)) {
+      if (!it?.defName) continue;
+      const def = itemDatabase.getItemDef(it.defName);
+      if (def?.movementPenalty) penalty += def.movementPenalty;
+    }
+    // Clamp total penalty to 40% max
+    penalty = Math.min(0.4, Math.max(0, penalty));
+    const mult = 1 - penalty;
+    return Math.max(0.6, mult); // never slower than 60%
+  }
+
+  // Work speed multiplier based on equipped tools/clothes for a given work type label
+  getWorkSpeedMultiplier(c: Colonist, workType: 'Construction' | 'Woodcutting' | 'Mining' | 'Farming' | 'Harvest' | string): number {
+    let bonus = 0;
+    for (const it of this.getEquippedItems(c)) {
+      if (!it?.defName) continue;
+      const def = itemDatabase.getItemDef(it.defName);
+      if (!def?.workSpeedBonus) continue;
+      if (!def.workTypes || def.workTypes.includes(workType)) {
+        bonus += def.workSpeedBonus; // additive bonuses
+      }
+    }
+    // Modest cap to avoid extremes
+    bonus = Math.min(0.8, Math.max(0, bonus));
+    return 1 + bonus;
+  }
+
+  // Armor damage reduction from helmet/armor; returns fraction reduced (0..0.8)
+  getArmorReduction(c: Colonist): number {
+    let armor = 0;
+    const eq = c.inventory?.equipment || {} as any;
+    const pieces = [eq.helmet, eq.armor];
+    for (const it of pieces) {
+      if (!it?.defName) continue;
+      const def = itemDatabase.getItemDef(it.defName);
+      if (def?.armorRating) armor += def.armorRating;
+    }
+    return Math.min(0.8, Math.max(0, armor));
+  }
+
+  // Apply damage to a colonist, considering armor
+  applyDamageToColonist(c: Colonist, rawDamage: number) {
+    const red = this.getArmorReduction(c);
+    const dmg = rawDamage * (1 - red);
+    c.hp = Math.max(0, c.hp - dmg);
+  }
+
+  // Try to consume one Food item from inventory; returns true if eaten
+  tryConsumeInventoryFood(c: Colonist): boolean {
+    if (!c.inventory) return false;
+    const items = c.inventory.items;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      // Prefer explicit category when present; fallback to def lookup
+      const isFood = it.category === 'Food' || (!!it.defName && (itemDatabase.getItemDef(it.defName)?.category === 'Food'));
+      if (!isFood || it.quantity <= 0) continue;
+      // Determine nutrition -> hunger reduction (map roughly 1 nutrition = 3 hunger)
+      const nutrition = it.defName ? (itemDatabase.getItemDef(it.defName)?.nutrition || 10) : 10;
+      const hungerReduce = Math.max(20, Math.min(70, Math.round(nutrition * 3)));
+      c.hunger = Math.max(0, (c.hunger || 0) - hungerReduce);
+      // Small heal and mood bump via message
+      c.hp = Math.min(100, c.hp + 1.5);
+      this.msg(`${c.profile?.name || 'Colonist'} ate ${it.name}`, 'good');
+      // Decrement stack and cleanup
+      it.quantity -= 1;
+      if (it.quantity <= 0) items.splice(i, 1);
+      this.recalcInventoryWeight(c);
+      return true;
+    }
+    return false;
+  }
+
+  recalcInventoryWeight(c: Colonist) {
+    if (!c.inventory) return;
+    let total = 0;
+    for (const it of c.inventory.items) total += (it.weight || 0) * (it.quantity || 1);
+    const eq: any = c.inventory.equipment || {};
+    for (const slot of ['helmet','armor','weapon','tool','accessory']) {
+      const it = eq[slot];
+      if (it) total += it.weight || 0;
+    }
+    c.inventory.currentWeight = Math.round(total * 100) / 100;
+  }
   
   // Ensure camera remains within world bounds based on current zoom and canvas size
   private clampCameraToWorld() {
@@ -1209,7 +1303,7 @@ export class Game {
     const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
     const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
     // Movement speed; boost if standing on a path tile
-    let speed = c.speed * ((c as any).fatigueSlow || 1);
+  let speed = c.speed * ((c as any).fatigueSlow || 1) * this.getMoveSpeedMultiplier(c);
     let onPath = false;
     {
       const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);

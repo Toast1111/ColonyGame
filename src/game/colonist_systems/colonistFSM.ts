@@ -424,7 +424,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       break;
     }
-    case 'eat': {
+  case 'eat': {
       // Go to HQ, warehouse, or storage to eat
       const canEat = (game.RES.food || 0) > 0;
       
@@ -442,6 +442,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         console.log(`NO FOOD AVAILABLE! Colonist will continue tasks or sleep.`);
         changeState(game.isNight() ? 'sleep' : 'seekTask', 'no food available');
         break;
+      }
+
+      // First try to eat from personal inventory if available (instant, immersive)
+      if ((c.hunger || 0) > 40) {
+        const ate = (game as any).tryConsumeInventoryFood ? (game as any).tryConsumeInventoryFood(c) : false;
+        if (ate) {
+          changeState('seekTask', 'ate from inventory');
+          break;
+        }
       }
 
       // Find the nearest food source building
@@ -491,11 +500,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
         
         if (closestDist <= reachDist) {
-          // Close enough to eat
+          // Close enough to eat from colony storage
           if (c.stateSince > 0.6) {
-            console.log(`Colonist successfully ate! Food: ${game.RES.food} → ${game.RES.food - 1}, hunger: ${c.hunger} → ${Math.max(0, (c.hunger || 0) - 60)}`);
-            game.RES.food -= 1;
-            c.hunger = Math.max(0, (c.hunger || 0) - 60); // More filling meal
+            console.log(`Colonist successfully ate from storage`);
+            game.RES.food = Math.max(0, game.RES.food - 1);
+            c.hunger = Math.max(0, (c.hunger || 0) - 60);
             c.hp = Math.min(100, c.hp + 2.5);
             changeState('seekTask', 'finished eating');
           }
@@ -839,7 +848,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       c.lastDistToNode = distToTarget;
       
       if (game.moveAlongPath(c, dt, pt, 12)) {
-        b.buildLeft -= 25 * dt;
+  // Apply equipment work speed bonuses (Construction)
+  const workMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Construction') : 1;
+  b.buildLeft -= 25 * dt * workMult;
         if (b.buildLeft <= 0) {
           b.done = true; if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
           
@@ -930,7 +941,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (distance <= interact + slack + 0.1) {
         // Close enough to chop
-        t.hp -= 18 * dt;
+  // Apply equipment work speed bonuses (Woodcutting)
+  const workMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Woodcutting') : 1;
+  t.hp -= 18 * dt * workMult;
         if (t.hp <= 0) {
           const collected = game.addResource('wood', 6);
           (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
@@ -995,7 +1008,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (distance <= interact + slack + 0.1) {
         // Close enough to mine
-        r.hp -= 16 * dt;
+  // Apply equipment work speed bonuses (Mining)
+  const workMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Mining') : 1;
+  r.hp -= 16 * dt * workMult;
         if (r.hp <= 0) {
           const collected = game.addResource('stone', 5);
           (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
