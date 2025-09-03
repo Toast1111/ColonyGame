@@ -368,6 +368,14 @@ export class Game {
         }
         
         if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+        
+        // Check for erase mode (set by mobile erase button)
+        if ((window as any)._eraseOnce) {
+          (window as any)._eraseOnce = false; // Consume the flag
+          this.cancelOrErase();
+          return;
+        }
+        
         if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); }
         else if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); }
         else {
@@ -687,6 +695,13 @@ export class Game {
 
     // Build menu click
     if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+
+    // Check for erase mode (set by mobile erase button)
+    if ((window as any)._eraseOnce) {
+      (window as any)._eraseOnce = false; // Consume the flag
+      this.cancelOrErase();
+      return;
+    }
 
     // Building/selection logic
   if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
