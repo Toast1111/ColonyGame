@@ -1,5 +1,6 @@
 // Colonist personality and background generator
 import { ImageAssets } from '../../assets/images';
+import { itemDatabase } from '../../data/itemDatabase';
 import { 
   generateCompleteTraitSet,
   NAMES,
@@ -10,6 +11,7 @@ import {
   randomChoice,
   type ColonistTraits
 } from './traits';
+import type { InventoryItem, Equipment, ColonistInventory } from '../types';
 
 // Enhanced interface with detailed personal information
 export interface ColonistProfile {
@@ -52,6 +54,7 @@ export interface ColonistProfile {
     hungerRate: number;
     fatigueRate: number;
   };
+  startingInventory: ColonistInventory; // New field for starting equipment and items
 }
 
 // Extended data for Prison Architect-style generation
@@ -267,6 +270,102 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
   return story;
 }
 
+// Item generation for starting inventory
+function generateStartingInventory(rng: SeededRandom, background: string, skills: string[]): ColonistInventory {
+  const inventory: ColonistInventory = {
+    items: [],
+    equipment: {},
+    carryCapacity: 50, // Base carry capacity
+    currentWeight: 0
+  };
+
+  // Initialize item database
+  itemDatabase.loadItems();
+
+  // Get items based on background
+  const backgroundItems = itemDatabase.getItemsForBackground(background);
+  
+  // Add background-specific items
+  for (const itemDefName of backgroundItems) {
+    const item = itemDatabase.createItem(itemDefName, 1, getRandomQuality(rng));
+    if (item) {
+      if (item.category === 'Tool' || item.category === 'Weapon' || item.category === 'Armor' || item.category === 'Helmet') {
+        // Equip the item
+        const equipSlot = getEquipSlot(item.category);
+        if (equipSlot && !inventory.equipment[equipSlot]) {
+          inventory.equipment[equipSlot] = item;
+        } else {
+          inventory.items.push(item);
+        }
+      } else {
+        inventory.items.push(item);
+      }
+    }
+  }
+
+  // Add skill-based bonus items
+  if (skills.includes('Cooking')) {
+    const item = itemDatabase.createItem('Knife', 1);
+    if (item) inventory.items.push(item);
+  }
+  if (skills.includes('First Aid')) {
+    const item = itemDatabase.createItem('MedicineKit', 1);
+    if (item) inventory.items.push(item);
+  }
+
+  // Add some basic supplies for everyone
+  const basicSupplies = ['Bread', 'Bandages'];
+  for (const itemDefName of basicSupplies) {
+    const item = itemDatabase.createItem(itemDefName, rng.range(1, 3));
+    if (item) {
+      inventory.items.push(item);
+    }
+  }
+
+  // Basic clothing if not equipped
+  if (!inventory.equipment.armor) {
+    const workClothes = itemDatabase.createItem('WorkClothes', 1);
+    if (workClothes) {
+      inventory.equipment.armor = workClothes;
+    }
+  }
+
+  // Calculate total weight
+  let totalWeight = 0;
+  for (const item of inventory.items) {
+    totalWeight += (item.weight || 0) * item.quantity;
+  }
+  for (const equipped of Object.values(inventory.equipment)) {
+    if (equipped) {
+      totalWeight += equipped.weight || 0;
+    }
+  }
+  inventory.currentWeight = totalWeight;
+
+  return inventory;
+}
+
+function getEquipSlot(category: string): keyof ColonistInventory['equipment'] | null {
+  switch (category) {
+    case 'Tool': return 'tool';
+    case 'Weapon': return 'weapon';
+    case 'Armor': return 'armor';
+    case 'Helmet': return 'helmet';
+    default: return null;
+  }
+}
+
+function getRandomQuality(rng: SeededRandom): 'poor' | 'normal' | 'good' | 'excellent' | 'masterwork' | 'legendary' | 'awful' {
+  const rand = rng.range(0, 1);
+  if (rand < 0.05) return 'poor';
+  if (rand < 0.15) return 'awful';
+  if (rand < 0.60) return 'normal';
+  if (rand < 0.85) return 'good';
+  if (rand < 0.95) return 'excellent';
+  if (rand < 0.99) return 'masterwork';
+  return 'legendary';
+}
+
 export function generateColonistProfile(): ColonistProfile {
   console.log('DEBUG: Generating new colonist profile...');
   const firstName = randomChoice(NAMES.FIRST);
@@ -313,7 +412,8 @@ export function generateColonistProfile(): ColonistProfile {
     backstory: '', // Will be generated next
     detailedInfo,
     avatar,
-    stats
+    stats,
+    startingInventory: generateStartingInventory(rng, traits.background.name, detailedInfo.skills)
   };
   
   // Generate rich backstory using all the detailed information
