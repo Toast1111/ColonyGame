@@ -45,6 +45,38 @@ export type Building = BuildingDef & {
 
 export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep';
 
+// Inventory and equipment types
+export interface InventoryItem {
+  name: string;
+  quantity: number;
+  description?: string;
+  quality?: 'poor' | 'normal' | 'good' | 'excellent' | 'masterwork' | 'legendary' | 'awful';
+  durability?: number; // For equipment items
+  maxDurability?: number;
+  stackable?: boolean;
+  category?: string;
+  value?: number;
+  weight?: number;
+  defName?: string; // Reference to item definition
+}
+
+export interface Equipment {
+  helmet?: InventoryItem;
+  armor?: InventoryItem;
+  pants?: InventoryItem;
+  boots?: InventoryItem;
+  weapon?: InventoryItem;
+  tool?: InventoryItem;
+  accessory?: InventoryItem;
+}
+
+export interface ColonistInventory {
+  items: InventoryItem[];
+  equipment: Equipment;
+  carryCapacity: number;
+  currentWeight: number;
+}
+
 export type Colonist = { 
   x: number; y: number; r: number; hp: number; speed: number; 
   task: string | null; target: any; carrying: any; hunger: number; 
@@ -67,6 +99,9 @@ export type Colonist = {
   
   // New personality system
   profile?: import('./colonist_systems/colonistGenerator').ColonistProfile;
+  
+  // Enhanced inventory system
+  inventory?: ColonistInventory;
 };
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };

@@ -9,6 +9,7 @@ import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { generateColonistProfile, getColonistDescription, getColonistMood } from "./colonist_systems/colonistGenerator";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles, drawParticles } from "../core/particles";
+import { itemDatabase } from '../data/itemDatabase';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -143,7 +144,105 @@ export class Game {
     this.camera.x = HQ_POS.x - viewW / 2; 
     this.camera.y = HQ_POS.y - viewH / 2; 
     this.clampCameraToWorld();
+    
+    // Initialize item database
+    itemDatabase.loadItems();
+    
     requestAnimationFrame(this.frame);
+  }
+
+  // ===== Inventory & Item Helpers =====
+  // Aggregate equipped items
+  private getEquippedItems(c: Colonist) {
+    const eq = c.inventory?.equipment || {} as any;
+    return [eq.helmet, eq.armor, eq.weapon, eq.tool, eq.accessory].filter(Boolean) as any[];
+  }
+
+  // Movement speed multiplier from equipment (armor penalties etc.)
+  getMoveSpeedMultiplier(c: Colonist): number {
+    let penalty = 0;
+    for (const it of this.getEquippedItems(c)) {
+      if (!it?.defName) continue;
+      const def = itemDatabase.getItemDef(it.defName);
+      if (def?.movementPenalty) penalty += def.movementPenalty;
+    }
+    // Clamp total penalty to 40% max
+    penalty = Math.min(0.4, Math.max(0, penalty));
+    const mult = 1 - penalty;
+    return Math.max(0.6, mult); // never slower than 60%
+  }
+
+  // Work speed multiplier based on equipped tools/clothes for a given work type label
+  getWorkSpeedMultiplier(c: Colonist, workType: 'Construction' | 'Woodcutting' | 'Mining' | 'Farming' | 'Harvest' | string): number {
+    let bonus = 0;
+    for (const it of this.getEquippedItems(c)) {
+      if (!it?.defName) continue;
+      const def = itemDatabase.getItemDef(it.defName);
+      if (!def?.workSpeedBonus) continue;
+      if (!def.workTypes || def.workTypes.includes(workType)) {
+        bonus += def.workSpeedBonus; // additive bonuses
+      }
+    }
+    // Modest cap to avoid extremes
+    bonus = Math.min(0.8, Math.max(0, bonus));
+    return 1 + bonus;
+  }
+
+  // Armor damage reduction from helmet/armor; returns fraction reduced (0..0.8)
+  getArmorReduction(c: Colonist): number {
+    let armor = 0;
+    const eq = c.inventory?.equipment || {} as any;
+    const pieces = [eq.helmet, eq.armor];
+    for (const it of pieces) {
+      if (!it?.defName) continue;
+      const def = itemDatabase.getItemDef(it.defName);
+      if (def?.armorRating) armor += def.armorRating;
+    }
+    return Math.min(0.8, Math.max(0, armor));
+  }
+
+  // Apply damage to a colonist, considering armor
+  applyDamageToColonist(c: Colonist, rawDamage: number) {
+    const red = this.getArmorReduction(c);
+    const dmg = rawDamage * (1 - red);
+    c.hp = Math.max(0, c.hp - dmg);
+  }
+
+  // Try to consume one Food item from inventory; returns true if eaten
+  tryConsumeInventoryFood(c: Colonist): boolean {
+    if (!c.inventory) return false;
+    const items = c.inventory.items;
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      // Prefer explicit category when present; fallback to def lookup
+      const isFood = it.category === 'Food' || (!!it.defName && (itemDatabase.getItemDef(it.defName)?.category === 'Food'));
+      if (!isFood || it.quantity <= 0) continue;
+      // Determine nutrition -> hunger reduction (map roughly 1 nutrition = 3 hunger)
+      const nutrition = it.defName ? (itemDatabase.getItemDef(it.defName)?.nutrition || 10) : 10;
+      const hungerReduce = Math.max(20, Math.min(70, Math.round(nutrition * 3)));
+      c.hunger = Math.max(0, (c.hunger || 0) - hungerReduce);
+      // Small heal and mood bump via message
+      c.hp = Math.min(100, c.hp + 1.5);
+      this.msg(`${c.profile?.name || 'Colonist'} ate ${it.name}`, 'good');
+      // Decrement stack and cleanup
+      it.quantity -= 1;
+      if (it.quantity <= 0) items.splice(i, 1);
+      this.recalcInventoryWeight(c);
+      return true;
+    }
+    return false;
+  }
+
+  recalcInventoryWeight(c: Colonist) {
+    if (!c.inventory) return;
+    let total = 0;
+    for (const it of c.inventory.items) total += (it.weight || 0) * (it.quantity || 1);
+    const eq: any = c.inventory.equipment || {};
+    for (const slot of ['helmet','armor','weapon','tool','accessory']) {
+      const it = eq[slot];
+      if (it) total += it.weight || 0;
+    }
+    c.inventory.currentWeight = Math.round(total * 100) / 100;
   }
   
   // Ensure camera remains within world bounds based on current zoom and canvas size
@@ -789,7 +888,8 @@ export class Game {
       hunger: 0, alive: true, color: profile.avatar.clothing, 
       t: rand(0, 1),
       direction: 0, // Initialize facing direction (0 = facing right)
-      profile: profile
+      profile: profile,
+      inventory: JSON.parse(JSON.stringify(profile.startingInventory)) // Deep copy the starting inventory
     };
     this.colonists.push(c); 
     this.msg(`${getColonistDescription(profile)} has joined the colony!`, 'good');
@@ -1203,7 +1303,7 @@ export class Game {
     const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
     const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
     // Movement speed; boost if standing on a path tile
-    let speed = c.speed * ((c as any).fatigueSlow || 1);
+  let speed = c.speed * ((c as any).fatigueSlow || 1) * this.getMoveSpeedMultiplier(c);
     let onPath = false;
     {
       const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);
@@ -2442,46 +2542,122 @@ export class Game {
     const ctx = this.ctx;
     let textY = y + this.scale(8);
     
+    // Header
     ctx.fillStyle = '#f1f5f9';
     ctx.font = this.getScaledFont(16, '600');
     ctx.textAlign = 'left';
-    ctx.fillText('Equipment & Apparel', x, textY);
+    ctx.fillText('Equipment & Inventory', x, textY);
     textY += this.scale(24);
     
-    // Equipment slots (placeholder)
-    const slots = [
-      { name: 'Head', item: 'None', color: '#6b7280' },
-      { name: 'Torso', item: 'Basic Shirt', color: '#60a5fa' },
-      { name: 'Legs', item: 'Basic Pants', color: '#60a5fa' },
-      { name: 'Feet', item: 'None', color: '#6b7280' },
-      { name: 'Weapon', item: c.carrying ? 'Tool' : 'None', color: c.carrying ? '#22c55e' : '#6b7280' }
-    ];
-    
-    for (const slot of slots) {
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = this.getScaledFont(12, '500');
-      ctx.fillText(`${slot.name}:`, x, textY);
-      
-      ctx.fillStyle = slot.color;
+    // Check if colonist has inventory
+    if (!c.inventory) {
+      ctx.fillStyle = '#6b7280';
       ctx.font = this.getScaledFont(12, '400');
-      ctx.fillText(slot.item, x + this.scale(80), textY);
-      textY += this.scale(18);
+      ctx.fillText('No inventory data available', x, textY);
+      return;
     }
     
-    textY += this.scale(16);
-    
-    // Inventory (placeholder)
+    // Equipment Slots
     ctx.fillStyle = '#f1f5f9';
     ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Inventory', x, textY);
+    ctx.fillText('Equipment', x, textY);
     textY += this.scale(18);
     
-    ctx.fillStyle = '#6b7280';
-    ctx.font = this.getScaledFont(11, '400');
-    if (c.carrying) {
-      ctx.fillText(`Carrying: ${c.carrying.type || 'Item'}`, x + this.scale(8), textY);
+    const equipmentSlots = ['helmet', 'armor', 'weapon', 'tool', 'shield', 'accessory'];
+    for (const slot of equipmentSlots) {
+      const item = c.inventory.equipment[slot as keyof typeof c.inventory.equipment];
+      
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = this.getScaledFont(12, '500');
+      const slotName = slot.charAt(0).toUpperCase() + slot.slice(1);
+      ctx.fillText(`${slotName}:`, x, textY);
+      
+      if (item) {
+        ctx.fillStyle = this.getItemQualityColor(item.quality || 'normal');
+        ctx.font = this.getScaledFont(12, '400');
+        ctx.fillText(item.name, x + this.scale(80), textY);
+        
+        // Show quality indicator
+        ctx.fillStyle = '#6b7280';
+        ctx.font = this.getScaledFont(10, '400');
+        ctx.fillText(`(${item.quality || 'normal'})`, x + this.scale(180), textY);
+      } else {
+        ctx.fillStyle = '#6b7280';
+        ctx.font = this.getScaledFont(12, '400');
+        ctx.fillText('None', x + this.scale(80), textY);
+      }
+      textY += this.scale(16);
+    }
+    
+    textY += this.scale(12);
+    
+    // Inventory Items
+    ctx.fillStyle = '#f1f5f9';
+    ctx.font = this.getScaledFont(14, '600');
+    ctx.fillText('Inventory Items', x, textY);
+    textY += this.scale(18);
+    
+    if (c.inventory.items.length === 0) {
+      ctx.fillStyle = '#6b7280';
+      ctx.font = this.getScaledFont(12, '400');
+      ctx.fillText('No items in inventory', x + this.scale(8), textY);
     } else {
-      ctx.fillText('No items carried', x + this.scale(8), textY);
+      // Show items with quantity and quality
+      for (const item of c.inventory.items) {
+        ctx.fillStyle = this.getItemQualityColor(item.quality || 'normal');
+        ctx.font = this.getScaledFont(12, '400');
+        
+        const displayText = `${item.name} (${item.quantity})`;
+        ctx.fillText(displayText, x + this.scale(8), textY);
+        
+        // Show quality indicator
+        ctx.fillStyle = '#6b7280';
+        ctx.font = this.getScaledFont(10, '400');
+        ctx.fillText(`${item.quality || 'normal'}`, x + this.scale(150), textY);
+        
+        // Show durability for items that have it
+        if (item.durability !== undefined) {
+          const durabilityText = `${Math.round(item.durability)}%`;
+          ctx.fillText(durabilityText, x + this.scale(200), textY);
+        }
+        
+        textY += this.scale(16);
+        
+        // Prevent overflow
+        if (textY > y + h - this.scale(20)) {
+          ctx.fillStyle = '#6b7280';
+          ctx.font = this.getScaledFont(10, '400');
+          ctx.fillText('...more items', x + this.scale(8), textY);
+          break;
+        }
+      }
+    }
+    
+    // Show currently carrying item
+    if (c.carrying) {
+      textY += this.scale(12);
+      ctx.fillStyle = '#f1f5f9';
+      ctx.font = this.getScaledFont(14, '600');
+      ctx.fillText('Currently Carrying', x, textY);
+      textY += this.scale(18);
+      
+      ctx.fillStyle = '#22c55e';
+      ctx.font = this.getScaledFont(12, '400');
+      ctx.fillText(`${c.carrying.type || 'Item'}`, x + this.scale(8), textY);
+    }
+  }
+  
+  // Helper function to get color based on item quality
+  getItemQualityColor(quality: string): string {
+    switch (quality.toLowerCase()) {
+      case 'legendary': return '#a855f7'; // Purple
+      case 'masterwork': return '#f59e0b'; // Amber
+      case 'excellent': return '#10b981'; // Emerald
+      case 'good': return '#3b82f6'; // Blue
+      case 'normal': return '#6b7280'; // Gray
+      case 'poor': return '#ef4444'; // Red
+      case 'awful': return '#991b1b'; // Dark red
+      default: return '#6b7280'; // Default gray
     }
   }
 

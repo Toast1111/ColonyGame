@@ -60,6 +60,15 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
   if ((tgt as Building).w) {
     const b = tgt as Building; if (game.pointInRect(e as any, b)) b.hp -= e.dmg * dt; if (b.hp <= 0) { if (b.kind === 'hq') { game.lose(); } else { game.evictColonistsFrom(b); (game.buildings as Building[]).splice((game.buildings as Building[]).indexOf(b), 1); game.msg((b.name || b.kind) + ' destroyed', 'warn'); } }
   } else {
-    const c = tgt as Colonist; const d = Math.hypot(e.x - c.x, e.y - c.y); if (d < e.r + 8) { c.hp -= e.dmg * dt; if (c.hp <= 0) { c.alive = false; (game.colonists as Colonist[]).splice((game.colonists as Colonist[]).indexOf(c), 1); game.msg('A colonist has fallen', 'warn'); } }
+    const c = tgt as Colonist; const d = Math.hypot(e.x - c.x, e.y - c.y);
+    if (d < e.r + 8) {
+      // Apply armor-aware damage
+      if (typeof (game as any).applyDamageToColonist === 'function') {
+        (game as any).applyDamageToColonist(c, e.dmg * dt);
+      } else {
+        c.hp -= e.dmg * dt;
+      }
+      if (c.hp <= 0) { c.alive = false; (game.colonists as Colonist[]).splice((game.colonists as Colonist[]).indexOf(c), 1); game.msg('A colonist has fallen', 'warn'); }
+    }
   }
 }
