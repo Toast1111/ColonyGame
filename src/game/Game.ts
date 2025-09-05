@@ -16,6 +16,7 @@ import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, pla
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
+import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 
 export class Game {
@@ -883,6 +884,18 @@ export class Game {
     this.buildHQ();
     this.scatter();
   for (let i = 0; i < 3; i++) { const a = rand(0, Math.PI * 2); const r = 80 + rand(-10, 10); this.spawnColonist({ x: HQ_POS.x + Math.cos(a) * r, y: HQ_POS.y + Math.sin(a) * r }); }
+    // Post-process: ensure at least one starting colonist has a ranged weapon
+    const hasAnyRanged = this.colonists.some(c => c.inventory?.equipment?.weapon && (c.inventory!.equipment!.weapon!.defName === 'Pistol' || c.inventory!.equipment!.weapon!.defName === 'Rifle'));
+    if (!hasAnyRanged && this.colonists.length) {
+      const c = this.colonists[0];
+      const pistol = itemDatabase.createItem('Pistol', 1, 'normal');
+      if (pistol) {
+        if (!c.inventory) c.inventory = { items: [], equipment: {}, carryCapacity: 50, currentWeight: 0 };
+        c.inventory.equipment.weapon = pistol;
+        this.recalcInventoryWeight(c);
+        this.msg(`${c.profile?.name || 'Colonist'} starts with a pistol for defense.`, 'info');
+      }
+    }
     this.msg("Welcome! Build farms before night, then turrets.");
   }
 
@@ -1333,7 +1346,11 @@ export class Game {
       this.camera.y = clamp(c.y - vh / 2, 0, Math.max(0, WORLD.h - vh));
     }
     this.dayTick(dt);
-  for (const c of this.colonists) { if (c.alive) updateColonistFSM(this, c, dt * this.fastForward); }
+  for (const c of this.colonists) { if (c.alive) {
+      // RimWorld-like pawn combat runs before FSM so states can react to being in combat
+      updateColonistCombat(this, c, dt * this.fastForward);
+      updateColonistFSM(this, c, dt * this.fastForward);
+    } }
   for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; updateEnemyFSM(this, e, dt * this.fastForward); if (e.hp <= 0) { this.enemies.splice(i, 1); if (Math.random() < .5) this.RES.food += 1; } }
     for (const b of this.buildings) {
       if (b.kind === 'turret' && b.done) this.updateTurret(b, dt * this.fastForward);
