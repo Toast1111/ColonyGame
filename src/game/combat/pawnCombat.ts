@@ -27,9 +27,34 @@ function lineIntersectsRect(x1: number, y1: number, x2: number, y2: number, r: {
 function hasLineOfFire(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): boolean {
   for (const b of game.buildings) {
     if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
+    const fromInside = from.x >= b.x && from.x <= b.x + b.w && from.y >= b.y && from.y <= b.y + b.h;
+    if (fromInside) continue;
     if (lineIntersectsRect(from.x, from.y, to.x, to.y, b)) return false;
   }
   return true;
+}
+
+function segmentIntersectsCircle(x1: number, y1: number, x2: number, y2: number, cx: number, cy: number, r: number): boolean {
+  const dx = x2 - x1, dy = y2 - y1;
+  const fx = x1 - cx, fy = y1 - cy;
+  const a = dx*dx + dy*dy;
+  const b = 2 * (fx*dx + fy*dy);
+  const c = fx*fx + fy*fy - r*r;
+  let disc = b*b - 4*a*c;
+  if (disc < 0) return false;
+  disc = Math.sqrt(disc);
+  const t1 = (-b - disc) / (2*a);
+  const t2 = (-b + disc) / (2*a);
+  return (t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1);
+}
+
+function willHitFriendly(game: Game, from: { x: number; y: number }, to: { x: number; y: number }, self: Colonist): boolean {
+  for (const f of game.colonists) {
+    if (f === self || !f.alive || f.inside) continue;
+    const r = (f.r || 8) + 6; // small safety margin
+    if (segmentIntersectsCircle(from.x, from.y, to.x, to.y, f.x, f.y, r)) return true;
+  }
+  return false;
 }
 
 function coverPenalty(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): number {
@@ -128,6 +153,19 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   const dist = Math.hypot(target.x - c.x, target.y - c.y);
   if (dist > stats.rangePx * 1.1) { (c as any).combatTarget = null; return; }
 
+  // Too close for ranged? Switch to a quick melee strike
+  if (dist <= stats.minRangePx) {
+    (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
+    if (((c as any).meleeCd || 0) <= 0) {
+      const meleeDmg = Math.max(8, Math.round(stats.damage * 0.6));
+      target.hp -= meleeDmg;
+      (c as any).meleeCd = 0.9;
+      // Small cooldown before resuming ranged
+      (c as any).fireCooldown = Math.max((c as any).fireCooldown || 0, 0.3);
+    }
+    return;
+  }
+
   // Wait for warmup
   if (((c as any).warmup || 0) > 0) return;
 
@@ -151,6 +189,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   const aimAng = ang + (Math.random() - 0.5) * maxSpread;
   const ax = c.x + Math.cos(aimAng) * dist;
   const ay = c.y + Math.sin(aimAng) * dist;
+
+  // Simple friendly-fire avoidance: skip shot if a colonist is in the line
+  if (willHitFriendly(game, c, { x: ax, y: ay }, c)) {
+    (c as any).betweenShots = Math.max((c as any).betweenShots || 0, 0.15);
+    return;
+  }
 
   const bullet: any = {
     x: c.x, y: c.y, tx: ax, ty: ay,

@@ -31,6 +31,9 @@ function hasLineOfFire(game: Game, from: { x: number; y: number }, to: { x: numb
   for (const b of game.buildings) {
     // Allow shooting through HQ, paths, houses, and farms (soft cover only); block by walls and finished solids
     if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
+    // If the shooter is inside this building (e.g., a turret), ignore this rectangle for LoS
+    const fromInside = from.x >= b.x && from.x <= b.x + b.w && from.y >= b.y && from.y <= b.y + b.h;
+    if (fromInside) continue;
     if (lineIntersectsRect(from.x, from.y, to.x, to.y, b)) return false;
   }
   return true;
@@ -64,8 +67,12 @@ export function updateTurret(game: Game, b: Building, dt: number) {
   const fireRate = (b as any).fireRate || 0.6;
   const dps = (b as any).dps || 12;
 
-  // Acquire target with LoS
-  const target = pickTarget(game, bc, range);
+  // Target persistence to reduce thrashing
+  let target: Enemy | null = (b as any).target || null;
+  if (!target || target.hp <= 0 || Math.hypot(target.x - bc.x, target.y - bc.y) > range || !hasLineOfFire(game, bc, target)) {
+    target = pickTarget(game, bc, range);
+    (b as any).target = target || null;
+  }
   if (!target) return;
 
   if (((b as any).cooldown || 0) <= 0) {
@@ -104,7 +111,7 @@ export function updateTurret(game: Game, b: Building, dt: number) {
     const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang);
     game.particles.push(...muzzleFlash);
     (b as any).flashTimer = 0.08;
-    (b as any).cooldown = fireRate;
+  (b as any).cooldown = fireRate;
   }
 }
 
@@ -124,6 +131,9 @@ export function updateProjectiles(game: Game, dt: number) {
       let hitBlocked = false;
       for (const bl of game.buildings) {
         if (bl.kind === 'hq' || bl.kind === 'path' || bl.kind === 'house' || bl.kind === 'farm' || !bl.done) continue;
+        // If projectile originates inside this building (e.g., fired from a turret), ignore this building for this step
+        const prevInside = prevX >= bl.x && prevX <= bl.x + bl.w && prevY >= bl.y && prevY <= bl.y + bl.h;
+        if (prevInside) continue;
         if (lineIntersectsRect(prevX, prevY, b.x, b.y, bl)) { hitBlocked = true; break; }
       }
 

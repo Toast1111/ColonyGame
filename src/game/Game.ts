@@ -18,6 +18,7 @@ import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
+import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -155,6 +156,8 @@ export class Game {
     
     // Initialize item database
     itemDatabase.loadItems();
+  // Init debug console
+  initDebugConsole(this);
     
     requestAnimationFrame(this.frame);
   }
@@ -541,6 +544,9 @@ export class Game {
       this.clampCameraToWorld();
     });
   window.addEventListener('keydown', (e) => { 
+    // If debug console is open, don't process game keybinds here
+    const dc = (this as any).debugConsole;
+    if (dc && dc.open) return;
     const k = (e as KeyboardEvent).key.toLowerCase(); 
     this.keyState[k] = true; 
     if (!this.once.has(k)) this.once.add(k); 
@@ -550,7 +556,17 @@ export class Game {
       e.preventDefault();
     }
   });
-    window.addEventListener('keyup', (e) => { this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; });
+    window.addEventListener('keyup', (e) => { 
+      const dc = (this as any).debugConsole; if (dc && dc.open) return;
+      this.keyState[(e as KeyboardEvent).key.toLowerCase()] = false; 
+    });
+    window.addEventListener('keydown', (e) => {
+      // Backquote toggles console; if open, route keys to console and stop propagation
+      const ke = e as KeyboardEvent;
+      if (ke.key === '`' || (ke.code === 'Backquote')) { e.preventDefault(); toggleDebugConsole(this); return; }
+      const handled = handleDebugConsoleKey(this, e as KeyboardEvent);
+      if (handled) { e.preventDefault(); e.stopPropagation(); }
+    });
     
     // Unified touch input: pan, pinch-zoom, and tap/select/place
     c.addEventListener('touchstart', (e) => {
@@ -1315,18 +1331,21 @@ export class Game {
   }
   keyPressed(k: string) { if (this.once.has(k)) { this.once.delete(k); return true; } return false; }
   update(dt: number) {
+    // If debug console is open, ignore gameplay hotkeys (space, etc.)
+    const dc = (this as any).debugConsole;
+    const consoleOpen = !!(dc && dc.open);
     // Handle toggles even when paused
-    if (this.keyPressed(' ')) { this.paused = !this.paused; const btn = document.getElementById('btnPause'); if (btn) btn.textContent = this.paused ? 'Resume' : 'Pause'; }
-    if (this.keyPressed('h')) { const help = document.getElementById('help'); if (help) help.hidden = !help.hidden; }
-  if (this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
-    if (this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
-    if (this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
-    if (this.keyPressed('k')) { 
+    if (!consoleOpen && this.keyPressed(' ')) { this.paused = !this.paused; const btn = document.getElementById('btnPause'); if (btn) btn.textContent = this.paused ? 'Resume' : 'Pause'; }
+    if (!consoleOpen && this.keyPressed('h')) { const help = document.getElementById('help'); if (help) help.hidden = !help.hidden; }
+  if (!consoleOpen && this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
+    if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
+    if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
+    if (!consoleOpen && this.keyPressed('k')) { 
       this.debug.forceDesktopMode = !this.debug.forceDesktopMode; 
       this.toast(this.debug.forceDesktopMode ? 'Debug: Force Desktop Mode ON' : 'Debug: Force Desktop Mode OFF'); 
     }
-  if (this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
-    if (this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
+  if (!consoleOpen && this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
+    if (!consoleOpen && this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
     
     // Camera movement (works even when paused)
     const camSpd = 360 * dt / this.camera.zoom;
@@ -1447,6 +1466,21 @@ export class Game {
       ctx.restore();
     }
   for (const c of this.colonists) { if (!c.inside && c.alive) drawColonistAvatar(ctx, c.x, c.y, c, c.r, this.selColonist === c); }
+
+  // Optional: combat debug visuals
+  if ((this.debug as any).combat) {
+    ctx.save();
+    ctx.strokeStyle = '#fca5a5';
+    ctx.globalAlpha = 0.6;
+    for (const b of this.buildings) {
+      if (b.kind !== 'turret' || !b.done) continue;
+      const c = this.centerOf(b);
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, (b as any).range || 160, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   
   // Draw long press progress circle
   this.drawLongPressProgress();
@@ -1595,6 +1629,8 @@ export class Game {
       ctx.restore();
     }
 
+  // Draw debug console overlay last in screen space
+  drawDebugConsole(this);
     // Detailed colonist debug information
     if (this.debug.colonists) {
       ctx.save();
