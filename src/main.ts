@@ -2,7 +2,78 @@ import { Game } from "./game/Game";
 import { BUILD_TYPES } from "./game/buildings";
 import { ImageAssets } from "./assets/images";
 
-const canvas = document.getElementById('game') as HTMLCanvasElement;
+// Simple in-app error overlay for mobile (iPad) where dev tools are limited
+function setupErrorOverlay() {
+  const existing = document.getElementById('error-overlay');
+  if (existing) return;
+  const el = document.createElement('div');
+  el.id = 'error-overlay';
+  el.style.cssText = [
+    'position:fixed',
+    'inset:0 auto auto 0',
+    'max-width:100%',
+    'z-index:99999',
+    'background:rgba(8,8,10,0.82)',
+    'color:#fee2e2',
+    'font:12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+    'padding:10px',
+    'overflow:auto',
+    'display:none',
+    'white-space:pre-wrap',
+    'pointer-events:auto'
+  ].join(';');
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+  const title = document.createElement('strong');
+  title.textContent = 'Errors';
+  const btn = document.createElement('button');
+  btn.textContent = 'Dismiss';
+  btn.style.cssText = 'margin-left:auto;background:#ef4444;color:white;border:none;border-radius:4px;padding:4px 8px;';
+  btn.onclick = () => { el.style.display = 'none'; el.innerHTML = ''; el.appendChild(header); header.appendChild(title); header.appendChild(btn); };
+  header.appendChild(title);
+  header.appendChild(btn);
+  el.appendChild(header);
+  document.body.appendChild(el);
+
+  const show = (msg: string) => {
+    el.style.display = 'block';
+    const p = document.createElement('div');
+    p.textContent = msg;
+    el.appendChild(p);
+  };
+  (window as any).__showErrorOverlay = show;
+
+  window.addEventListener('error', (ev) => {
+    const m = ev?.error?.stack || ev?.message || String(ev);
+    show(`[error] ${m}`);
+  });
+  window.addEventListener('unhandledrejection', (ev: PromiseRejectionEvent) => {
+    const reason: any = ev.reason;
+    const m = (reason && (reason.stack || reason.message)) || String(reason);
+    show(`[unhandledrejection] ${m}`);
+  });
+}
+
+// Initialize error overlay immediately
+setupErrorOverlay();
+
+// Mirror console errors/warnings to overlay for visibility on mobile
+(() => {
+  const show = (window as any).__showErrorOverlay as undefined | ((m: string) => void);
+  if (!show) return;
+  const origError = console.error.bind(console);
+  const origWarn = console.warn.bind(console);
+  console.error = (...args: any[]) => {
+    try { show(`[console.error] ${args.map(a => (a && (a.stack || a.message)) ? (a.stack || a.message) : String(a)).join(' ')}`); } catch {}
+    origError(...args);
+  };
+  console.warn = (...args: any[]) => {
+    try { show(`[console.warn] ${args.map(a => (a && (a.stack || a.message)) ? (a.stack || a.message) : String(a)).join(' ')}`); } catch {}
+    origWarn(...args);
+  };
+})();
+
+let canvas: HTMLCanvasElement | null = document.getElementById('game') as HTMLCanvasElement | null;
 const btnPause = document.getElementById('btnPause') as HTMLButtonElement | null;
 const btnHelp = document.getElementById('btnHelp') as HTMLButtonElement | null;
 const btnToggleUI = document.getElementById('btnToggleUI') as HTMLButtonElement | null; // may not exist
@@ -34,6 +105,14 @@ if (helpEl) {
 
 // Initialize game and load assets
 async function initGame() {
+  // Ensure canvas exists before anything else
+  canvas = document.getElementById('game') as HTMLCanvasElement | null;
+  if (!canvas) {
+    const show = (window as any).__showErrorOverlay as undefined | ((m: string) => void);
+    const msg = 'Fatal: Canvas element with id "game" not found in DOM.';
+    show?.(msg);
+    throw new Error(msg);
+  }
   // Show loading message
   const ctx = canvas.getContext('2d');
   if (ctx) {
@@ -52,6 +131,8 @@ async function initGame() {
     console.log('House image loaded:', !!ImageAssets.getInstance().getImage('house'));
   } catch (error) {
     console.warn('Some assets failed to load:', error);
+    const show = (window as any).__showErrorOverlay as undefined | ((m: string) => void);
+    show?.('Warning: some assets failed to load. See console for details.');
   }
 
   // Create game instance
@@ -134,4 +215,20 @@ if (btnBlueprint) {
 }
 
 // Start the game
-initGame();
+try {
+  const p = initGame();
+  // Also surface rejected promise explicitly (in addition to unhandledrejection)
+  if (p && typeof (p as any).catch === 'function') {
+    (p as Promise<void>).catch((e) => {
+      const show = (window as any).__showErrorOverlay as undefined | ((m: string) => void);
+      const msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+      show?.(`[init] ${msg}`);
+      console.error(e);
+    });
+  }
+} catch (e: any) {
+  const show = (window as any).__showErrorOverlay as undefined | ((m: string) => void);
+  const msg = (e && (e.stack || e.message)) ? (e.stack || e.message) : String(e);
+  show?.(`[init-sync] ${msg}`);
+  console.error(e);
+}
