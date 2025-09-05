@@ -45,7 +45,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     name: 'Wall', 
     description: 'Blocks enemy movement. Essential for creating defensive perimeters.',
     key: '4', 
-    cost: { wood: 5, stone: 5 }, 
+    cost: { wood: 1, stone: 0 }, 
     hp: 150, 
     size: { w: 1, h: 1 }, 
     build: 40, 

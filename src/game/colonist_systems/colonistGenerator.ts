@@ -330,6 +330,19 @@ function generateStartingInventory(rng: SeededRandom, background: string, skills
     }
   }
 
+  // Soft guarantee: Non-soldiers sometimes get a pistol. This increases chances
+  // that early colonies have at least one ranged weapon without forcing it.
+  const bgl = background.toLowerCase();
+  const hasWeapon = !!inventory.equipment.weapon;
+  const hasRanged = hasWeapon && (inventory.equipment.weapon?.defName === 'Pistol' || inventory.equipment.weapon?.defName === 'Rifle');
+  if (!hasRanged && bgl !== 'soldier') {
+    // ~35% chance to receive a pistol as starting gear
+    if (rng.next() < 0.35) {
+      const pistol = itemDatabase.createItem('Pistol', 1, getRandomQuality(rng));
+      if (pistol) inventory.equipment.weapon = pistol;
+    }
+  }
+
   // Calculate total weight
   let totalWeight = 0;
   for (const item of inventory.items) {
