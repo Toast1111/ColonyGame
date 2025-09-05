@@ -14,7 +14,8 @@ import { drawContextMenu as drawContextMenuUI, showContextMenu as showContextMen
 import { drawPlacementUI as drawPlacementUIUI } from "./ui/placement";
 import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
-import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles, drawParticles } from "../core/particles";
+import { drawParticles } from "../core/particles";
+import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { itemDatabase } from '../data/itemDatabase';
 
 export class Game {
@@ -1241,42 +1242,7 @@ export class Game {
   // Enemies & combat
   centerOf(b: Building) { return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; }
   pointInRect(p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) { return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; }
-  updateTurret(b: Building, dt: number) {
-    if (!('range' in b) || !(b as any).range) return; 
-    b.cooldown = Math.max(0, (b.cooldown || 0) - dt);
-    
-    // Update flash timer
-    if ('flashTimer' in b) {
-      (b as any).flashTimer = Math.max(0, ((b as any).flashTimer || 0) - dt);
-    }
-    
-    let best: Enemy | null = null, bestD = 1e9; 
-    const bc = this.centerOf(b);
-    for (const e of this.enemies) { 
-      const d = dist2(e as any, bc as any); 
-      if (d < (b as any).range * (b as any).range && d < bestD) { 
-        bestD = d; best = e; 
-      } 
-    }
-    if (best && (b.cooldown || 0) <= 0) { 
-      best.hp -= ((b as any).dps || 0); 
-      
-      // Create bullet with particle trail
-      const bullet: Bullet = { x: bc.x, y: bc.y, tx: best.x, ty: best.y, t: .12 };
-      bullet.particles = createProjectileTrail(bullet);
-      this.bullets.push(bullet);
-      
-      // Create muzzle flash particles
-      const angle = Math.atan2(best.y - bc.y, best.x - bc.x);
-      const muzzleFlash = createMuzzleFlash(bc.x, bc.y, angle);
-      this.particles.push(...muzzleFlash);
-      
-      // Add flash effect to turret
-      (b as any).flashTimer = 0.08;
-      
-      b.cooldown = (b as any).fireRate || 0.6; 
-    }
-  }
+  updateTurret(b: Building, dt: number) { updateTurretCombat(this, b, dt); }
 
   // Day/Night & waves
   isNight() { return (this.tDay >= NIGHT_SPAN.start || this.tDay <= NIGHT_SPAN.end); }
@@ -1416,30 +1382,7 @@ export class Game {
     // resource respawn
     this.tryRespawn(dt);
     
-    // Update bullets and create impact particles when they expire
-    for (let i = this.bullets.length - 1; i >= 0; i--) { 
-      const b = this.bullets[i]; 
-      b.t -= dt; 
-      
-      // Update bullet's own particles
-      if (b.particles) {
-        b.particles = updateParticles(b.particles, dt);
-        // Remove empty particle arrays
-        if (b.particles && b.particles.length === 0) {
-          delete b.particles;
-        }
-      }
-      
-      if (b.t <= 0) { 
-        // Create impact particles at target location
-        const impact = createImpactEffect(b.tx, b.ty);
-        this.particles.push(...impact);
-        this.bullets.splice(i, 1); 
-      }
-    }
-    
-    // Update global particles
-    this.particles = updateParticles(this.particles, dt);
+  updateProjectilesCombat(this, dt);
     
     for (let i = this.messages.length - 1; i >= 0; i--) { const m = this.messages[i]; m.t -= dt; if (m.t <= 0) this.messages.splice(i, 1); }
   }
