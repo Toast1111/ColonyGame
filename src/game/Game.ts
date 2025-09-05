@@ -1,13 +1,19 @@
 
 import { clamp, dist2, rand, randi } from "../core/utils";
-import { aStar, clearGrid, makeGrid, markRectSolid, markCircleSolid, markRoadPath, ROAD_COSTS, updateDirtySections } from "../core/pathfinding";
+import { makeGrid } from "../core/pathfinding";
+import { rebuildNavGrid as rebuildNavGridNav, computePath as computePathNav, computePathWithDangerAvoidance as computePathWithDangerAvoidanceNav, cellIndexAt as cellIndexAtNav, isBlocked as isBlockedNav } from "./navigation/navGrid";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
-import { BUILD_TYPES, hasCost, makeBuilding, payCost, groupByCategory } from "./buildings";
+import { BUILD_TYPES, hasCost } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
-import { generateColonistProfile, getColonistDescription, getColonistMood } from "./colonist_systems/colonistGenerator";
+import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
+import { drawColonistProfile as drawColonistProfileUI } from "./ui/colonistProfile";
+import { drawContextMenu as drawContextMenuUI, showContextMenu as showContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
+import { drawPlacementUI as drawPlacementUIUI } from "./ui/placement";
+import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
+import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles, drawParticles } from "../core/particles";
 import { itemDatabase } from '../data/itemDatabase';
 
@@ -466,7 +472,7 @@ export class Game {
           }
         }
         
-        if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+  if (this.showBuildMenu) { handleBuildMenuClickUI(this); return; }
         
         // Check for erase mode (set by mobile erase button)
         if ((window as any)._eraseOnce) {
@@ -491,7 +497,7 @@ export class Game {
         // Check for colonist context menu
         const clickedColonist = this.findColonistAt(this.mouse.wx, this.mouse.wy);
         if (clickedColonist) {
-          this.showContextMenu(clickedColonist, this.mouse.x, this.mouse.y);
+          showContextMenuUI(this, clickedColonist, this.mouse.x, this.mouse.y);
           return;
         }
         
@@ -565,7 +571,7 @@ export class Game {
           this.longPressTarget = clickedColonist;
           
           this.longPressTimer = window.setTimeout(() => {
-            this.showContextMenu(clickedColonist, sx, sy);
+            showContextMenuUI(this, clickedColonist, sx, sy);
             // Provide haptic feedback if available
             if (navigator.vibrate) {
               navigator.vibrate(50);
@@ -793,7 +799,7 @@ export class Game {
     }
 
     // Build menu click
-    if (this.showBuildMenu) { this.handleBuildMenuClick(); return; }
+  if (this.showBuildMenu) { handleBuildMenuClickUI(this); return; }
 
     // Check for erase mode (set by mobile erase button)
     if ((window as any)._eraseOnce) {
@@ -902,196 +908,26 @@ export class Game {
   }
 
   // Placement
-  canPlace(def: Building, x: number, y: number) {
-    const w = (def as any).w ?? def.size.w * T;
-    const h = (def as any).h ?? def.size.h * T;
-    const rect = { x, y, w, h };
-    if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > WORLD.w || rect.y + rect.h > WORLD.h) return false;
-    for (const b of this.buildings) { if (!(rect.x + rect.w <= b.x || rect.x >= b.x + b.w || rect.y + rect.h <= b.y || rect.y >= b.y + b.h)) return false; }
-    const circleRectOverlap = (c: { x: number; y: number; r: number }, r: { x: number; y: number; w: number; h: number }) => {
-      const cx = Math.max(r.x, Math.min(c.x, r.x + r.w)); const cy = Math.max(r.y, Math.min(c.y, r.y + r.h)); const dx = c.x - cx, dy = c.y - cy; return (dx * dx + dy * dy) <= (c.r * c.r);
-    };
-    for (const t of this.trees) { if (circleRectOverlap(t, rect)) return false; }
-    for (const r of this.rocks) { if (circleRectOverlap(r, rect)) return false; }
-    return true;
-  }
-  placeAtMouse() {
-    if (this.paused) return; const t = this.selectedBuild; if (!t) return; const def = BUILD_TYPES[t]; if (!def) return;
-    // Touch devices: start precise placement mode (only if actually using touch and not forced desktop mode)
-    if (!this.debug.forceDesktopMode && this.isActuallyTouchDevice && this.lastInputWasTouch) {
-      // Snap to grid upper-left corner
-      const gx = Math.floor(this.mouse.wx / T) * T;
-      const gy = Math.floor(this.mouse.wy / T) * T;
-  this.pendingPlacement = { key: t, x: gx, y: gy, rot: 0 };
-      return;
-    }
-    // Desktop: immediate placement
-    this.tryPlaceNow(t, this.mouse.wx, this.mouse.wy);
-  }
+  placeAtMouse() { placeAtMousePlacement(this); }
 
-  private tryPlaceNow(t: keyof typeof BUILD_TYPES, wx: number, wy: number, rot?: 0|90|180|270) {
-    const def = BUILD_TYPES[t]; if (!def) return;
-    const b = makeBuilding(t, wx, wy);
-    if (rot) { (b as any).rot = rot; if (rot === 90 || rot === 270) { const tmp = b.w; b.w = b.h; b.h = tmp; } }
-    if (!this.canPlace(b as any, b.x, b.y)) { this.toast("Can't place here"); return; }
-    if (!hasCost(this.RES, def.cost)) { this.toast('Not enough resources'); return; }
-    payCost(this.RES, def.cost);
-    if (b.kind !== 'path') {
-      for (let i = this.buildings.length - 1; i >= 0; i--) {
-        const pb = this.buildings[i];
-        if (pb.kind === 'path') {
-          const overlap = !(b.x + b.w <= pb.x || b.x >= pb.x + pb.w || b.y + b.h <= pb.y || b.y >= pb.y + pb.h);
-          if (overlap) this.buildings.splice(i, 1);
-        }
-      }
-    }
-    this.buildings.push(b); this.rebuildNavGrid();
-  }
+  private tryPlaceNow(t: keyof typeof BUILD_TYPES, wx: number, wy: number, rot?: 0|90|180|270) { tryPlaceNowPlacement(this, t, wx, wy, rot); }
 
-  nudgePending(dx: number, dy: number) {
-    if (!this.pendingPlacement) return;
-    const def = BUILD_TYPES[this.pendingPlacement.key];
-    const nx = this.pendingPlacement.x + dx * T;
-    const ny = this.pendingPlacement.y + dy * T;
-    // Clamp within world
-  const rot = this.pendingPlacement.rot || 0; const rotated = (rot === 90 || rot === 270);
-  const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
-    this.pendingPlacement.x = clamp(nx, 0, WORLD.w - w);
-    this.pendingPlacement.y = clamp(ny, 0, WORLD.h - h);
-  }
+  nudgePending(dx: number, dy: number) { nudgePendingPlacement(this, dx, dy); }
 
-  rotatePending(delta: -90 | 90) {
-    if (!this.pendingPlacement) return;
-    const def = BUILD_TYPES[this.pendingPlacement.key];
-    const next = (((this.pendingPlacement.rot || 0) + delta + 360) % 360) as 0 | 90 | 180 | 270;
-    this.pendingPlacement.rot = next;
-    // Clamp within world after rotation change
-    const rotated = (next === 90 || next === 270);
-    const w = (rotated ? def.size.h : def.size.w) * T, h = (rotated ? def.size.w : def.size.h) * T;
-    this.pendingPlacement.x = clamp(this.pendingPlacement.x, 0, WORLD.w - w);
-    this.pendingPlacement.y = clamp(this.pendingPlacement.y, 0, WORLD.h - h);
-  }
+  rotatePending(delta: -90 | 90) { rotatePendingPlacement(this, delta); }
 
-  confirmPending() {
-    if (!this.pendingPlacement) return;
-    const { key, x, y, rot } = this.pendingPlacement;
-  const def = BUILD_TYPES[key];
-  const b = makeBuilding(key, x + 1, y + 1);
-  if (rot) { (b as any).rot = rot; if (rot === 90 || rot === 270) { const tmp = b.w; b.w = b.h; b.h = tmp; } }
-  // Validate before closing overlay (friendlier UX)
-  const valid = this.canPlace(b as any, b.x, b.y) && hasCost(this.RES, def.cost);
-  if (!valid) { this.toast("Can't place here"); return; }
-  this.pendingPlacement = null;
-  this.tryPlaceNow(key, x + 1, y + 1, rot);
-  }
+  confirmPending() { confirmPendingPlacement(this); }
 
-  cancelPending() { this.pendingPlacement = null; }
+  cancelPending() { cancelPendingPlacement(this); }
 
-  paintPathAtMouse(force = false) {
-    const gx = Math.floor(this.mouse.wx / T); const gy = Math.floor(this.mouse.wy / T);
-    if (!force && this.lastPaintCell && this.lastPaintCell.gx === gx && this.lastPaintCell.gy === gy) return;
-    const cellToWorld = (x: number, y: number) => ({ x: x * T, y: y * T });
-    const tryPlace = (x: number, y: number) => {
-      const wx = x * T + 1, wy = y * T + 1; // slight offset to choose the cell
-      const b = makeBuilding('path' as any, wx, wy);
-      
-      // Avoid duplicates on same tile
-      const exists = this.buildings.some(pb => pb.kind === 'path' && pb.x === b.x && pb.y === b.y);
-      if (exists) return;
-      
-      // Check for overlap with non-path buildings (prevent paths through buildings)
-      const overlapsBuilding = this.buildings.some(pb => {
-        if (pb.kind === 'path') return false; // Paths can overlap other paths
-        const overlap = !(b.x + b.w <= pb.x || b.x >= pb.x + pb.w || b.y + b.h <= pb.y || b.y >= pb.y + pb.h);
-        return overlap;
-      });
-      
-      if (!overlapsBuilding && hasCost(this.RES, BUILD_TYPES['path'].cost)) { 
-        payCost(this.RES, BUILD_TYPES['path'].cost); 
-        this.buildings.push(b); 
-      }
-    };
-    if (this.lastPaintCell == null) {
-      tryPlace(gx, gy);
-      this.lastPaintCell = { gx, gy };
-      this.rebuildNavGrid();
-      return;
-    }
-    // Bresenham between last cell and current
-    let x0 = this.lastPaintCell.gx, y0 = this.lastPaintCell.gy, x1 = gx, y1 = gy;
-    const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-    const sx = x0 < x1 ? 1 : -1; const sy = y0 < y1 ? 1 : -1;
-    let err = dx - dy;
-    while (true) {
-      tryPlace(x0, y0);
-      if (x0 === x1 && y0 === y1) break;
-      const e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; }
-    }
-    this.lastPaintCell = { gx, gy };
-    this.rebuildNavGrid();
-  }
+  paintPathAtMouse(force = false) { paintPathAtMousePlacement(this, force); }
 
-  paintWallAtMouse(force = false) {
-    const gx = Math.floor(this.mouse.wx / T); const gy = Math.floor(this.mouse.wy / T);
-    if (!force && this.lastPaintCell && this.lastPaintCell.gx === gx && this.lastPaintCell.gy === gy) return;
-    const tryPlace = (x: number, y: number) => {
-      const wx = x * T + 1, wy = y * T + 1;
-      const b = makeBuilding('wall' as any, wx, wy);
-      // avoid duplicates on same tile
-      const exists = this.buildings.some(pb => pb.kind === 'wall' && pb.x === b.x && pb.y === b.y);
-      if (exists) return;
-      if (!hasCost(this.RES, BUILD_TYPES['wall'].cost)) return;
-      if (!this.canPlace(b as any, b.x, b.y)) return;
-      payCost(this.RES, BUILD_TYPES['wall'].cost);
-      this.buildings.push(b);
-    };
-    if (this.lastPaintCell == null) {
-      tryPlace(gx, gy); this.lastPaintCell = { gx, gy }; this.rebuildNavGrid(); return;
-    }
-    let x0 = this.lastPaintCell.gx, y0 = this.lastPaintCell.gy, x1 = gx, y1 = gy;
-    const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-    const sx = x0 < x1 ? 1 : -1; const sy = y0 < y1 ? 1 : -1;
-    let err = dx - dy;
-    while (true) {
-      tryPlace(x0, y0);
-      if (x0 === x1 && y0 === y1) break;
-      const e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; }
-    }
-    this.lastPaintCell = { gx, gy }; this.rebuildNavGrid();
-  }
+  paintWallAtMouse(force = false) { paintWallAtMousePlacement(this, force); }
 
-  eraseInRect(rect: { x: number; y: number; w: number; h: number }) {
-    const before = this.buildings.length;
-    for (let i = this.buildings.length - 1; i >= 0; i--) {
-      const b = this.buildings[i]; if (b.kind === 'hq') continue;
-      const overlap = !(rect.x + rect.w <= b.x || rect.x >= b.x + b.w || rect.y + rect.h <= b.y || rect.y >= b.y + b.h);
-  if (overlap) { this.evictColonistsFrom(b); this.buildings.splice(i, 1); this.buildReservations.delete(b); this.insideCounts.delete(b); }
-    }
-    const removed = before - this.buildings.length;
-    if (removed > 0) { this.msg(`Removed ${removed} structure(s)`); this.rebuildNavGrid(); }
-  }
-  cancelOrErase() {
-    const pos = { x: this.mouse.wx, y: this.mouse.wy };
-  for (let i = this.buildings.length - 1; i >= 0; i--) { const b = this.buildings[i]; if (b.kind === 'hq') continue; if (pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h) { this.evictColonistsFrom(b); this.buildings.splice(i, 1); this.msg('Building removed'); this.rebuildNavGrid(); return; } }
-    this.selectedBuild = null; this.toast('Build canceled');
-  }
+  eraseInRect(rect: { x: number; y: number; w: number; h: number }) { eraseInRectPlacement(this, rect); }
+  cancelOrErase() { cancelOrErasePlacement(this); }
 
-  evictColonistsFrom(b: Building) {
-    // Move any colonists hiding inside to just outside the footprint
-    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    for (const c of this.colonists) {
-      if (c.inside === b) {
-  this.leaveBuilding(c);
-  c.safeTarget = null; c.safeTimer = 0;
-        // place them near the building edge
-        const angle = Math.random() * Math.PI * 2;
-        const rx = (b.w / 2 + 10) * Math.cos(angle);
-        const ry = (b.h / 2 + 10) * Math.sin(angle);
-        c.x = clamp(cx + rx, 0, WORLD.w);
-        c.y = clamp(cy + ry, 0, WORLD.h);
-      }
-    }
-  }
+  evictColonistsFrom(b: Building) { evictColonistsFromPlacement(this, b); }
 
   // AI
   assignedTargets = new WeakSet<object>();
@@ -1912,7 +1748,7 @@ export class Game {
   if (this.selectedBuild && !this.pendingPlacement) {
       const def = BUILD_TYPES[this.selectedBuild];
   const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
-  const can = this.canPlace({ ...def, size: def.size } as any, gx, gy) && hasCost(this.RES, def.cost);
+  const can = canPlacePlacement(this, { ...def, size: def.size } as any, gx, gy) && hasCost(this.RES, def.cost);
   ctx.globalAlpha = .6; ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88'; ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T); ctx.globalAlpha = 1;
     }
     // right-drag erase rectangle overlay
@@ -1941,11 +1777,11 @@ export class Game {
     messages: this.messages,
     storage: { used: storageUsed, max: storageMax }
   }, this);
-  if (this.selColonist) this.drawColonistProfile(this.selColonist);
+  if (this.selColonist) drawColonistProfileUI(this, this.selColonist);
   else { this.colonistPanelRect = this.colonistPanelCloseRect = null; }
-  if (this.showBuildMenu) this.drawBuildMenu();
-  if (this.pendingPlacement) this.drawPlacementUI();
-  if (this.contextMenu) this.drawContextMenu();
+  if (this.showBuildMenu) drawBuildMenuUI(this);
+  if (this.pendingPlacement) drawPlacementUIUI(this);
+  if (this.contextMenu) drawContextMenuUI(this);
   }
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }
@@ -1962,111 +1798,15 @@ export class Game {
 
   // Pathfinding grid and helpers
   grid = makeGrid();
-  rebuildNavGrid() {
-    clearGrid(this.grid);
-    
-    // Mark buildings as obstacles (allow walking inside unfinished sites? keep blocked to avoid overlap)
-    for (const b of this.buildings) {
-      // Block buildings except HQ, paths, houses, and farms (houses are walkable for entry/exit)
-      if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm') {
-        markRectSolid(this.grid, b.x, b.y, b.w, b.h);
-      }
-      // Path tiles reduce traversal cost using proper road cost system
-      if (b.kind === 'path') {
-        markRoadPath(this.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
-      }
-      // Add door tiles for houses to naturally guide approach points
-      if (b.kind === 'house' && b.done) {
-        // Place a fast road tile at the bottom-center of the house (the "door")
-        const doorX = b.x + b.w / 2 - T / 2; // Center horizontally
-        const doorY = b.y + b.h; // Bottom edge
-        markRoadPath(this.grid, doorX, doorY, T, T, 'FAST_ROAD');
-      }
-    }
-    
-    // Mark trees and rocks as obstacles in the grid
-    for (const tree of this.trees) {
-      markCircleSolid(this.grid, tree.x, tree.y, tree.r);
-    }
-    for (const rock of this.rocks) {
-      markCircleSolid(this.grid, rock.x, rock.y, rock.r);
-    }
-  }
-  computePath(sx: number, sy: number, tx: number, ty: number) {
-    return aStar(this.grid, sx, sy, tx, ty);
-  }
+  rebuildNavGrid() { rebuildNavGridNav(this); }
+  computePath(sx: number, sy: number, tx: number, ty: number) { return computePathNav(this, sx, sy, tx, ty); }
   
   // Colonist-aware pathfinding that avoids dangerous areas from memory
-  computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-    const dangerMemory = (c as any).dangerMemory;
-    if (!dangerMemory || !Array.isArray(dangerMemory) || dangerMemory.length === 0) {
-      // No danger memory, use normal pathfinding
-      return aStar(this.grid, sx, sy, tx, ty);
-    }
-    
-    // Temporarily modify grid costs to make dangerous areas expensive
-    const modifiedCosts: Array<{ idx: number; originalCost: number }> = [];
-    
-    for (const mem of dangerMemory) {
-      const timeSinceDanger = c.t - mem.time;
-      if (timeSinceDanger >= 20) continue; // Skip expired memories
-      
-      // Calculate current danger radius (same logic as in nearestSafeCircle)
-      const currentRadius = timeSinceDanger < 5 ? mem.radius : 
-                           timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
-      
-      if (currentRadius <= 0) continue;
-      
-      // Add high cost to grid cells within danger radius
-      const dangCost = 10.0; // Make dangerous areas very expensive to path through
-      const radiusInTiles = Math.ceil(currentRadius / T);
-      const centerGx = Math.floor(mem.x / T);
-      const centerGy = Math.floor(mem.y / T);
-      
-      for (let dy = -radiusInTiles; dy <= radiusInTiles; dy++) {
-        for (let dx = -radiusInTiles; dx <= radiusInTiles; dx++) {
-          const gx = centerGx + dx;
-          const gy = centerGy + dy;
-          
-          if (gx < 0 || gy < 0 || gx >= this.grid.cols || gy >= this.grid.rows) continue;
-          
-          // Check if this tile is within the danger radius
-          const tileWorldX = gx * T + T/2;
-          const tileWorldY = gy * T + T/2;
-          const distanceToTarget = Math.hypot(tileWorldX - mem.x, tileWorldY - mem.y);
-          
-          if (distanceToTarget <= currentRadius) {
-            const idx = gy * this.grid.cols + gx;
-            if (!this.grid.solid[idx]) { // Don't modify solid tiles
-              modifiedCosts.push({ idx, originalCost: this.grid.cost[idx] });
-              this.grid.cost[idx] = dangCost;
-            }
-          }
-        }
-      }
-    }
-    
-    // Compute path with modified costs
-    const path = aStar(this.grid, sx, sy, tx, ty);
-    
-    // Restore original costs
-    for (const mod of modifiedCosts) {
-      this.grid.cost[mod.idx] = mod.originalCost;
-    }
-    
-    return path;
-  }
+  computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) { return computePathWithDangerAvoidanceNav(this, c, sx, sy, tx, ty); }
 
   // Navigation helpers for AI
-  private cellIndexAt(x: number, y: number) {
-    const gx = Math.floor(x / T), gy = Math.floor(y / T);
-    if (gx < 0 || gy < 0 || gx >= this.grid.cols || gy >= this.grid.rows) return -1;
-    return gy * this.grid.cols + gx;
-  }
-  isBlocked(x: number, y: number) {
-    const idx = this.cellIndexAt(x, y);
-    return idx < 0 ? true : !!this.grid.solid[idx];
-  }
+  private cellIndexAt(x: number, y: number) { return cellIndexAtNav(this, x, y); }
+  isBlocked(x: number, y: number) { return isBlockedNav(this, x, y); }
   
   // Check if position is within interaction range of a circle (for direct interaction checks)
   isWithinInteractionRange(x: number, y: number, circle: { x: number; y: number; r: number }, interactDistance: number): boolean {
@@ -2211,683 +1951,10 @@ export class Game {
     return candidates[0];
   }
 
-  // UI: colonist profile panel
-  // UI: colonist profile panel
-  drawColonistProfile(c: Colonist) {
-    const ctx = this.ctx; 
-    const cw = this.canvas.width; 
-    const ch = this.canvas.height; 
-    
-    // Responsive sizing - larger to accommodate tabs
-    const W = Math.min(this.scale(550), cw * 0.65);
-    const H = Math.min(this.scale(450), ch * 0.7);
-    const PAD = this.scale(12);
-    const X = PAD; // Move to left side instead of right (was: cw - W - PAD)
-    const Y = this.scale(54);
-    
-    // Ensure panel doesn't go off screen
-    const finalY = Math.min(Y, ch - H - PAD);
-    
-    ctx.save();
-    ctx.fillStyle = '#0b1220cc'; 
-    ctx.fillRect(X, finalY, W, H);
-    ctx.strokeStyle = '#1e293b'; 
-    ctx.strokeRect(X + .5, finalY + .5, W - 1, H - 1);
+  // UI: colonist profile panel moved to src/game/ui/colonistProfile.ts
 
-    // Close button (top-right of panel)
-    const closeSize = this.scale(26);
-    const closePad = this.scale(8);
-    const closeX = X + W - closePad - closeSize;
-    const closeY = finalY + closePad;
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(closeX, closeY, closeSize, closeSize);
-    ctx.strokeStyle = '#1e293b';
-    ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
-    ctx.fillStyle = '#dbeafe';
-    ctx.font = this.getScaledFont(16, '700');
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + this.scale(1));
-    
-    // Tab navigation
-    const tabHeight = this.scale(32);
-    const tabY = finalY + this.scale(12);
-    const tabs = [
-      { id: 'bio', label: 'Bio', icon: '👤' },
-      { id: 'health', label: 'Health', icon: '❤️' },
-      { id: 'gear', label: 'Gear', icon: '🎒' },
-      { id: 'social', label: 'Social', icon: '👥' },
-      { id: 'stats', label: 'Stats', icon: '📊' },
-      { id: 'log', label: 'Log', icon: '📜' }
-    ];
-    
-    this.colonistTabRects = [];
-    const tabWidth = (W - this.scale(32)) / tabs.length;
-    
-    for (let i = 0; i < tabs.length; i++) {
-      const tab = tabs[i];
-      const tabX = X + this.scale(16) + i * tabWidth;
-      const isActive = this.colonistProfileTab === tab.id;
-      
-      // Tab background
-      ctx.fillStyle = isActive ? '#1e293b' : '#0f172a';
-      ctx.fillRect(tabX, tabY, tabWidth, tabHeight);
-      ctx.strokeStyle = isActive ? '#3b82f6' : '#1e293b';
-      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
-      
-      // Tab label
-      ctx.fillStyle = isActive ? '#60a5fa' : '#9ca3af';
-      ctx.font = this.getScaledFont(10, '600');
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const textY = tabY + tabHeight / 2;
-      ctx.fillText(`${tab.icon} ${tab.label}`, tabX + tabWidth / 2, textY);
-      
-      // Store for hit testing
-      this.colonistTabRects.push({
-        tab: tab.id,
-        x: tabX,
-        y: tabY,
-        w: tabWidth,
-        h: tabHeight
-      });
-    }
-    
-    // Content area
-    const contentY = tabY + tabHeight + this.scale(8);
-    const contentH = H - (contentY - finalY) - this.scale(16);
-    
-    // Draw content based on active tab
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(X + this.scale(8), contentY, W - this.scale(16), contentH);
-    ctx.clip();
-    
-    switch (this.colonistProfileTab) {
-      case 'bio':
-        this.drawBioTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
-        break;
-      case 'health':
-        this.drawHealthTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
-        break;
-      case 'gear':
-        this.drawGearTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
-        break;
-      case 'social':
-        this.drawSocialTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
-        break;
-      case 'stats':
-        this.drawStatsTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
-        break;
-      case 'log':
-        this.drawLogTab(c, X + this.scale(16), contentY, W - this.scale(32), contentH);
-        break;
-    }
-    
-    ctx.restore();
-    
-    ctx.fillStyle = '#4b5563';
-    ctx.font = this.getScaledFont(9);
-    ctx.textAlign = 'left';
-    ctx.fillText(this.follow ? 'Following (Esc to stop)' : 'Click to follow', X + this.scale(16), finalY + H - this.scale(8));
-    
-    // Record panel rects for hit-testing (already in device pixels)
-    this.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
-    this.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
-    ctx.restore();
-  }
 
-  drawBioTab(c: Colonist, x: number, y: number, w: number, h: number) {
-    const ctx = this.ctx;
-    let textY = y + this.scale(8);
-    
-    // Avatar section
-    const avatarSize = this.scale(64);
-    const ax = x + this.scale(8);
-    const ay = textY;
-    
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(ax, ay, avatarSize, avatarSize);
-    ctx.strokeStyle = '#1e293b';
-    ctx.strokeRect(ax + .5, ay + .5, avatarSize - 1, avatarSize - 1);
-    
-    // Draw colonist avatar
-    ctx.save();
-    ctx.translate(ax + avatarSize/2, ay + avatarSize/2);
-    ctx.scale(this.uiScale * 2, this.uiScale * 2);
-    drawColonistAvatar(ctx as any, 0, 0, c, 16, true);
-    ctx.restore();
-    
-    // Basic info next to avatar
-    const profile = c.profile;
-    const infoX = ax + avatarSize + this.scale(16);
-    let infoY = ay + this.scale(8);
-    
-    ctx.fillStyle = '#dbeafe';
-    ctx.font = this.getScaledFont(18, '700');
-    ctx.textAlign = 'left';
-    
-    if (profile) {
-      ctx.fillText(profile.name, infoX, infoY);
-      infoY += this.scale(22);
-      
-      ctx.font = this.getScaledFont(13, '400');
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText(profile.background, infoX, infoY);
-      infoY += this.scale(16);
-      
-      ctx.fillStyle = '#60a5fa';
-      // Use consistent age from profile if available, otherwise fallback to random
-      const age = (profile as any).age || Math.floor(Math.random() * 30) + 20;
-      ctx.fillText(`Age: ${age}`, infoX, infoY);
-      infoY += this.scale(14);
-      
-      // Show birthplace if available
-      if ((profile as any).detailedInfo?.birthplace) {
-        ctx.fillStyle = '#a78bfa';
-        ctx.fillText(`From: ${(profile as any).detailedInfo.birthplace}`, infoX, infoY);
-        infoY += this.scale(14);
-      }
-      
-      ctx.fillStyle = '#fbbf24';
-      ctx.fillText(`Favorite Food: ${profile.favoriteFood}`, infoX, infoY);
-    } else {
-      ctx.fillText('Unnamed Colonist', infoX, infoY);
-      infoY += this.scale(22);
-      ctx.font = this.getScaledFont(13, '400');
-      ctx.fillStyle = '#94a3b8';
-      ctx.fillText('No background available', infoX, infoY);
-    }
-    
-    textY = ay + avatarSize + this.scale(20);
-    
-    // Personality section
-    if (profile && profile.personality.length > 0) {
-      ctx.fillStyle = '#f1f5f9';
-      ctx.font = this.getScaledFont(14, '600');
-      ctx.fillText('Personality Traits', x, textY);
-      textY += this.scale(18);
-      
-      for (const trait of profile.personality) {
-        ctx.fillStyle = '#60a5fa';
-        ctx.font = this.getScaledFont(12, '400');
-        ctx.fillText(`• ${trait}`, x + this.scale(8), textY);
-        textY += this.scale(16);
-      }
-      textY += this.scale(8);
-    }
-
-    // Family section (if detailed info available)
-    const detailedInfo = (profile as any)?.detailedInfo;
-    if (detailedInfo && detailedInfo.family) {
-      ctx.fillStyle = '#f1f5f9';
-      ctx.font = this.getScaledFont(14, '600');
-      ctx.fillText('Family', x, textY);
-      textY += this.scale(18);
-      
-      ctx.fillStyle = '#10b981';
-      ctx.font = this.getScaledFont(11, '400');
-      
-      if (detailedInfo.family.parents.length > 0) {
-        ctx.fillText(`Parents: ${detailedInfo.family.parents.join(', ')}`, x + this.scale(8), textY);
-        textY += this.scale(14);
-      }
-      if (detailedInfo.family.siblings.length > 0) {
-        ctx.fillText(`Siblings: ${detailedInfo.family.siblings.join(', ')}`, x + this.scale(8), textY);
-        textY += this.scale(14);
-      }
-      if (detailedInfo.family.spouse) {
-        ctx.fillText(`Spouse: ${detailedInfo.family.spouse}`, x + this.scale(8), textY);
-        textY += this.scale(14);
-      }
-      if (detailedInfo.family.children.length > 0) {
-        ctx.fillText(`Children: ${detailedInfo.family.children.join(', ')}`, x + this.scale(8), textY);
-        textY += this.scale(14);
-      }
-      textY += this.scale(8);
-    }
-
-    // Skills section (if detailed info available)
-    if (detailedInfo && detailedInfo.skills && detailedInfo.skills.length > 0) {
-      ctx.fillStyle = '#f1f5f9';
-      ctx.font = this.getScaledFont(14, '600');
-      ctx.fillText('Skills', x, textY);
-      textY += this.scale(18);
-      
-      ctx.fillStyle = '#f59e0b';
-      ctx.font = this.getScaledFont(11, '400');
-      ctx.fillText(`• ${detailedInfo.skills.join(', ')}`, x + this.scale(8), textY);
-      textY += this.scale(16);
-    }
-
-    // Backstory section
-    if (profile && profile.backstory) {
-      ctx.fillStyle = '#f1f5f9';
-      ctx.font = this.getScaledFont(14, '600');
-      ctx.fillText('Backstory', x, textY);
-      textY += this.scale(18);
-      
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = this.getScaledFont(11, '400');
-      
-      // Word wrap the backstory
-      const words = profile.backstory.split(' ');
-      const maxWidth = w - this.scale(16);
-      let line = '';
-      
-      for (let word of words) {
-        const testLine = line + word + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxWidth && line !== '') {
-          ctx.fillText(line.trim(), x + this.scale(8), textY);
-          textY += this.scale(14);
-          line = word + ' ';
-          if (textY > y + h - this.scale(20)) break;
-        } else {
-          line = testLine;
-        }
-      }
-      if (line.trim() && textY <= y + h - this.scale(20)) {
-        ctx.fillText(line.trim(), x + this.scale(8), textY);
-      }
-    }
-  }
-
-  drawHealthTab(c: Colonist, x: number, y: number, w: number, h: number) {
-    const ctx = this.ctx;
-    let textY = y + this.scale(8);
-    
-    const hp = Math.max(0, Math.min(100, c.hp | 0));
-    const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
-    const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
-    const mood = getColonistMood(c);
-    
-    // Overall condition
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(16, '600');
-    ctx.textAlign = 'left';
-    ctx.fillText('Overall Condition', x, textY);
-    textY += this.scale(24);
-    
-    // Health bars
-    const barSpacing = this.scale(22);
-    this.barRow(x, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
-    this.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
-    this.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
-    
-    textY += this.scale(16);
-    
-    // Mood section
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Mental State', x, textY);
-    textY += this.scale(18);
-    
-    ctx.fillStyle = '#9fb3c8';
-    ctx.font = this.getScaledFont(12, '400');
-    ctx.fillText(`Current Mood: ${mood}`, x + this.scale(8), textY);
-    textY += this.scale(16);
-    
-    // Status effects (placeholder)
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Status Effects', x, textY);
-    textY += this.scale(18);
-    
-    ctx.fillStyle = '#6b7280';
-    ctx.font = this.getScaledFont(11, '400');
-    ctx.fillText('No active status effects', x + this.scale(8), textY);
-  }
-
-  drawGearTab(c: Colonist, x: number, y: number, w: number, h: number) {
-    const ctx = this.ctx;
-    let textY = y + this.scale(8);
-    
-    // Header
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(16, '600');
-    ctx.textAlign = 'left';
-    ctx.fillText('Equipment & Inventory', x, textY);
-    textY += this.scale(24);
-    
-    // Check if colonist has inventory
-    if (!c.inventory) {
-      ctx.fillStyle = '#6b7280';
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillText('No inventory data available', x, textY);
-      return;
-    }
-    
-    // Equipment Slots
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Equipment', x, textY);
-    textY += this.scale(18);
-    
-    const equipmentSlots = ['helmet', 'armor', 'weapon', 'tool', 'shield', 'accessory'];
-    for (const slot of equipmentSlots) {
-      const item = c.inventory.equipment[slot as keyof typeof c.inventory.equipment];
-      
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = this.getScaledFont(12, '500');
-      const slotName = slot.charAt(0).toUpperCase() + slot.slice(1);
-      ctx.fillText(`${slotName}:`, x, textY);
-      
-      if (item) {
-        ctx.fillStyle = this.getItemQualityColor(item.quality || 'normal');
-        ctx.font = this.getScaledFont(12, '400');
-        ctx.fillText(item.name, x + this.scale(80), textY);
-        
-        // Show quality indicator
-        ctx.fillStyle = '#6b7280';
-        ctx.font = this.getScaledFont(10, '400');
-        ctx.fillText(`(${item.quality || 'normal'})`, x + this.scale(180), textY);
-      } else {
-        ctx.fillStyle = '#6b7280';
-        ctx.font = this.getScaledFont(12, '400');
-        ctx.fillText('None', x + this.scale(80), textY);
-      }
-      textY += this.scale(16);
-    }
-    
-    textY += this.scale(12);
-    
-    // Inventory Items
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Inventory Items', x, textY);
-    textY += this.scale(18);
-    
-    if (c.inventory.items.length === 0) {
-      ctx.fillStyle = '#6b7280';
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillText('No items in inventory', x + this.scale(8), textY);
-    } else {
-      // Show items with quantity and quality
-      for (const item of c.inventory.items) {
-        ctx.fillStyle = this.getItemQualityColor(item.quality || 'normal');
-        ctx.font = this.getScaledFont(12, '400');
-        
-        const displayText = `${item.name} (${item.quantity})`;
-        ctx.fillText(displayText, x + this.scale(8), textY);
-        
-        // Show quality indicator
-        ctx.fillStyle = '#6b7280';
-        ctx.font = this.getScaledFont(10, '400');
-        ctx.fillText(`${item.quality || 'normal'}`, x + this.scale(150), textY);
-        
-        // Show durability for items that have it
-        if (item.durability !== undefined) {
-          const durabilityText = `${Math.round(item.durability)}%`;
-          ctx.fillText(durabilityText, x + this.scale(200), textY);
-        }
-        
-        textY += this.scale(16);
-        
-        // Prevent overflow
-        if (textY > y + h - this.scale(20)) {
-          ctx.fillStyle = '#6b7280';
-          ctx.font = this.getScaledFont(10, '400');
-          ctx.fillText('...more items', x + this.scale(8), textY);
-          break;
-        }
-      }
-    }
-    
-    // Show currently carrying item
-    if (c.carrying) {
-      textY += this.scale(12);
-      ctx.fillStyle = '#f1f5f9';
-      ctx.font = this.getScaledFont(14, '600');
-      ctx.fillText('Currently Carrying', x, textY);
-      textY += this.scale(18);
-      
-      ctx.fillStyle = '#22c55e';
-      ctx.font = this.getScaledFont(12, '400');
-      ctx.fillText(`${c.carrying.type || 'Item'}`, x + this.scale(8), textY);
-    }
-  }
-  
-  // Helper function to get color based on item quality
-  getItemQualityColor(quality: string): string {
-    switch (quality.toLowerCase()) {
-      case 'legendary': return '#a855f7'; // Purple
-      case 'masterwork': return '#f59e0b'; // Amber
-      case 'excellent': return '#10b981'; // Emerald
-      case 'good': return '#3b82f6'; // Blue
-      case 'normal': return '#6b7280'; // Gray
-      case 'poor': return '#ef4444'; // Red
-      case 'awful': return '#991b1b'; // Dark red
-      default: return '#6b7280'; // Default gray
-    }
-  }
-
-  drawSocialTab(c: Colonist, x: number, y: number, w: number, h: number) {
-    const ctx = this.ctx;
-    let textY = y + this.scale(8);
-    
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(16, '600');
-    ctx.textAlign = 'left';
-    ctx.fillText('Social Relationships', x, textY);
-    textY += this.scale(24);
-    
-    // Social stats (placeholder)
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = this.getScaledFont(12, '400');
-    ctx.fillText('Social skill: Novice', x, textY);
-    textY += this.scale(16);
-    
-    textY += this.scale(16);
-    
-    // Relationships with other colonists
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Colony Relationships', x, textY);
-    textY += this.scale(18);
-    
-    const otherColonists = this.colonists.filter(col => col !== c && col.alive);
-    if (otherColonists.length > 0) {
-      for (let i = 0; i < Math.min(otherColonists.length, 3); i++) {
-        const other = otherColonists[i];
-        const relationship = ['Neutral', 'Friend', 'Good friend', 'Rival'][Math.floor(Math.random() * 4)];
-        const relationshipColor = relationship === 'Friend' || relationship === 'Good friend' ? '#22c55e' : 
-                                 relationship === 'Rival' ? '#ef4444' : '#94a3b8';
-        
-        ctx.fillStyle = '#dbeafe';
-        ctx.font = this.getScaledFont(11, '500');
-        ctx.fillText(other.profile?.name || 'Colonist', x + this.scale(8), textY);
-        
-        ctx.fillStyle = relationshipColor;
-        ctx.font = this.getScaledFont(11, '400');
-        ctx.fillText(relationship, x + this.scale(120), textY);
-        textY += this.scale(16);
-      }
-    } else {
-      ctx.fillStyle = '#6b7280';
-      ctx.font = this.getScaledFont(11, '400');
-      ctx.fillText('No other colonists in colony', x + this.scale(8), textY);
-    }
-  }
-
-  drawStatsTab(c: Colonist, x: number, y: number, w: number, h: number) {
-    const ctx = this.ctx;
-    let textY = y + this.scale(8);
-    
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(16, '600');
-    ctx.textAlign = 'left';
-    ctx.fillText('Skills & Abilities', x, textY);
-    textY += this.scale(24);
-    
-    // Core stats from profile
-    const profile = c.profile;
-    if (profile && profile.stats) {
-      const stats = [
-        { name: 'Work Speed', value: Math.round(profile.stats.workSpeed * 100), suffix: '%' },
-        { name: 'Social Bonus', value: Math.round(profile.stats.socialBonus * 100), suffix: '%' },
-        { name: 'Hunger Rate', value: Math.round(profile.stats.hungerRate * 100), suffix: '%' },
-        { name: 'Fatigue Rate', value: Math.round(profile.stats.fatigueRate * 100), suffix: '%' }
-      ];
-      
-      for (const stat of stats) {
-        ctx.fillStyle = '#94a3b8';
-        ctx.font = this.getScaledFont(12, '500');
-        ctx.fillText(`${stat.name}:`, x, textY);
-        
-        ctx.fillStyle = '#dbeafe';
-        ctx.font = this.getScaledFont(12, '400');
-        ctx.fillText(`${stat.value}${stat.suffix}`, x + this.scale(120), textY);
-        textY += this.scale(18);
-      }
-    }
-    
-    textY += this.scale(16);
-    
-    // Skills (placeholder - expandable)
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(14, '600');
-    ctx.fillText('Skills', x, textY);
-    textY += this.scale(18);
-    
-    const skills = [
-      { name: 'Construction', level: Math.floor(Math.random() * 10) + 1 },
-      { name: 'Farming', level: Math.floor(Math.random() * 10) + 1 },
-      { name: 'Mining', level: Math.floor(Math.random() * 10) + 1 },
-      { name: 'Research', level: Math.floor(Math.random() * 10) + 1 },
-      { name: 'Combat', level: Math.floor(Math.random() * 10) + 1 }
-    ];
-    
-    for (const skill of skills) {
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = this.getScaledFont(11, '400');
-      ctx.fillText(`${skill.name}:`, x + this.scale(8), textY);
-      
-      const levelColor = skill.level >= 8 ? '#22c55e' : skill.level >= 5 ? '#eab308' : '#6b7280';
-      ctx.fillStyle = levelColor;
-      ctx.fillText(`Level ${skill.level}`, x + this.scale(100), textY);
-      textY += this.scale(16);
-    }
-  }
-
-  drawLogTab(c: Colonist, x: number, y: number, w: number, h: number) {
-    const ctx = this.ctx;
-    let textY = y + this.scale(8);
-    
-    ctx.fillStyle = '#f1f5f9';
-    ctx.font = this.getScaledFont(16, '600');
-    ctx.textAlign = 'left';
-    ctx.fillText('Activity Log', x, textY);
-    textY += this.scale(24);
-    
-    // Recent activities (placeholder)
-    const activities = [
-      { time: `Day ${this.day} 08:30`, action: 'Started construction work', type: 'work' },
-      { time: `Day ${this.day} 07:45`, action: 'Finished eating breakfast', type: 'need' },
-      { time: `Day ${this.day} 07:00`, action: 'Woke up', type: 'rest' },
-      { time: `Day ${this.day - 1} 22:30`, action: 'Went to sleep', type: 'rest' },
-      { time: `Day ${this.day - 1} 19:15`, action: 'Had dinner', type: 'need' }
-    ];
-    
-    for (const activity of activities) {
-      const activityColor = activity.type === 'work' ? '#60a5fa' : 
-                           activity.type === 'need' ? '#22c55e' : 
-                           activity.type === 'rest' ? '#a78bfa' : '#94a3b8';
-      
-      ctx.fillStyle = '#6b7280';
-      ctx.font = this.getScaledFont(10, '400');
-      ctx.fillText(activity.time, x, textY);
-      
-      ctx.fillStyle = activityColor;
-      ctx.font = this.getScaledFont(11, '400');
-      ctx.fillText(activity.action, x + this.scale(100), textY);
-      textY += this.scale(16);
-      
-      if (textY > y + h - this.scale(20)) break;
-    }
-  }
-
-  // Context Menu System
-  showContextMenu(colonist: Colonist, screenX: number, screenY: number) {
-    const isIdle = !colonist.task || colonist.task === 'idle';
-    const hasTarget = !!colonist.target;
-    const isInjured = colonist.hp < 50;
-    const isHungry = (colonist.hunger || 0) > 60;
-    const isTired = (colonist.fatigue || 0) > 60;
-    
-    this.contextMenu = {
-      visible: true,
-      x: screenX,
-      y: screenY,
-      target: colonist,
-      openSubmenu: undefined,
-      items: [
-        {
-          id: 'prioritize',
-          label: 'Prioritize',
-          icon: '⚡',
-          enabled: true,
-          submenu: [
-            { id: 'prioritize_work', label: 'Work Tasks', icon: '🔨', enabled: true },
-            { id: 'prioritize_build', label: 'Construction', icon: '🏗️', enabled: true },
-            { id: 'prioritize_haul', label: 'Hauling', icon: '📦', enabled: true },
-            { id: 'prioritize_research', label: 'Research', icon: '🔬', enabled: true }
-          ]
-        },
-        {
-          id: 'force',
-          label: 'Force',
-          icon: '❗',
-          enabled: true,
-          submenu: [
-            { id: 'force_rest', label: 'Rest Now', icon: '😴', enabled: isTired },
-            { id: 'force_eat', label: 'Eat Now', icon: '🍽️', enabled: isHungry },
-            { id: 'force_work', label: 'Work', icon: '⚒️', enabled: isIdle },
-            { id: 'force_guard', label: 'Guard Area', icon: '🛡️', enabled: true }
-          ]
-        },
-        {
-          id: 'goto',
-          label: 'Go To',
-          icon: '🎯',
-          enabled: true,
-          submenu: [
-            { id: 'goto_hq', label: 'HQ', icon: '🏠', enabled: true },
-            { id: 'goto_safety', label: 'Safe Room', icon: '🛡️', enabled: true },
-            { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
-            { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true }
-          ]
-        },
-        {
-          id: 'medical',
-          label: 'Medical',
-          icon: '🏥',
-          enabled: isInjured,
-          submenu: [
-            { id: 'medical_treat', label: 'Treat Wounds', icon: '🩹', enabled: isInjured },
-            { id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: isInjured },
-            { id: 'medical_surgery', label: 'Surgery', icon: '⚕️', enabled: false }
-          ]
-        },
-        {
-          id: 'cancel',
-          label: 'Cancel Current Task',
-          icon: '❌',
-          enabled: hasTarget,
-        },
-        {
-          id: 'follow',
-          label: this.follow && this.selColonist === colonist ? 'Stop Following' : 'Follow',
-          icon: '👁️',
-          enabled: true,
-        }
-      ]
-    };
-  }
-
-  hideContextMenu() {
-    this.contextMenu = null;
-    this.contextMenuRects = [];
-  }
+  // Context menu rendering moved to src/game/ui/contextMenu.ts
 
   handleContextMenuAction(actionId: string, colonist: Colonist) {
     console.log(`Context menu action: ${actionId} for colonist:`, colonist.profile?.name);
@@ -2968,7 +2035,7 @@ export class Game {
         break;
     }
     
-    this.hideContextMenu();
+  hideContextMenuUI(this);
   }
 
   // Helper functions for context menu actions
@@ -3084,177 +2151,7 @@ export class Game {
     }
   }
 
-  drawContextMenu() {
-    if (!this.contextMenu || !this.contextMenu.visible) return;
-    
-    const ctx = this.ctx;
-    const menu = this.contextMenu;
-    
-    ctx.save();
-    
-    // Calculate menu dimensions
-    const itemHeight = this.scale(32); // Increased for mobile friendliness
-    const menuWidth = this.scale(220); // Increased width
-    const padding = this.scale(8);
-    const iconWidth = this.scale(24);
-    
-    // Count visible items
-    const visibleItems = menu.items.filter(item => item.enabled || true); // Show disabled items grayed out
-    const menuHeight = visibleItems.length * itemHeight + padding * 2;
-    
-    // Adjust position to keep menu on screen
-    let menuX = menu.x;
-    let menuY = menu.y;
-    
-    if (menuX + menuWidth > this.canvas.width) {
-      menuX = this.canvas.width - menuWidth - this.scale(10);
-    }
-    if (menuY + menuHeight > this.canvas.height) {
-      menuY = this.canvas.height - menuHeight - this.scale(10);
-    }
-    
-    // Draw menu background with shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.fillRect(menuX + 3, menuY + 3, menuWidth, menuHeight);
-    
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(menuX, menuY, menuWidth, menuHeight);
-    ctx.strokeStyle = '#374151';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(menuX + 0.5, menuY + 0.5, menuWidth - 1, menuHeight - 1);
-    
-    this.contextMenuRects = [];
-    
-    // Draw menu items
-    let currentY = menuY + padding;
-    
-    for (let i = 0; i < visibleItems.length; i++) {
-      const item = visibleItems[i];
-      const itemY = currentY + i * itemHeight;
-      const isHovered = this.isPointInRect(this.mouse.x * this.DPR, this.mouse.y * this.DPR, {
-        x: menuX, y: itemY, w: menuWidth, h: itemHeight
-      });
-      
-      // Store rect for click detection
-      this.contextMenuRects.push({
-        id: item.id,
-        x: menuX,
-        y: itemY,
-        w: menuWidth,
-        h: itemHeight
-      });
-      
-      // Draw item background
-      if (isHovered && item.enabled) {
-        ctx.fillStyle = '#374151';
-        ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
-      }
-      
-      // Highlight if submenu is open
-      if (item.submenu && menu.openSubmenu === item.id) {
-        ctx.fillStyle = '#475569';
-        ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
-      }
-      
-      // Draw icon
-      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
-      ctx.font = this.getScaledFont(16, '400'); // Larger icons for mobile
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(item.icon, menuX + padding, itemY + itemHeight / 2);
-      
-      // Draw label
-      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
-      ctx.font = this.getScaledFont(14, '400'); // Larger text for mobile
-      ctx.fillText(item.label, menuX + padding + iconWidth, itemY + itemHeight / 2);
-      
-      // Draw submenu arrow if applicable
-      if (item.submenu) {
-        ctx.fillStyle = item.enabled ? '#9ca3af' : '#4b5563';
-        const arrow = menu.openSubmenu === item.id ? '▼' : '▶';
-        ctx.fillText(arrow, menuX + menuWidth - padding - this.scale(16), itemY + itemHeight / 2);
-      }
-      
-      // Draw submenu if open (click-based, not hover)
-      if (item.submenu && menu.openSubmenu === item.id) {
-        this.drawSubmenu(item, menuX + menuWidth + this.scale(5), itemY);
-      }
-    }
-    
-    ctx.restore();
-  }
-
-  drawSubmenu(parentItem: any, x: number, y: number) {
-    const ctx = this.ctx;
-    const submenu = parentItem.submenu;
-    
-    if (!submenu || submenu.length === 0) return;
-    
-    const itemHeight = this.scale(30); // Increased for mobile
-    const submenuWidth = this.scale(200); // Increased width
-    const padding = this.scale(8);
-    const iconWidth = this.scale(22);
-    
-    const submenuHeight = submenu.length * itemHeight + padding * 2;
-    
-    // Adjust position to keep submenu on screen
-    let submenuX = x;
-    let submenuY = y;
-    
-    if (submenuX + submenuWidth > this.canvas.width) {
-      submenuX = x - submenuWidth - this.scale(225); // Position to the left of main menu
-    }
-    if (submenuY + submenuHeight > this.canvas.height) {
-      submenuY = this.canvas.height - submenuHeight - this.scale(10);
-    }
-    
-    // Draw submenu background with shadow
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.fillRect(submenuX + 3, submenuY + 3, submenuWidth, submenuHeight);
-    
-    ctx.fillStyle = '#1e293b';
-    ctx.fillRect(submenuX, submenuY, submenuWidth, submenuHeight);
-    ctx.strokeStyle = '#374151';
-    ctx.strokeRect(submenuX + 0.5, submenuY + 0.5, submenuWidth - 1, submenuHeight - 1);
-    
-    // Draw submenu items
-    for (let i = 0; i < submenu.length; i++) {
-      const item = submenu[i];
-      const itemY = submenuY + padding + i * itemHeight;
-      const isHovered = this.isPointInRect(this.mouse.x * this.DPR, this.mouse.y * this.DPR, {
-        x: submenuX, y: itemY, w: submenuWidth, h: itemHeight
-      });
-      
-      // Store rect for click detection
-      this.contextMenuRects.push({
-        id: item.id,
-        x: submenuX,
-        y: itemY,
-        w: submenuWidth,
-        h: itemHeight,
-        isSubmenu: true,
-        parentId: parentItem.id
-      });
-      
-      // Draw item background
-      if (isHovered && item.enabled) {
-        ctx.fillStyle = '#374151';
-        ctx.fillRect(submenuX + 1, itemY, submenuWidth - 2, itemHeight);
-      }
-      
-      // Draw icon
-      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
-      ctx.font = this.getScaledFont(14, '400'); // Larger icons
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(item.icon, submenuX + padding, itemY + itemHeight / 2);
-      
-      // Draw label
-      ctx.fillStyle = item.enabled ? '#f1f5f9' : '#6b7280';
-      ctx.font = this.getScaledFont(13, '400'); // Larger text
-      ctx.fillText(item.label, submenuX + padding + iconWidth, itemY + itemHeight / 2);
-    }
-  }
+  // Context menu drawing moved to src/game/ui/contextMenu.ts
 
   drawLongPressProgress() {
     if (!this.longPressStartTime || !this.longPressTarget || !this.longPressStartPos) return;
@@ -3315,9 +2212,6 @@ export class Game {
     ctx.restore();
   }
 
-  isPointInRect(x: number, y: number, rect: { x: number; y: number; w: number; h: number }): boolean {
-    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
-  }
 
   barRow(x: number, y: number, label: string, val: number, color: string) {
     const ctx = this.ctx; 
@@ -3336,250 +2230,5 @@ export class Game {
     ctx.fillRect(x + labelWidth + this.scale(2), y - this.scale(6), Math.max(0, Math.min(w - this.scale(4), (val / 100) * (w - this.scale(4)))), h - this.scale(4));
   }
 
-  // Build menu UI
-  drawBuildMenu() {
-    const ctx = this.ctx; 
-    const cw = this.canvas.width; 
-    const ch = this.canvas.height;
-    
-  // Responsive panel sizing (larger on touch devices)
-  const baseW = this.isTouch ? 980 : 860;
-  const baseH = this.isTouch ? 720 : 620;
-  const sidePad = this.isTouch ? 28 : 40;
-  const topPad = this.isTouch ? 60 : 80;
-  const W = Math.min(this.scale(baseW), cw - this.scale(sidePad)); 
-  const H = Math.min(this.scale(baseH), ch - this.scale(topPad)); 
-    const X = (cw - W) / 2; 
-    const Y = (ch - H) / 2;
-    
-    ctx.save();
-    ctx.fillStyle = '#0b1628dd'; 
-    ctx.fillRect(X, Y, W, H);
-    ctx.strokeStyle = '#1e293b'; 
-    ctx.strokeRect(X + .5, Y + .5, W - 1, H - 1);
-    
-  ctx.fillStyle = '#dbeafe'; 
-  ctx.font = this.getScaledFont(this.isTouch ? 22 : 18, '600'); 
-    ctx.fillText('Build Menu (B to close)', X + this.scale(14), Y + this.scale(24));
-    
-    const groups = groupByCategory(BUILD_TYPES);
-    const cats = Object.keys(groups);
-  const padding = this.scale(this.isTouch ? 36 : 28);
-    const colW = Math.floor((W - padding) / Math.max(1, cats.length));
-    
-    this.menuRects = [];
-    let hoveredItem: { key: keyof typeof BUILD_TYPES; desc: string } | null = null;
-    
-    for (let i = 0; i < cats.length; i++) {
-      const cx = X + this.scale(12) + i * colW; 
-  let cy = Y + this.scale(50);
-      const cat = cats[i];
-      
-  ctx.fillStyle = '#93c5fd'; 
-  ctx.font = this.getScaledFont(this.isTouch ? 18 : 15, '600');
-      ctx.fillText(cat, cx, cy);
-  cy += this.scale(this.isTouch ? 12 : 8);
-      
-      const items = groups[cat];
-      for (const [key, d] of items) {
-  cy += this.scale(this.isTouch ? 12 : 8);
-  const rowH = this.scale(this.isTouch ? 78 : 58); // Taller rows for readability and touch
-        const rw = colW - this.scale(18); 
-        const rx = cx; 
-        const ry = cy;
-        
-        // Check if mouse is hovering this item
-        const mx = this.mouse.x * this.DPR;
-        const my = this.mouse.y * this.DPR;
-        const isHovered = mx >= rx && mx <= rx + rw && 
-                         my >= ry && my <= ry + rowH;
-        
-        ctx.fillStyle = (this.selectedBuild === key) ? '#102034' : (isHovered ? '#1a1f2e' : '#0f172a');
-        ctx.fillRect(rx, ry, rw, rowH);
-        ctx.strokeStyle = (this.selectedBuild === key) ? '#4b9fff' : (isHovered ? '#3b82f6' : '#1e293b');
-        ctx.strokeRect(rx + .5, ry + .5, rw - 1, rowH - 1);
-        
-        // Building name
-  ctx.fillStyle = '#dbeafe'; 
-  ctx.font = this.getScaledFont(this.isTouch ? 18 : 15, '600');
-  ctx.fillText(d.name, rx + this.scale(10), ry + this.scale(this.isTouch ? 22 : 18));
-        
-        // Cost
-        const cost = this.costText(d.cost || {});
-  ctx.fillStyle = '#9fb3c8'; 
-  ctx.font = this.getScaledFont(this.isTouch ? 14 : 12);
-  const costWidth = Math.min(this.scale(this.isTouch ? 120 : 100), ctx.measureText(cost).width + this.scale(4));
-  ctx.fillText(cost, rx + rw - costWidth, ry + this.scale(this.isTouch ? 22 : 18));
-        
-        // Description (truncated to fit)
-        if (d.description) {
-          ctx.fillStyle = '#94a3b8'; 
-          ctx.font = this.getScaledFont(this.isTouch ? 14 : 12);
-          const maxDescWidth = rw - this.scale(18);
-          let desc = d.description;
-          
-          // Truncate description if too long
-          while (ctx.measureText(desc).width > maxDescWidth && desc.length > 10) {
-            desc = desc.substring(0, desc.length - 4) + '...';
-          }
-          
-          ctx.fillText(desc, rx + this.scale(10), ry + this.scale(this.isTouch ? 46 : 36));
-        }
-        
-        // Store for hover tooltip
-        if (isHovered && d.description) {
-          hoveredItem = { key: key as keyof typeof BUILD_TYPES, desc: d.description };
-        }
-        
-        this.menuRects.push({ key: key as keyof typeof BUILD_TYPES, x: rx, y: ry, w: rw, h: rowH });
-  cy += rowH;
-        
-  if (cy > Y + H - this.scale(this.isTouch ? 90 : 70)) break; // stop overflow
-      }
-    }
-    
-    // Draw detailed tooltip for hovered item
-    if (hoveredItem) {
-  const tooltipPadding = this.scale(this.isTouch ? 16 : 14);
-  const tooltipMaxWidth = this.scale(this.isTouch ? 420 : 360);
-      
-  ctx.font = this.getScaledFont(this.isTouch ? 16 : 14);
-      const lines = this.wrapText(hoveredItem.desc, tooltipMaxWidth - tooltipPadding * 2);
-  const lineHeight = this.scale(this.isTouch ? 20 : 18);
-      const tooltipHeight = lines.length * lineHeight + tooltipPadding * 2;
-      
-      const mx = this.mouse.x * this.DPR;
-      const my = this.mouse.y * this.DPR;
-      let tooltipX = mx + this.scale(20);
-      let tooltipY = my - tooltipHeight - this.scale(10);
-      
-      // Keep tooltip on screen
-      if (tooltipX + tooltipMaxWidth > cw) tooltipX = mx - tooltipMaxWidth - this.scale(20);
-      if (tooltipY < 0) tooltipY = my + this.scale(20);
-      
-      // Tooltip background
-  ctx.fillStyle = '#0f1419f0';
-      ctx.fillRect(tooltipX, tooltipY, tooltipMaxWidth, tooltipHeight);
-      ctx.strokeStyle = '#374151';
-      ctx.strokeRect(tooltipX + .5, tooltipY + .5, tooltipMaxWidth - 1, tooltipHeight - 1);
-      
-      // Tooltip text
-      ctx.fillStyle = '#e5e7eb';
-      for (let i = 0; i < lines.length; i++) {
-        ctx.fillText(lines[i], tooltipX + tooltipPadding, tooltipY + tooltipPadding + (i + 1) * lineHeight - this.scale(4));
-      }
-    }
-    
-    // Instructions
-    ctx.fillStyle = '#9fb3c8'; 
-  ctx.font = this.getScaledFont(this.isTouch ? 16 : 14);
-    const instructionText = 'Click a building to select • Hover for details • Press B to close';
-    const textWidth = ctx.measureText(instructionText).width;
-  ctx.fillText(instructionText, (cw - textWidth) / 2, Y + H + this.scale(this.isTouch ? 30 : 24));
-    
-    ctx.restore();
-  }
-
-  // Helper function to wrap text into lines
-  wrapText(text: string, maxWidth: number): string[] {
-    const ctx = this.ctx;
-    const words = text.split(' ');
-    const lines: string[] = [];
-    let currentLine = '';
-    
-    for (const word of words) {
-      const testLine = currentLine + (currentLine ? ' ' : '') + word;
-      if (ctx.measureText(testLine).width <= maxWidth) {
-        currentLine = testLine;
-      } else {
-        if (currentLine) lines.push(currentLine);
-        currentLine = word;
-      }
-    }
-    if (currentLine) lines.push(currentLine);
-    
-    return lines;
-  }
-
-  handleBuildMenuClick() {
-    const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-    for (const r of this.menuRects) {
-      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        this.selectedBuild = r.key; this.showBuildMenu = false; this.toast('Selected: ' + BUILD_TYPES[r.key].name); return;
-      }
-    }
-    // click outside: close
-    this.showBuildMenu = false;
-  }
-
-  // Precise placement overlay
-  drawPlacementUI() {
-    const p = this.pendingPlacement; if (!p) return;
-    const def = BUILD_TYPES[p.key];
-    const ctx = this.ctx; const w = def.size.w * T; const h = def.size.h * T;
-    // Convert world to screen coords (device pixels)
-    const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
-    const scr = toScreen(p.x, p.y);
-  let sw = w * this.camera.zoom;
-  let sh = h * this.camera.zoom;
-  const rot = p.rot || 0; const rotated = (rot === 90 || rot === 270);
-  if (rotated) { const tmp = sw; sw = sh; sh = tmp; }
-
-  // Ghost at pending position (overlay)
-    ctx.save();
-  // Validate placement for feedback
-  const bTmp = makeBuilding(p.key as any, p.x + 1, p.y + 1);
-  const can = this.canPlace(bTmp as any, bTmp.x, bTmp.y) && hasCost(this.RES, def.cost);
-  ctx.globalAlpha = .6; ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88'; ctx.fillRect(scr.x, scr.y, sw, sh); ctx.globalAlpha = 1;
-    ctx.strokeStyle = '#4b9fff'; ctx.setLineDash([4,3]); ctx.strokeRect(scr.x + .5, scr.y + .5, sw - 1, sh - 1); ctx.setLineDash([]);
-    ctx.restore();
-
-  // Controls near the ghost, in screen space
-    const pad = this.scale(10);
-  const btn = this.scale(42);
-    let cx = scr.x + sw + pad; // default to right of ghost
-    let cy = scr.y;
-    // If off right edge, place to the left
-    const maxW = this.canvas.width;
-    if (cx + btn * 3 > maxW - this.scale(6)) cx = Math.max(this.scale(6), scr.x - pad - btn * 3);
-
-    const makeRect = (id: any, x: number, y: number) => ({ id, x, y, w: btn, h: btn });
-    const rects = [
-      makeRect('up', cx + btn, cy),
-      makeRect('left', cx, cy + btn),
-      makeRect('right', cx + btn * 2, cy + btn),
-      makeRect('down', cx + btn, cy + btn * 2),
-      makeRect('rotL', cx, cy + btn * 3 + this.scale(6)),
-      makeRect('rotR', cx + btn * 2, cy + btn * 3 + this.scale(6)),
-      makeRect('cancel', cx, cy + btn * 4 + this.scale(6)),
-      makeRect('ok', cx + btn * 2, cy + btn * 4 + this.scale(6)),
-    ];
-    this.placeUIRects = rects as any; // store screen-space rects for hit testing
-    ctx.save();
-    ctx.fillStyle = '#0f172aee'; ctx.strokeStyle = '#1e293b';
-    const drawBtn = (r: any, label: string, disabled = false) => { 
-      ctx.save();
-      ctx.globalAlpha = disabled ? 0.5 : 1;
-      ctx.fillRect(r.x, r.y, r.w, r.h); ctx.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1);
-      ctx.fillStyle = '#dbeafe'; ctx.font = this.getScaledFont(18, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 + this.scale(2));
-      ctx.restore();
-      ctx.fillStyle = '#0f172aee';
-    };
-    for (const r of rects) {
-      if (r.id === 'up') drawBtn(r, '↑');
-      else if (r.id === 'down') drawBtn(r, '↓');
-      else if (r.id === 'left') drawBtn(r, '←');
-      else if (r.id === 'right') drawBtn(r, '→');
-  else if (r.id === 'rotL') drawBtn(r, '⟲');
-  else if (r.id === 'rotR') drawBtn(r, '⟳');
-  else if (r.id === 'ok') drawBtn(r, 'OK', !can);
-      else if (r.id === 'cancel') drawBtn(r, 'X');
-    }
-    // Hint text: drag to move
-    ctx.fillStyle = '#dbeafe';
-    ctx.font = this.getScaledFont(14, '500');
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText('Drag to move • Tap OK to place', Math.max(this.scale(6), scr.x), Math.max(this.scale(6), scr.y - this.scale(26)));
-    ctx.restore();
-  }
+  // Build and placement UI moved to src/game/ui
 }
