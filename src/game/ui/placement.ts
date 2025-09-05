@@ -1,4 +1,5 @@
 import { BUILD_TYPES, hasCost, makeBuilding } from "../buildings";
+import { canPlace as canPlacePlacement } from "../placement/placementSystem";
 import { COLORS, T } from "../constants";
 
 export function drawPlacementUI(game: any) {
@@ -12,7 +13,7 @@ export function drawPlacementUI(game: any) {
   if (rotated) { const tmp = sw; sw = sh; sh = tmp; }
   ctx.save();
   const bTmp = makeBuilding(p.key as any, p.x + 1, p.y + 1);
-  const can = game.canPlace(bTmp as any, bTmp.x, bTmp.y) && hasCost(game.RES, def.cost);
+  const can = canPlacePlacement(game, bTmp as any, bTmp.x, bTmp.y) && hasCost(game.RES, def.cost);
   ctx.globalAlpha = .6; ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88'; ctx.fillRect(scr.x, scr.y, sw, sh); ctx.globalAlpha = 1;
   ctx.strokeStyle = '#4b9fff'; ctx.setLineDash([4,3]); ctx.strokeRect(scr.x + .5, scr.y + .5, sw - 1, sh - 1); ctx.setLineDash([]);
   ctx.restore();
