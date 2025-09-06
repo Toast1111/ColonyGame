@@ -121,11 +121,7 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
   const isFlipped = colonist.direction !== undefined && 
     ((colonist.direction * 180 / Math.PI + 360) % 360) >= 135 && 
     ((colonist.direction * 180 / Math.PI + 360) % 360) < 225;
-  
-  // Apply horizontal flip for west-facing sprites
-  if (isFlipped) {
-    ctx.scale(-1, 1);
-  }
+  const isDowned = !!(colonist as any).health?.downed;
   
   // Fixed sprite sizes - not dependent on colonist collision radius
   const spriteWidth = 32; // Nice wide sprites that look proportional
@@ -199,6 +195,11 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
     return tempCanvas;
   };
   
+  // Draw sprite layers with optional flip/rotation (do not affect UI overlays)
+  ctx.save();
+  if (isFlipped) ctx.scale(-1, 1);
+  if (isDowned) ctx.rotate(-Math.PI / 2); // lay down sideways when downed
+  
   // 1. Body (tinted with skin tone)
   const bodySprite = imageAssets.getColonistSprite('body', sprites.bodyType, spriteDirection);
   if (bodySprite) {
@@ -226,10 +227,11 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
     const tintedHair = createTintedSprite(hairSprite, profile.avatar.hairColor);
     ctx.drawImage(tintedHair, -spriteWidth/2, -offsetY);
   }
+  ctx.restore();
   
   // Mood indicator (small colored dot above the head) - not flipped
   ctx.save();
-  if (isFlipped) ctx.scale(-1, 1); // Un-flip for UI elements
+  // Keep UI elements upright regardless of sprite flip/rotation
   
   const mood = getColonistMood && getColonistMood(colonist) || 'Okay';
   
@@ -255,6 +257,33 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.strokeStyle = '#000000';
   ctx.lineWidth = 0.5;
   ctx.stroke();
+  
+  // Combat warmup/cooldown indicator ring (RimWorld-style)
+  const cd = (colonist as any).fireCooldown || 0; const cdT = (colonist as any).cooldownTotal || 0;
+  const wu = (colonist as any).warmup || 0; const wuT = (colonist as any).warmupTotal || 0;
+  if ((wuT > 0 && wu > 0) || (cdT > 0 && cd > 0)) {
+    const r = size + 6;
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#0b0f14aa';
+    ctx.beginPath(); ctx.arc(0, -offsetY + spriteHeight * 0.1, r, 0, Math.PI * 2); ctx.stroke();
+    const ox = 0, oy = -offsetY + spriteHeight * 0.1;
+    if (wuT > 0 && wu > 0) {
+      const p = 1 - Math.min(1, wu / wuT);
+      ctx.strokeStyle = '#60a5fa';
+      ctx.beginPath(); ctx.arc(ox, oy, r, -Math.PI/2, -Math.PI/2 + p * Math.PI * 2); ctx.stroke();
+    } else if (cdT > 0 && cd > 0) {
+      const p = 1 - Math.min(1, cd / cdT);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.beginPath(); ctx.arc(ox, oy, r, -Math.PI/2, -Math.PI/2 + p * Math.PI * 2); ctx.stroke();
+    }
+  }
+  // Optional combat debug numbers
+  if ((colonist as any).game?.debug?.combat || (window as any).game?.debug?.combat) {
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '10px system-ui';
+    const txt = wuT > 0 && wu > 0 ? `WU ${(wuT - wu).toFixed(2)}/${wuT.toFixed(2)}` : (cdT > 0 && cd > 0 ? `CD ${(cdT - cd).toFixed(2)}/${cdT.toFixed(2)}` : '');
+    if (txt) ctx.fillText(txt, -16, -offsetY + spriteHeight * 0.1 - (size + 12));
+  }
   
   ctx.restore(); // Restore mood indicator transform
   ctx.restore(); // Restore main transform
@@ -359,6 +388,42 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
       ctx.fillStyle = '#ffffff88';
       ctx.fillRect(b.x, b.y, b.w, b.h);
     }
+
+    // Turret barrel + aim indicator
+    if (b.kind === 'turret') {
+      const cx = b.x + b.w / 2; const cy = b.y + b.h / 2;
+      const ang = (b as any).angle || 0;
+      // Barrel
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(ang);
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(-2, -2, Math.max(8, b.w * 0.45), 4);
+      ctx.restore();
+
+      // Warmup/cooldown progress ring
+      const cd = (b as any).cooldown || 0; const cdT = (b as any).cooldownTotal || 0;
+      const wu = (b as any).warmup || 0; const wuT = (b as any).warmupTotal || 0;
+      const r = Math.max(10, Math.min(b.w, b.h) * 0.6);
+      if (wuT > 0 || cdT > 0) {
+        ctx.save();
+        ctx.lineWidth = 2;
+        // background ring
+        ctx.strokeStyle = '#0b0f14aa';
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+        // warmup in blue, cooldown in orange
+        if (wuT > 0 && wu > 0) {
+          const p = 1 - Math.min(1, wu / wuT);
+          ctx.strokeStyle = '#60a5fa';
+          ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + p * Math.PI * 2); ctx.stroke();
+        } else if (cdT > 0 && cd > 0) {
+          const p = 1 - Math.min(1, cd / cdT);
+          ctx.strokeStyle = '#f59e0b';
+          ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI/2, -Math.PI/2 + p * Math.PI * 2); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
   }
 
   // Build progress bar
@@ -390,6 +455,14 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.globalAlpha = .07; ctx.fillStyle = '#e2f3ff'; 
     ctx.beginPath(); ctx.arc(cx, cy, (b as any).range, 0, Math.PI * 2); 
     ctx.fill(); ctx.globalAlpha = 1; 
+  }
+  // Optional combat debug numbers for turret
+  if ((b as any).game?.debug?.combat || (window as any).game?.debug?.combat) {
+    const cx = b.x + b.w / 2; const cy = b.y + b.h / 2;
+    const cd = (b as any).cooldown || 0; const cdT = (b as any).cooldownTotal || 0;
+    const wu = (b as any).warmup || 0; const wuT = (b as any).warmupTotal || 0;
+    const txt = wuT > 0 && wu > 0 ? `WU ${(wuT - wu).toFixed(2)}/${wuT.toFixed(2)}` : (cdT > 0 && cd > 0 ? `CD ${(cdT - cd).toFixed(2)}/${cdT.toFixed(2)}` : '');
+    if (txt) { ctx.save(); ctx.fillStyle = '#ffffff'; ctx.font = '10px system-ui'; ctx.fillText(txt, cx - 16, cy - Math.max(b.h, b.w) * 0.7); ctx.restore(); }
   }
 }
 

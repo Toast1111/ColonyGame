@@ -16,6 +16,7 @@ import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, pla
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
+import { updateColonistHealth, tendColonist as tendColonistHealth } from "./health/healthSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
@@ -114,6 +115,8 @@ export class Game {
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'stats' | 'log' = 'bio';
   colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
+  // Health tab action rects (set by UI draw)
+  colonistHealthActions: { tend: { x: number; y: number; w: number; h: number }; rescue: { x: number; y: number; w: number; h: number } } | null = null;
   
   // Context menu system
   contextMenu: {
@@ -391,6 +394,43 @@ export class Game {
             const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
             // On desktop, only close when clicking outside if not over the panel
             if (!inside) { this.selColonist = null; this.follow = false; return; }
+            // Inside panel: check health action buttons if on Health tab
+            if (this.selColonist && this.colonistProfileTab === 'health' && this.colonistHealthActions) {
+              const act = this.colonistHealthActions;
+              const hit = (rr: any) => mx0 >= rr.x && mx0 <= rr.x + rr.w && my0 >= rr.y && my0 <= rr.y + rr.h;
+              if (hit(act.tend)) {
+                // Assign a colonist to tend the selected colonist (self-tend if no one else)
+                const target = this.selColonist;
+                const candidates = this.colonists.filter(c => c !== target && c.alive && !(c as any).health?.downed && !c.inside);
+                let tender = candidates[0];
+                if (candidates.length > 1) {
+                  const dc = (p: any) => (p.x - target.x) * (p.x - target.x) + (p.y - target.y) * (p.y - target.y);
+                  tender = candidates.sort((a,b) => dc(a) - dc(b))[0];
+                }
+                if (!tender && target && target.alive && !(target as any).health?.downed) tender = target; // self-tend
+                if (tender) {
+                  tender.task = null; tender.target = null; this.clearPath && this.clearPath(tender);
+                  (tender as any).tendTarget = target;
+                  (tender as any).state = 'tend'; (tender as any).stateSince = 0;
+                  this.msg('Tend ordered', 'info');
+                } else {
+                  this.msg('No available tender', 'warn');
+                }
+                return;
+              }
+              if (hit(act.rescue)) {
+                // Assign nearest healthy colonist to rescue selected colonist
+                const target = this.selColonist;
+                const rescuer = this.colonists.find(c => c !== target && c.alive && !(c as any).health?.downed && !c.inside);
+                if (rescuer) {
+                  rescuer.task = null; rescuer.target = null; this.clearPath && this.clearPath(rescuer);
+                  (rescuer as any).rescueTarget = target; (rescuer as any).state = 'rescue'; (rescuer as any).stateSince = 0;
+                  this.msg('Rescue ordered', 'info');
+                }
+                else this.msg('No available rescuer', 'warn');
+                return;
+              }
+            }
           }
         }
         // If precise placement UI active, handle mouse clicks like taps/drag
@@ -1366,6 +1406,8 @@ export class Game {
     }
     this.dayTick(dt);
   for (const c of this.colonists) { if (c.alive) {
+      // Health system tick (bleeding, infections, pain, downed)
+      updateColonistHealth(this, c, dt * this.fastForward);
       // RimWorld-like pawn combat runs before FSM so states can react to being in combat
       updateColonistCombat(this, c, dt * this.fastForward);
       updateColonistFSM(this, c, dt * this.fastForward);

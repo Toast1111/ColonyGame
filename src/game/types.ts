@@ -43,7 +43,7 @@ export type Building = BuildingDef & {
   rot?: 0 | 90 | 180 | 270; // orientation in degrees
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'downed' | 'rescue' | 'tend';
 
 // Inventory and equipment types
 export interface InventoryItem {

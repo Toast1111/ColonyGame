@@ -25,15 +25,15 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear";
+  return "commands: help, toggle, spawn, speed, pause, give, select, clear";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
     const flag = (args[0] || "").toLowerCase();
-    if (!flag) return "usage: toggle <nav|colonists|combat>";
+  if (!flag) return "usage: toggle <nav|colonists|combat>";
     if (flag === "nav") g.debug.nav = !g.debug.nav;
     else if (flag === "colonists") g.debug.colonists = !g.debug.colonists;
-    else if (flag === "combat") (g.debug as any).combat = !(g.debug as any).combat;
+  else if (flag === "combat") (g.debug as any).combat = !(g.debug as any).combat;
     else return `unknown toggle '${flag}'`;
     return `${flag} = ${flag === 'combat' ? (g.debug as any).combat : (g.debug as any)[flag]}`;
   }, "toggle nav|colonists|combat — flip debug flags");

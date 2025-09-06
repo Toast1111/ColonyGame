@@ -1,4 +1,5 @@
 import { dist2, norm, sub } from "../../core/utils";
+import { isDowned, findRescueDestination, tendColonist } from "../health/healthSystem";
 import { WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState } from "../types";
 
@@ -185,6 +186,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   if (!c.state) changeState('seekTask', 'initial state');
   c.stateSince = (c.stateSince || 0) + dt;
   
+  // Hard interrupt: if this colonist is downed, enforce 'downed' state
+  if (isDowned(c) && c.state !== 'downed') {
+    c.task = null; c.target = null; game.clearPath && game.clearPath(c);
+    changeState('downed', 'incapacitated');
+  }
+  
   // Universal stuck detection and rescue system (runs every frame)
   if (checkAndRescueStuckColonist(game, c)) {
     // If colonist was rescued, clear their current task and let them reassess
@@ -352,8 +359,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   }
 
   // If inside any building and not resting, immediately switch to resting
-  if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
-  else {
+  if (c.state !== 'downed') {
+    if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
+    else {
     const statePriority = (s: ColonistState | undefined): number => {
       switch (s) {
         case 'flee': return 100;
@@ -380,8 +388,58 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (shouldSwitch) changeState(intent.state, intent.reason);
     }
   }
+  }
 
   switch (c.state) {
+    case 'downed': {
+      // Immobilized; wait for rescue or tending
+      // Visual cue can be handled by renderer via c.state
+      break;
+    }
+    case 'tend': {
+      // Simple on-the-spot tending for self or target
+      const tgt: Colonist = (c as any).tendTarget || c;
+      // Move near target if not close
+      const reach = 16;
+      const d = Math.hypot(tgt.x - c.x, tgt.y - c.y);
+      if (tgt !== c && d > reach) {
+        game.moveAlongPath(c, dt, tgt, reach);
+      } else {
+        tendColonist(tgt, 0.5);
+        (c as any).tendTarget = null;
+        changeState('seekTask', 'tended');
+      }
+      break;
+    }
+    case 'rescue': {
+      // Rescue a downed colonist: carry to safety
+      const tgt: Colonist | null = (c as any).rescueTarget;
+      if (!tgt || !isDowned(tgt) || !tgt.alive) { changeState('seekTask', 'no rescue target'); break; }
+      // First approach the target if far
+      const approachReach = 14;
+      const dToTgt = Math.hypot(tgt.x - c.x, tgt.y - c.y);
+      if (dToTgt > approachReach) {
+        game.moveAlongPath(c, dt, tgt, approachReach);
+        break;
+      }
+      const dest = findRescueDestination(game);
+      if (!dest) { changeState('seekTask', 'no rescue destination'); break; }
+      const dc = game.centerOf(dest);
+      const near = Math.hypot(c.x - dc.x, c.y - dc.y) <= 20;
+      if (!near) {
+        // Move while "carrying" target (teleport target to carrier)
+        game.moveAlongPath(c, dt, dc, 20);
+        tgt.x = c.x; tgt.y = c.y; // follow carrier
+      } else {
+        // Drop target inside/near destination
+        tgt.x = dc.x + (Math.random() - 0.5) * 16; tgt.y = dc.y + (Math.random() - 0.5) * 16;
+        (tgt as any).health && ((tgt as any).health.downed = false);
+        (c as any).rescueTarget = null;
+        game.msg(`${c.profile?.name || 'Colonist'} rescued ${tgt.profile?.name || 'colonist'}`, 'good');
+        changeState('seekTask', 'rescued colonist');
+      }
+      break;
+    }
     case 'resting': {
       c.hideTimer = Math.max(0, (c.hideTimer || 0) - dt);
       // Rest recovers fatigue quickly and heals slowly
@@ -516,6 +574,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'flee': {
+      if (isDowned(c)) { changeState('downed', 'incapacitated'); break; }
       let dest: { x: number; y: number } | null = null; let buildingDest: Building | null = null;
       const tgtTurret = danger ? game.findSafeTurret(c, danger) : null;
       if (tgtTurret) {
@@ -761,6 +820,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'seekTask': {
+      // Opportunistic: if a nearby colonist is downed, rescue them
+      const rescueCandidate = (game.colonists as Colonist[]).find(o => o !== c && o.alive && isDowned(o));
+      if (rescueCandidate) {
+        (c as any).rescueTarget = rescueCandidate; changeState('rescue', 'rescue downed colonist'); break;
+      }
       if (game.isNight()) { changeState('sleep', 'night time'); break; }
       if (!c.task || (c.task === 'idle' && Math.random() < 0.05)) {
         const oldTask = c.task;

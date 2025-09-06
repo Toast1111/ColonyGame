@@ -1,43 +1,13 @@
 import type { Game } from "../Game";
 import type { Building, Bullet, Enemy } from "../types";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles } from "../../core/particles";
+import { hasLineOfFire as hasLoF, lineIntersectsRect } from "./utils";
 import { dist2 } from "../../core/utils";
+import { applyDamageToEnemy } from "./damage";
 
-// Simple line-rectangle intersection for cover/obstruction checks
-function lineIntersectsRect(x1: number, y1: number, x2: number, y2: number, r: { x: number; y: number; w: number; h: number }): boolean {
-  const xMin = r.x, xMax = r.x + r.w;
-  const yMin = r.y, yMax = r.y + r.h;
-  // Cohen–Sutherland-like trivial accept/reject via segment-box test
-  const minX = Math.min(x1, x2), maxX = Math.max(x1, x2);
-  const minY = Math.min(y1, y2), maxY = Math.max(y1, y2);
-  if (maxX < xMin || minX > xMax || maxY < yMin || minY > yMax) return false;
-  // Parametric intersection test with 4 edges
-  const intersectsEdge = (x1: number, y1: number, x2: number, y2: number, x3: number, y3: number, x4: number, y4: number) => {
-    const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
-    if (denom === 0) return false;
-    const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-    const u = ((x1 - x3) * (y1 - y2) - (y1 - y3) * (x1 - x2)) / denom;
-    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
-  };
-  // Check against rectangle edges
-  if (intersectsEdge(x1, y1, x2, y2, xMin, yMin, xMax, yMin)) return true;
-  if (intersectsEdge(x1, y1, x2, y2, xMax, yMin, xMax, yMax)) return true;
-  if (intersectsEdge(x1, y1, x2, y2, xMax, yMax, xMin, yMax)) return true;
-  if (intersectsEdge(x1, y1, x2, y2, xMin, yMax, xMin, yMin)) return true;
-  return false;
-}
+// Intersection helpers provided by utils
 
-function hasLineOfFire(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): boolean {
-  for (const b of game.buildings) {
-    // Allow shooting through HQ, paths, houses, and farms (soft cover only); block by walls and finished solids
-    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
-    // If the shooter is inside this building (e.g., a turret), ignore this rectangle for LoS
-    const fromInside = from.x >= b.x && from.x <= b.x + b.w && from.y >= b.y && from.y <= b.y + b.h;
-    if (fromInside) continue;
-    if (lineIntersectsRect(from.x, from.y, to.x, to.y, b)) return false;
-  }
-  return true;
-}
+// hasLineOfFire now comes from utils
 
 function pickTarget(game: Game, origin: { x: number; y: number }, range: number): Enemy | null {
   let best: Enemy | null = null, bestD = Infinity;
@@ -45,7 +15,7 @@ function pickTarget(game: Game, origin: { x: number; y: number }, range: number)
     const d = Math.hypot(e.x - origin.x, e.y - origin.y);
     if (d <= range && d < bestD) {
       // Prefer line of sight targets
-      if (hasLineOfFire(game, origin, e)) {
+  if (hasLoF(game, origin, e)) {
         best = e; bestD = d;
       }
     }
@@ -56,6 +26,7 @@ function pickTarget(game: Game, origin: { x: number; y: number }, range: number)
 export function updateTurret(game: Game, b: Building, dt: number) {
   if (!('range' in b) || !(b as any).range) return;
   (b as any).cooldown = Math.max(0, ((b as any).cooldown || 0) - dt);
+  (b as any).warmup = Math.max(0, ((b as any).warmup || 0) - dt);
 
   // Update flash timer
   if ('flashTimer' in b) {
@@ -69,11 +40,21 @@ export function updateTurret(game: Game, b: Building, dt: number) {
 
   // Target persistence to reduce thrashing
   let target: Enemy | null = (b as any).target || null;
-  if (!target || target.hp <= 0 || Math.hypot(target.x - bc.x, target.y - bc.y) > range || !hasLineOfFire(game, bc, target)) {
+  if (!target || target.hp <= 0 || Math.hypot(target.x - bc.x, target.y - bc.y) > range || !hasLoF(game, bc, target)) {
     target = pickTarget(game, bc, range);
     (b as any).target = target || null;
+    if (target) {
+      (b as any).warmup = (b as any).warmupTime ?? 0.4;
+      (b as any).warmupTotal = (b as any).warmup;
+    }
   }
   if (!target) return;
+
+  // Track facing angle towards target for rendering
+  (b as any).angle = Math.atan2(target.y - bc.y, target.x - bc.x);
+
+  // Wait for warmup before firing
+  if (((b as any).warmup || 0) > 0) return;
 
   if (((b as any).cooldown || 0) <= 0) {
     // Accuracy model: closer = more accurate; base 75% at mid-range
@@ -110,8 +91,9 @@ export function updateTurret(game: Game, b: Building, dt: number) {
     // Muzzle flash
     const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang);
     game.particles.push(...muzzleFlash);
-    (b as any).flashTimer = 0.08;
+  (b as any).flashTimer = 0.08;
   (b as any).cooldown = fireRate;
+  (b as any).cooldownTotal = fireRate;
   }
 }
 
@@ -129,7 +111,7 @@ export function updateProjectiles(game: Game, dt: number) {
 
       // Collision with blocking buildings (cover)
       let hitBlocked = false;
-      for (const bl of game.buildings) {
+  for (const bl of game.buildings) {
         if (bl.kind === 'hq' || bl.kind === 'path' || bl.kind === 'house' || bl.kind === 'farm' || !bl.done) continue;
         // If projectile originates inside this building (e.g., fired from a turret), ignore this building for this step
         const prevInside = prevX >= bl.x && prevX <= bl.x + bl.w && prevY >= bl.y && prevY <= bl.y + bl.h;
@@ -159,7 +141,7 @@ export function updateProjectiles(game: Game, dt: number) {
 
       if (hitEnemy) {
         const dmg = Math.max(1, Math.round((b.dmg || 10)));
-        hitEnemy.hp -= dmg;
+        applyDamageToEnemy(hitEnemy, dmg);
         const impact = createImpactEffect(hitEnemy.x, hitEnemy.y);
         game.particles.push(...impact);
         game.bullets.splice(i, 1);

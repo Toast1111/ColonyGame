@@ -1,5 +1,6 @@
 import { dist2, norm, sub } from "../core/utils";
 import type { Building, Enemy, Colonist } from "../game/types";
+import { applyDamageToColonist as applyInjury } from "../game/health/healthSystem";
 
 // Helper function to check if a position would collide with buildings (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -63,11 +64,8 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
     const c = tgt as Colonist; const d = Math.hypot(e.x - c.x, e.y - c.y);
     if (d < e.r + 8) {
       // Apply armor-aware damage
-      if (typeof (game as any).applyDamageToColonist === 'function') {
-        (game as any).applyDamageToColonist(c, e.dmg * dt);
-      } else {
-        c.hp -= e.dmg * dt;
-      }
+  // Apply injury-based damage so pain/blood loss can down pawns
+  applyInjury(game, c, e.dmg * dt, 'bite');
       if (c.hp <= 0) { c.alive = false; (game.colonists as Colonist[]).splice((game.colonists as Colonist[]).indexOf(c), 1); game.msg('A colonist has fallen', 'warn'); }
     }
   }

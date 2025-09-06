@@ -17,6 +17,13 @@ export interface ItemDef {
   range?: number;
   accuracy?: number;
   ammoType?: string;
+  // Advanced weapon tuning (optional)
+  warmup?: number;           // seconds to aim before first shot/burst
+  cooldown?: number;         // seconds after burst
+  burstCount?: number;       // shots per burst
+  burstSpacing?: number;     // seconds between burst shots
+  projectileSpeed?: number;  // px/sec
+  minRange?: number;         // tiles (applies to ranged only)
   
   // Protection stats
   armorRating?: number;
@@ -125,7 +132,13 @@ export class ItemDatabase {
           damage: 25,
           range: 15,
           accuracy: 0.7,
-          ammoType: 'Bullets'
+          ammoType: 'Bullets',
+          warmup: 0.35,
+          cooldown: 0.5,
+          burstCount: 1,
+          burstSpacing: 0.1,
+          projectileSpeed: 700,
+          minRange: 1.1
         },
         {
           defName: 'Rifle',
@@ -140,7 +153,13 @@ export class ItemDatabase {
           damage: 40,
           range: 25,
           accuracy: 0.8,
-          ammoType: 'Bullets'
+          ammoType: 'Bullets',
+          warmup: 0.6,
+          cooldown: 0.75,
+          burstCount: 3,
+          burstSpacing: 0.1,
+          projectileSpeed: 760,
+          minRange: 1.25
         },
         {
           defName: 'Knife',

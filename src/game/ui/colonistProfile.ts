@@ -201,6 +201,46 @@ function drawHealthTab(game: any, c: any, x: number, y: number, w: number, h: nu
   game.barRow(x, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
   game.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
   game.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
+  textY += game.scale(8);
+  // Health system specifics
+  const health = (c as any).health;
+  if (health) {
+    const bloodLoss = Math.round(health.bloodLoss || 0);
+    const pain = Math.round(health.pain || 0);
+    game.barRow(x, textY, 'Blood Loss', 100 - bloodLoss, '#60a5fa'); textY += barSpacing;
+    game.barRow(x, textY, 'Pain', pain, '#ef4444'); textY += barSpacing;
+    textY += game.scale(8);
+    ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Injuries', x, textY); textY += game.scale(18);
+    if (!health.injuries || health.injuries.length === 0) {
+      ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No injuries', x + game.scale(8), textY); textY += game.scale(16);
+    } else {
+      for (const inj of health.injuries) {
+        const line = `${inj.part} — ${inj.kind} (sev ${inj.severity})` + (inj.tended ? ' [tended]' : '') + (inj.infected ? ' [infected]' : '');
+        ctx.fillStyle = inj.infected ? '#f87171' : inj.tended ? '#22c55e' : '#dbeafe';
+        ctx.font = game.getScaledFont(12, '500');
+        ctx.fillText(line, x + game.scale(8), textY); textY += game.scale(16);
+        if (textY > y + h - game.scale(60)) break;
+      }
+    }
+    textY += game.scale(8);
+    // Quick actions (non-interactive text cues; clicks handled in Game input if wired later)
+    const canTend = true;
+    const btnW = game.scale(110), btnH = game.scale(24);
+    const tendX = x; const rescueX = x + btnW + game.scale(8);
+    const btnY = textY;
+    // Tend button
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(tendX, btnY, btnW, btnH);
+    ctx.strokeStyle = '#1e293b'; ctx.strokeRect(tendX + .5, btnY + .5, btnW - 1, btnH - 1);
+    ctx.fillStyle = '#22c55e'; ctx.font = game.getScaledFont(12, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Tend', tendX + btnW/2, btnY + btnH/2 + game.scale(1));
+    // Rescue button (if downed)
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(rescueX, btnY, btnW, btnH);
+    ctx.strokeStyle = '#1e293b'; ctx.strokeRect(rescueX + .5, btnY + .5, btnW - 1, btnH - 1);
+    ctx.fillStyle = '#60a5fa'; ctx.font = game.getScaledFont(12, '600'); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Rescue', rescueX + btnW/2, btnY + btnH/2 + game.scale(1));
+    // Record rects for potential click handling
+    game.colonistHealthActions = { tend: { x: tendX, y: btnY, w: btnW, h: btnH }, rescue: { x: rescueX, y: btnY, w: btnW, h: btnH } };
+  }
   textY += game.scale(16);
   ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600');
   ctx.fillText('Mental State', x, textY); textY += game.scale(18);
