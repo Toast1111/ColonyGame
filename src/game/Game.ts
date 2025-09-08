@@ -2047,9 +2047,41 @@ export class Game {
         break;
         
       // Medical actions
-      case 'medical_treat':
-        this.treatColonist(colonist);
-        break;
+      case 'medical_treat': {
+        // Assign nearest eligible colonist (or self) to tend this colonist
+        const target = colonist;
+        const candidates = this.colonists.filter(c => c !== target && c.alive && !(c as any).health?.downed && !c.inside);
+        let tender = candidates[0];
+        if (candidates.length > 1) {
+          const dc = (p: any) => (p.x - target.x) * (p.x - target.x) + (p.y - target.y) * (p.y - target.y);
+          tender = candidates.sort((a,b) => dc(a) - dc(b))[0];
+        }
+        if (!tender && target && target.alive && !(target as any).health?.downed) tender = target; // self-tend fallback
+        if (tender) {
+          tender.task = null; tender.target = null; this.clearPath && this.clearPath(tender);
+          (tender as any).tendTarget = target; (tender as any).state = 'tend'; (tender as any).stateSince = 0;
+          this.msg('Tend ordered', 'info');
+        } else {
+          this.msg('No available tender', 'warn');
+        }
+        break; }
+      case 'medical_rescue': {
+        // Assign nearest eligible colonist to rescue this (downed) colonist
+        const target = colonist;
+        const candidates = this.colonists.filter(c => c !== target && c.alive && !(c as any).health?.downed && !c.inside);
+        let rescuer = candidates[0];
+        if (candidates.length > 1) {
+          const dc = (p: any) => (p.x - target.x) * (p.x - target.x) + (p.y - target.y) * (p.y - target.y);
+          rescuer = candidates.sort((a,b) => dc(a) - dc(b))[0];
+        }
+        if (rescuer) {
+          rescuer.task = null; rescuer.target = null; this.clearPath && this.clearPath(rescuer);
+          (rescuer as any).rescueTarget = target; (rescuer as any).state = 'rescue'; (rescuer as any).stateSince = 0;
+          this.msg('Rescue ordered', 'info');
+        } else {
+          this.msg('No available rescuer', 'warn');
+        }
+        break; }
       case 'medical_rest':
         this.forceColonistToRest(colonist);
         this.msg(`${colonist.profile?.name || 'Colonist'} ordered to bed rest`, 'info');

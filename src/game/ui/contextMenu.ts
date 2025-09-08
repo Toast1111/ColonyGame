@@ -3,6 +3,7 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
   const isInjured = colonist.hp < 50;
   const isHungry = (colonist.hunger || 0) > 60;
   const isTired = (colonist.fatigue || 0) > 60;
+  const isDowned = !!(colonist as any).health?.downed;
   game.contextMenu = {
     visible: true, x: screenX, y: screenY, target: colonist, openSubmenu: undefined,
     items: [
@@ -24,8 +25,9 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
         { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
         { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true },
       ]},
-      { id: 'medical', label: 'Medical', icon: '🏥', enabled: isInjured, submenu: [
-        { id: 'medical_treat', label: 'Treat Wounds', icon: '🩹', enabled: isInjured },
+      { id: 'medical', label: 'Medical', icon: '🏥', enabled: isInjured || isDowned, submenu: [
+        { id: 'medical_treat', label: 'Treat Wounds', icon: '🩹', enabled: isInjured && !isDowned },
+        { id: 'medical_rescue', label: 'Rescue Downed', icon: '🚑', enabled: isDowned },
         { id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: isInjured },
         { id: 'medical_surgery', label: 'Surgery', icon: '⚕️', enabled: false },
       ]},
