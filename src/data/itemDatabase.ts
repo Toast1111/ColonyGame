@@ -185,8 +185,8 @@ export class ItemDatabase {
             description: 'Close-range powerhouse.',
             category: 'Weapon', equipSlot: 'weapon', stackable: false,
             maxDurability: 80, value: 240, weight: 3.0,
-            damage: 40, range: 12, accuracy: 0.75,
-            burstCount: 1, warmup: 0.5, burstSpacing: 0.0, cooldown: 0.9,
+            damage: 25, range: 12, accuracy: 0.75,
+            burstCount: 5, warmup: 0.5, burstSpacing: 0.01, cooldown: 1.5,
             projectileSpeed: 620, minRange: 1.2
           },
           {
