@@ -2283,21 +2283,38 @@ export class Game {
   }
 
 
-  barRow(x: number, y: number, label: string, val: number, color: string) {
-    const ctx = this.ctx; 
-    ctx.fillStyle = '#dbeafe'; 
+  barRow(x: number, y: number, label: string, val: number, color: string, availableWidth?: number) {
+    const ctx = this.ctx;
+    // Draw label and compute dynamic label width based on current font
+    ctx.fillStyle = '#dbeafe';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
     ctx.fillText(label, x, y);
-    
-    const w = this.scale(140); 
-    const h = this.scale(10); 
-    const labelWidth = this.scale(70);
-    
-    ctx.fillStyle = '#0f172a'; 
-    ctx.fillRect(x + labelWidth, y - this.scale(8), w, h); 
-    ctx.strokeStyle = '#1e293b'; 
-    ctx.strokeRect(x + labelWidth + .5, y - this.scale(8) + .5, w - 1, h - 1);
-    ctx.fillStyle = color; 
-    ctx.fillRect(x + labelWidth + this.scale(2), y - this.scale(6), Math.max(0, Math.min(w - this.scale(4), (val / 100) * (w - this.scale(4)))), h - this.scale(4));
+
+    const measured = ctx.measureText(label).width;
+    const minLabel = this.scale(70);
+    const pad = this.scale(10);
+    const labelWidth = Math.max(minLabel, Math.ceil(measured + pad * 2));
+
+    // Determine bar width based on available width (panel content width) minus label & small margin
+    const defaultBarW = this.scale(180);
+    const totalAvail = (availableWidth && availableWidth > 0) ? availableWidth : (labelWidth + defaultBarW + this.scale(16));
+    const barW = Math.max(this.scale(120), Math.min(defaultBarW * 2, totalAvail - labelWidth - this.scale(12)));
+    const barH = this.scale(10);
+
+    // Draw bar background and outline
+    const barX = x + labelWidth;
+    const barY = y - this.scale(8);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(barX, barY, barW, barH);
+    ctx.strokeStyle = '#1e293b';
+    ctx.strokeRect(barX + 0.5, barY + 0.5, barW - 1, barH - 1);
+
+    // Fill bar value
+    const innerPad = this.scale(2);
+    const innerW = Math.max(0, Math.min(barW - innerPad * 2, (val / 100) * (barW - innerPad * 2)));
+    ctx.fillStyle = color;
+    ctx.fillRect(barX + innerPad, barY + innerPad, innerW, barH - innerPad * 2);
   }
 
   // Build and placement UI moved to src/game/ui

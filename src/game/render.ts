@@ -220,6 +220,44 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
     const tintedHead = createTintedSprite(headSprite, profile.avatar.skinTone);
     ctx.drawImage(tintedHead, -spriteWidth/2, -offsetY);
   }
+
+  // 3.5 Weapon overlay when actively using a ranged weapon
+  // Show only if colonist has a ranged weapon and is aiming/firing (warmup/burst/betweenShots or has a combat target)
+  try {
+    const eq: any = colonist.inventory?.equipment || {};
+    const weap = eq.weapon as any;
+    const isRanged = weap && (weap.defName && weap.defName !== 'Knife');
+    const activeCombat = ((colonist as any).combatTarget) || (((colonist as any).warmup || 0) > 0) || (((colonist as any).betweenShots || 0) > 0);
+    if (!isDowned && isRanged && activeCombat) {
+      const icon = ImageAssets.getInstance().getItemIcon(weap.defName || weap.name);
+      if (icon) {
+        const iconW = 22; // weapon sprite size (UI icon scaled for world rendering)
+        const iconH = 10;
+        let wx = 0;
+        let wy = 0;
+        switch (spriteDirection) {
+          case 'east':
+            wx = 6; wy = -offsetY + spriteHeight * 0.55; break;
+          case 'north':
+            wx = -4; wy = -offsetY + spriteHeight * 0.45; break;
+          case 'south':
+          default:
+            wx = -2; wy = -offsetY + spriteHeight * 0.60; break;
+        }
+        // Determine aim angle; fallback to cardinal
+        let aim = typeof colonist.direction === 'number' ? (colonist.direction as number) : 0;
+        if (typeof colonist.direction !== 'number') {
+          aim = spriteDirection === 'east' ? 0 : spriteDirection === 'north' ? -Math.PI / 2 : Math.PI / 2;
+        }
+        // Draw rotated around the hand position; the isFlipped transform already applied
+        ctx.save();
+        ctx.translate(wx, wy);
+        ctx.rotate(aim);
+        ctx.drawImage(icon, -iconW / 2, -iconH / 2, iconW, iconH);
+        ctx.restore();
+      }
+    }
+  } catch {}
   
   // 4. Hair (tinted with hair color)
   const hairSprite = imageAssets.getColonistSprite('hair', sprites.hairStyle, spriteDirection);

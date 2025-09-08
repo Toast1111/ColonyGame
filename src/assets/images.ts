@@ -70,6 +70,12 @@ import ShirtBasicMaleEast from './colonist/apperal/ShirtBasic/ShirtBasic_Male_ea
 import ShirtBasicMaleNorth from './colonist/apperal/ShirtBasic/ShirtBasic_Male_north.png';
 import ShirtBasicMaleSouth from './colonist/apperal/ShirtBasic/ShirtBasic_Male_south.png';
 
+// Item/Equipment icons (weapons)
+import WeaponAutopistol from './item/equipment/weapon_ranged/Autopistol.png';
+import WeaponShotgun from './item/equipment/weapon_ranged/Shotgun.png';
+import WeaponChainShotgun from './item/equipment/weapon_ranged/ChainShotgun.png';
+import WeaponMinigun from './item/equipment/weapon_ranged/Minigun.png';
+
 export class ImageAssets {
   private static instance: ImageAssets;
   private images: Map<string, HTMLImageElement> = new Map();
@@ -154,7 +160,15 @@ export class ImageAssets {
       { name: 'apparel_shirt_basic_male_south', path: ShirtBasicMaleSouth }
     ];
 
-    const allAssets = [...buildingAssets, ...colonistAssets];
+    const equipmentAssets = [
+      // Weapons
+      { name: 'weapon_autopistol', path: WeaponAutopistol },
+      { name: 'weapon_shotgun', path: WeaponShotgun },
+      { name: 'weapon_chainshotgun', path: WeaponChainShotgun },
+      { name: 'weapon_minigun', path: WeaponMinigun }
+    ];
+
+    const allAssets = [...buildingAssets, ...colonistAssets, ...equipmentAssets];
     const loadPromises = allAssets.map(asset => this.loadImage(asset.name, asset.path));
     
     try {
@@ -211,6 +225,35 @@ export class ImageAssets {
   // Get all available apparel types
   getAvailableApparelTypes(): string[] {
     return ['shirt_basic_male'];
+  }
+
+  // Map item defNames to available icon keys
+  private getItemIconKey(defName: string): string | null {
+    // Normalize defName for mapping
+    const key = defName.toLowerCase();
+    switch (key) {
+      case 'pistol':
+      case 'autopistol':
+        return 'weapon_autopistol';
+      case 'shotgun':
+        return 'weapon_shotgun';
+      case 'chainshotgun':
+        return 'weapon_chainshotgun';
+      case 'minigun':
+        return 'weapon_minigun';
+      case 'rifle':
+        // No dedicated rifle sprite yet; return null to omit icon
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  // Public helper to retrieve an item icon for UI by item defName
+  getItemIcon(defName?: string | null): HTMLImageElement | null {
+    if (!defName) return null;
+    const iconKey = this.getItemIconKey(defName);
+    return iconKey ? (this.images.get(iconKey) || null) : null;
   }
 
   isLoaded(): boolean {

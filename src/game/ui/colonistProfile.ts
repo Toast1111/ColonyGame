@@ -1,15 +1,20 @@
 import { drawColonistAvatar } from "../render";
+import { ImageAssets } from "../../assets/images";
 
 export function drawColonistProfile(game: any, c: any) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   const cw = game.canvas.width; 
   const ch = game.canvas.height; 
 
-  const W = Math.min(game.scale(550), cw * 0.65);
-  const H = Math.min(game.scale(450), ch * 0.7);
+  // Responsive sizing with sensible caps for large monitors
+  const maxPanelW = Math.min(860, Math.floor(cw * 0.72));
+  const maxPanelH = Math.min(600, Math.floor(ch * 0.78));
+  const W = Math.min(game.scale(580), maxPanelW);
+  const H = Math.min(game.scale(480), maxPanelH);
   const PAD = game.scale(12);
-  const X = PAD; 
-  const Y = game.scale(54);
+  // Slightly inset from left, not fully flush; keep top clear of resource HUD
+  const X = Math.max(PAD, Math.floor(cw * 0.02));
+  const Y = Math.max(game.scale(110), Math.floor(ch * 0.08));
   const finalY = Math.min(Y, ch - H - PAD);
 
   ctx.save();
@@ -18,10 +23,17 @@ export function drawColonistProfile(game: any, c: any) {
   ctx.strokeStyle = '#1e293b'; 
   ctx.strokeRect(X + .5, finalY + .5, W - 1, H - 1);
 
-  const closeSize = game.scale(26);
-  const closePad = game.scale(8);
+  // Header bar to keep the close button unobstructed
+  const headerH = game.scale(36);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(X, finalY, W, headerH);
+  ctx.strokeStyle = '#1e293b';
+  ctx.strokeRect(X + .5, finalY + .5, W - 1, headerH - 1);
+
+  const closeSize = game.scale(28);
+  const closePad = game.scale(6);
   const closeX = X + W - closePad - closeSize;
-  const closeY = finalY + closePad;
+  const closeY = finalY + Math.floor((headerH - closeSize) / 2);
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(closeX, closeY, closeSize, closeSize);
   ctx.strokeStyle = '#1e293b';
@@ -31,8 +43,14 @@ export function drawColonistProfile(game: any, c: any) {
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + game.scale(1));
 
+  // Optional panel title on the left side of header
+  ctx.fillStyle = '#9fb3c8';
+  ctx.textAlign = 'left';
+  ctx.font = game.getScaledFont(14, '600');
+  ctx.fillText('Colonist', X + game.scale(12), finalY + Math.floor(headerH / 2) + game.scale(1));
+
   const tabHeight = game.scale(32);
-  const tabY = finalY + game.scale(12);
+  const tabY = finalY + headerH + game.scale(8);
   const tabs = [
     { id: 'bio', label: 'Bio', icon: '👤' },
     { id: 'health', label: 'Health', icon: '❤️' },
@@ -43,7 +61,7 @@ export function drawColonistProfile(game: any, c: any) {
   ];
 
   game.colonistTabRects = [];
-  const tabWidth = (W - game.scale(32)) / tabs.length;
+  const tabWidth = Math.max(game.scale(70), (W - game.scale(32)) / tabs.length);
   for (let i = 0; i < tabs.length; i++) {
     const tab = tabs[i];
     const tabX = X + game.scale(16) + i * tabWidth;
@@ -61,7 +79,7 @@ export function drawColonistProfile(game: any, c: any) {
     game.colonistTabRects.push({ tab: tab.id, x: tabX, y: tabY, w: tabWidth, h: tabHeight });
   }
 
-  const contentY = tabY + tabHeight + game.scale(8);
+  const contentY = tabY + tabHeight + game.scale(10);
   const contentH = H - (contentY - finalY) - game.scale(16);
   ctx.save();
   ctx.beginPath();
@@ -198,17 +216,18 @@ function drawHealthTab(game: any, c: any, x: number, y: number, w: number, h: nu
   ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left';
   ctx.fillText('Overall Condition', x, textY); textY += game.scale(24);
   const barSpacing = game.scale(22);
-  game.barRow(x, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
-  game.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
-  game.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
+  const availW = w - game.scale(16);
+  game.barRow(x, textY, 'Health', hp, '#22c55e', availW); textY += barSpacing;
+  game.barRow(x, textY, 'Energy', 100 - tired, '#eab308', availW); textY += barSpacing;
+  game.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171', availW); textY += barSpacing;
   textY += game.scale(8);
   // Health system specifics
   const health = (c as any).health;
   if (health) {
     const bloodLoss = Math.round(health.bloodLoss || 0);
     const pain = Math.round(health.pain || 0);
-    game.barRow(x, textY, 'Blood Loss', 100 - bloodLoss, '#60a5fa'); textY += barSpacing;
-    game.barRow(x, textY, 'Pain', pain, '#ef4444'); textY += barSpacing;
+  game.barRow(x, textY, 'Blood Loss', 100 - bloodLoss, '#60a5fa', availW); textY += barSpacing;
+  game.barRow(x, textY, 'Pain', pain, '#ef4444', availW); textY += barSpacing;
     textY += game.scale(8);
     ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Injuries', x, textY); textY += game.scale(18);
     if (!health.injuries || health.injuries.length === 0) {
@@ -262,9 +281,15 @@ function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: numb
     const slotName = slot.charAt(0).toUpperCase() + slot.slice(1);
     ctx.fillText(`${slotName}:`, x, textY);
     if (item) {
+      // Try draw item icon
+      const icon = ImageAssets.getInstance().getItemIcon(item.defName || item.name);
+      if (icon) {
+        const iconSize = game.scale(18);
+        ctx.drawImage(icon, x + game.scale(70), textY - iconSize + game.scale(12), iconSize, iconSize);
+      }
       ctx.fillStyle = getItemQualityColor(game, item.quality || 'normal');
       ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText(item.name, x + game.scale(80), textY);
+      ctx.fillText(item.name, x + game.scale(94), textY);
       ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400');
       ctx.fillText(`(${item.quality || 'normal'})`, x + game.scale(180), textY);
     } else {
@@ -280,8 +305,16 @@ function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: numb
   } else {
     for (const item of c.inventory.items) {
       ctx.fillStyle = getItemQualityColor(game, item.quality || 'normal'); ctx.font = game.getScaledFont(12, '400');
+      // Draw icon if available
+      const icon = ImageAssets.getInstance().getItemIcon(item.defName || item.name);
+      let textOffset = game.scale(8);
+      if (icon) {
+        const iconSize = game.scale(16);
+        ctx.drawImage(icon, x + textOffset, textY - iconSize + game.scale(12), iconSize, iconSize);
+        textOffset += game.scale(20);
+      }
       const displayText = `${item.name} (${item.quantity})`;
-      ctx.fillText(displayText, x + game.scale(8), textY);
+      ctx.fillText(displayText, x + textOffset, textY);
       ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400');
       ctx.fillText(`${item.quality || 'normal'}`, x + game.scale(150), textY);
       if (item.durability !== undefined) ctx.fillText(`${Math.round(item.durability)}%`, x + game.scale(200), textY);
