@@ -55,21 +55,29 @@ export function initDebugConsole(game: Game) {
 
   reg("pause", (g) => { g.paused = !g.paused; return `paused = ${g.paused}`; }, "pause — toggle pause");
 
+  reg("weapons", (g) => {
+    const defs = itemDatabase.getItemDefsByCategory('Weapon');
+    if (!defs.length) return 'no weapons loaded';
+    return 'weapons: ' + defs.map(d => d.defName).sort().join(', ');
+  }, "weapons — list available weapon defNames");
+
   reg("give", (g, args) => {
-    const what = (args[0] || "").toLowerCase();
-    if (what !== "pistol") return "usage: give pistol [all]";
+    const what = (args[0] || "").trim();
+    if (!what) return "usage: give <ItemDefName> [all]";
+    const def = itemDatabase.getItemDef(what) || itemDatabase.getItemDef(what[0].toUpperCase() + what.slice(1));
+    if (!def) return `unknown item: ${what}`;
     const all = (args[1] || "").toLowerCase() === "all";
     const targets = all ? g.colonists : (g.selColonist ? [g.selColonist] : []);
     if (!targets.length) return "no colonist selected (use 'select next') or add 'all'";
     for (const c of targets) {
       if (!c.inventory) (c as any).inventory = { items: [], equipment: {}, carryCapacity: 50, currentWeight: 0 } as any;
-      const pistol = (g as any).itemDatabase?.createItem ? (g as any).itemDatabase.createItem('Pistol', 1, 'normal') : null;
+      const item = itemDatabase.createItem(def.defName, 1, 'normal');
       if (!(c as any).inventory.equipment) (c as any).inventory.equipment = {} as any;
-      (c as any).inventory.equipment.weapon = pistol || null;
+      (c as any).inventory.equipment.weapon = item || null;
       g.recalcInventoryWeight(c);
     }
-    return `gave pistol to ${targets.length} colonist(s)`;
-  }, "give pistol [all] — equip a pistol to selected or all");
+    return `gave ${def.label} to ${targets.length} colonist(s)`;
+  }, "give <ItemDefName> [all] — equip item to selected or all");
 
   reg("select", (g, args) => {
     const sub = (args[0] || "").toLowerCase();

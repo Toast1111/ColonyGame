@@ -334,7 +334,7 @@ function generateStartingInventory(rng: SeededRandom, background: string, skills
   // that early colonies have at least one ranged weapon without forcing it.
   const bgl = background.toLowerCase();
   const hasWeapon = !!inventory.equipment.weapon;
-  const hasRanged = hasWeapon && (inventory.equipment.weapon?.defName === 'Pistol' || inventory.equipment.weapon?.defName === 'Rifle');
+  const hasRanged = hasWeapon && !!itemDatabase.getItemDef(inventory.equipment.weapon!.defName || '')?.range && (itemDatabase.getItemDef(inventory.equipment.weapon!.defName || '')!.range! > 2);
   if (!hasRanged && bgl !== 'soldier') {
     // ~35% chance to receive a pistol as starting gear
     if (rng.next() < 0.35) {

@@ -72,9 +72,21 @@ import ShirtBasicMaleSouth from './colonist/apperal/ShirtBasic/ShirtBasic_Male_s
 
 // Item/Equipment icons (weapons)
 import WeaponAutopistol from './item/equipment/weapon_ranged/Autopistol.png';
+import WeaponRevolver from './item/equipment/weapon_ranged/Revolver.png';
+import WeaponMachinePistol from './item/equipment/weapon_ranged/MachinePistol.png';
+import WeaponHeavySMG from './item/equipment/weapon_ranged/HeavySMG.png';
+import WeaponLMG from './item/equipment/weapon_ranged/LMG.png';
+import WeaponMinigun from './item/equipment/weapon_ranged/Minigun.png';
+import WeaponAssaultRifle from './item/equipment/weapon_ranged/AssaultRifle.png';
+import WeaponBoltActionRifle from './item/equipment/weapon_ranged/BoltActionRifle.png';
+import WeaponSniperRifle from './item/equipment/weapon_ranged/SniperRifle.png';
 import WeaponShotgun from './item/equipment/weapon_ranged/Shotgun.png';
 import WeaponChainShotgun from './item/equipment/weapon_ranged/ChainShotgun.png';
-import WeaponMinigun from './item/equipment/weapon_ranged/Minigun.png';
+import WeaponRocketLauncher from './item/equipment/weapon_ranged/RocketLauncher.png';
+import WeaponThumpCannon from './item/equipment/weapon_ranged/ThumpCannon.png';
+import WeaponBowShort from './item/equipment/weapon_ranged/BowShort.png';
+import WeaponBowRecurve from './item/equipment/weapon_ranged/BowRecurve.png';
+import WeaponBowGreat from './item/equipment/weapon_ranged/BowGreat.png';
 
 export class ImageAssets {
   private static instance: ImageAssets;
@@ -163,9 +175,21 @@ export class ImageAssets {
     const equipmentAssets = [
       // Weapons
       { name: 'weapon_autopistol', path: WeaponAutopistol },
+      { name: 'weapon_revolver', path: WeaponRevolver },
+      { name: 'weapon_machinepistol', path: WeaponMachinePistol },
+      { name: 'weapon_heavysmg', path: WeaponHeavySMG },
+      { name: 'weapon_lmg', path: WeaponLMG },
+      { name: 'weapon_minigun', path: WeaponMinigun },
+      { name: 'weapon_assaultrifle', path: WeaponAssaultRifle },
+      { name: 'weapon_boltactionrifle', path: WeaponBoltActionRifle },
+      { name: 'weapon_sniperrifle', path: WeaponSniperRifle },
       { name: 'weapon_shotgun', path: WeaponShotgun },
       { name: 'weapon_chainshotgun', path: WeaponChainShotgun },
-      { name: 'weapon_minigun', path: WeaponMinigun }
+      { name: 'weapon_rocketlauncher', path: WeaponRocketLauncher },
+      { name: 'weapon_thumpcannon', path: WeaponThumpCannon },
+      { name: 'weapon_bowshort', path: WeaponBowShort },
+      { name: 'weapon_bowrecurve', path: WeaponBowRecurve },
+      { name: 'weapon_bowgreat', path: WeaponBowGreat }
     ];
 
     const allAssets = [...buildingAssets, ...colonistAssets, ...equipmentAssets];
@@ -232,18 +256,40 @@ export class ImageAssets {
     // Normalize defName for mapping
     const key = defName.toLowerCase();
     switch (key) {
-      case 'pistol':
+      case 'pistol': // fall back to autopistol art
       case 'autopistol':
         return 'weapon_autopistol';
+      case 'revolver':
+        return 'weapon_revolver';
+      case 'machinepistol':
+        return 'weapon_machinepistol';
+      case 'heavysmg':
+        return 'weapon_heavysmg';
+      case 'lmg':
+        return 'weapon_lmg';
+      case 'minigun':
+        return 'weapon_minigun';
+      case 'assaultrifle':
+      case 'rifle':
+        return 'weapon_assaultrifle';
+      case 'boltactionrifle':
+        return 'weapon_boltactionrifle';
+      case 'sniperrifle':
+        return 'weapon_sniperrifle';
       case 'shotgun':
         return 'weapon_shotgun';
       case 'chainshotgun':
         return 'weapon_chainshotgun';
-      case 'minigun':
-        return 'weapon_minigun';
-      case 'rifle':
-        // No dedicated rifle sprite yet; return null to omit icon
-        return null;
+      case 'rocketlauncher':
+        return 'weapon_rocketlauncher';
+      case 'thumpcannon':
+        return 'weapon_thumpcannon';
+      case 'bowshort':
+        return 'weapon_bowshort';
+      case 'bowrecurve':
+        return 'weapon_bowrecurve';
+      case 'bowgreat':
+        return 'weapon_bowgreat';
       default:
         return null;
     }

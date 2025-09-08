@@ -1,9 +1,10 @@
 import type { Game } from "../Game";
 import type { Building, Bullet, Enemy } from "../types";
-import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles } from "../../core/particles";
+import { createMuzzleFlash, createProjectileTrail, createImpactEffect, createSparks, createDebris, createSmokeCloud, updateParticles } from "../../core/particles";
 import { hasLineOfFire as hasLoF, lineIntersectsRect } from "./utils";
 import { dist2 } from "../../core/utils";
 import { applyDamageToEnemy } from "./damage";
+import { T, COLORS } from "../constants";
 
 // Intersection helpers provided by utils
 
@@ -71,7 +72,7 @@ export function updateTurret(game: Game, b: Building, dt: number) {
     const ay = bc.y + Math.sin(aimAng) * aimDist;
 
     // Create a fast projectile
-    const bullet: Bullet = {
+    const bullet: Bullet & { kind?: string } = {
       x: bc.x, y: bc.y,
       tx: ax, ty: ay,
       t: 0.12,
@@ -79,21 +80,102 @@ export function updateTurret(game: Game, b: Building, dt: number) {
       dmg: dps, // apply per shot (approximate RimWorld burst by fireRate)
       life: 0,
       maxLife: Math.max(0.12, dist / 700 + 0.1),
-      owner: 'turret'
+      owner: 'turret',
+      kind: 'turret'
     };
     // Compute velocity toward aim
     const dx = ax - bc.x, dy = ay - bc.y; const L = Math.hypot(dx, dy) || 1;
     bullet.vx = (dx / L) * (bullet.speed as number);
     bullet.vy = (dy / L) * (bullet.speed as number);
-    (bullet as any).particles = createProjectileTrail(bullet);
+  (bullet as any).particles = createProjectileTrail(bullet as any);
     game.bullets.push(bullet);
 
     // Muzzle flash
-    const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang);
+  const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang, 'turret');
     game.particles.push(...muzzleFlash);
   (b as any).flashTimer = 0.08;
   (b as any).cooldown = fireRate;
   (b as any).cooldownTotal = fireRate;
+  }
+}
+
+function debrisColorForBuilding(b: Building): string {
+  switch (b.kind) {
+    case 'wall': return COLORS.wall;
+    case 'house': return COLORS.wood;
+    case 'turret': return COLORS.metal;
+    case 'warehouse': return COLORS.metal;
+    case 'stock': return COLORS.metal;
+    case 'path': return '#475569';
+    case 'farm': return COLORS.ground;
+    case 'infirmary': return b.color || COLORS.bld;
+    case 'tent': return b.color || COLORS.tent;
+    case 'hq': return b.color || COLORS.bld;
+    default: return b.color || '#8d8d8d';
+  }
+}
+
+function destroyBuildingIfDead(game: Game, b: Building) {
+  if (b.hp > 0) return;
+  if (b.kind === 'hq') { game.lose(); return; }
+  // Evict and remove
+  (game as any).evictColonistsFrom && (game as any).evictColonistsFrom(b);
+  const idx = (game.buildings as Building[]).indexOf(b);
+  if (idx >= 0) (game.buildings as Building[]).splice(idx, 1);
+  game.msg(((b as any).name || b.kind) + ' destroyed', 'warn');
+  // Rebuild navigation as the obstruction changed
+  (game as any).rebuildNavGrid && (game as any).rebuildNavGrid();
+}
+
+function explodeAt(game: Game, x: number, y: number, baseDamage: number, radiusTiles = 2.0) {
+  const radius = radiusTiles * T;
+  // Particles: core smoke handled by caller if desired; here we can add extra debris from nearby structures
+  // Damage enemies with falloff and small knockback
+  for (const e of game.enemies) {
+    const dx = e.x - x, dy = e.y - y; const d = Math.hypot(dx, dy);
+    if (d > radius) continue;
+    const falloff = 1 - (d / radius);
+    const dmg = Math.max(1, Math.round(baseDamage * (0.4 + 0.6 * falloff)));
+    applyDamageToEnemy(e, dmg);
+    // Knockback
+    if (d > 1) {
+      const kb = 18 * falloff; // pixels
+      const nx = dx / d, ny = dy / d;
+      e.x += nx * kb; e.y += ny * kb;
+    }
+  }
+
+  // Damage colonists (friendly fire) with armor consideration and knockback
+  for (const c of game.colonists) {
+    if (!c.alive) continue;
+    const dx = c.x - x, dy = c.y - y; const d = Math.hypot(dx, dy);
+    if (d > radius) continue;
+    const falloff = 1 - (d / radius);
+    const dmg = Math.max(1, Math.round(baseDamage * 0.35 * (0.4 + 0.6 * falloff)));
+    // Use game's armor-aware function
+    (game as any).applyDamageToColonist ? (game as any).applyDamageToColonist(c, dmg) : (c.hp = Math.max(0, c.hp - dmg));
+    if (d > 1) {
+      const kb = 16 * falloff;
+      const nx = dx / d, ny = dy / d;
+      c.x += nx * kb; c.y += ny * kb;
+    }
+  }
+
+  // Damage buildings (reduced vs. pawns); walls take near-full
+  for (const b of game.buildings.slice()) {
+    if (!b.done) continue;
+    // Ignore low-impact structures like paths and farms for HP damage
+    if (b.kind === 'path' || b.kind === 'farm') continue;
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    const dx = cx - x, dy = cy - y; const d = Math.hypot(dx, dy);
+    if (d > radius + Math.max(b.w, b.h) * 0.5) continue;
+    const nearest = Math.max(0, d - Math.min(b.w, b.h) * 0.5); // distance to rect approx
+    if (nearest > radius) continue;
+    const falloff = 1 - (nearest / radius);
+    const factor = (b.kind === 'wall') ? 0.95 : 0.6;
+    const dmg = Math.max(1, Math.round(baseDamage * factor * (0.4 + 0.6 * falloff)));
+    b.hp -= dmg;
+    destroyBuildingIfDead(game, b);
   }
 }
 
@@ -110,13 +192,13 @@ export function updateProjectiles(game: Game, dt: number) {
       b.life = (b.life || 0) + dt;
 
       // Collision with blocking buildings (cover)
-      let hitBlocked = false;
-  for (const bl of game.buildings) {
+      let hitBlocked = false; let hitBuilding: Building | null = null;
+      for (const bl of game.buildings) {
         if (bl.kind === 'hq' || bl.kind === 'path' || bl.kind === 'house' || bl.kind === 'farm' || !bl.done) continue;
         // If projectile originates inside this building (e.g., fired from a turret), ignore this building for this step
         const prevInside = prevX >= bl.x && prevX <= bl.x + bl.w && prevY >= bl.y && prevY <= bl.y + bl.h;
         if (prevInside) continue;
-        if (lineIntersectsRect(prevX, prevY, b.x, b.y, bl)) { hitBlocked = true; break; }
+        if (lineIntersectsRect(prevX, prevY, b.x, b.y, bl)) { hitBlocked = true; hitBuilding = bl; break; }
       }
 
       // Collision with enemies
@@ -141,16 +223,44 @@ export function updateProjectiles(game: Game, dt: number) {
 
       if (hitEnemy) {
         const dmg = Math.max(1, Math.round((b.dmg || 10)));
-        applyDamageToEnemy(hitEnemy, dmg);
-        const impact = createImpactEffect(hitEnemy.x, hitEnemy.y);
-        game.particles.push(...impact);
+        const kind = ((b as any).kind || 'rifle') as any;
+        if (kind === 'rocket') {
+          // Rocket: explode instead of single-target damage
+          const power = Math.max(dmg, 60);
+          game.particles.push(...createImpactEffect(hitEnemy.x, hitEnemy.y, kind, Math.min(2, power / 60)));
+          game.particles.push(...createSmokeCloud(hitEnemy.x, hitEnemy.y, 32, 30));
+          explodeAt(game, hitEnemy.x, hitEnemy.y, power, 2.2);
+        } else {
+          applyDamageToEnemy(hitEnemy, dmg);
+          const impact = createImpactEffect(hitEnemy.x, hitEnemy.y, kind, Math.min(2, (b.dmg || 10) / 20));
+          game.particles.push(...impact);
+          // Extra sparks for high rate-of-fire weapons
+          if (kind === 'minigun') {
+            game.particles.push(...createSparks(hitEnemy.x, hitEnemy.y, Math.atan2((b as any).vy || 0, (b as any).vx || 1), 12, 200));
+          }
+        }
         game.bullets.splice(i, 1);
         continue;
       }
 
       if (hitBlocked || (b.maxLife != null && (b.life as number) >= b.maxLife)) {
-        const impact = createImpactEffect(b.x, b.y);
-        game.particles.push(...impact);
+        const kind = ((b as any).kind || 'rifle') as any;
+        if (kind === 'rocket') {
+          const power = Math.max((b.dmg || 60), 60);
+          game.particles.push(...createImpactEffect(b.x, b.y, kind, Math.min(2, power / 60)));
+          game.particles.push(...createSmokeCloud(b.x, b.y, 32, 30));
+          if (hitBuilding) {
+            game.particles.push(...createDebris(b.x, b.y, 22, debrisColorForBuilding(hitBuilding)));
+          }
+          explodeAt(game, b.x, b.y, power, 2.2);
+        } else {
+          const impact = createImpactEffect(b.x, b.y, kind, Math.min(2, (b.dmg || 10) / 20));
+          game.particles.push(...impact);
+          // Debris when hitting walls/structures
+          if (hitBuilding) {
+            game.particles.push(...createDebris(b.x, b.y, 10, debrisColorForBuilding(hitBuilding)));
+          }
+        }
         game.bullets.splice(i, 1);
         continue;
       }

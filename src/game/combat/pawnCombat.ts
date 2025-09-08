@@ -1,7 +1,7 @@
 import type { Game } from "../Game";
 import type { Colonist, Enemy } from "../types";
 import { itemDatabase } from "../../data/itemDatabase";
-import { createMuzzleFlash, createProjectileTrail } from "../../core/particles";
+import { createMuzzleFlash, createProjectileTrail, createImpactEffect } from "../../core/particles";
 import { hasLineOfFire as hasLoF, segmentIntersectsCircle, coverPenalty } from "./utils";
 import { applyDamageToEnemy } from "./damage";
 
@@ -36,6 +36,18 @@ function getWeaponStats(c: Colonist) {
   const minRangePx = ((def as any).minRange ?? 1.25) * T; // too close -> bad for ranged
   const isMelee = (def.range || 0) <= 2;
   return { rangePx, damage, accuracy, burst, warmup, betweenShots, cooldown, speed, minRangePx, isMelee };
+}
+
+function weaponFxKind(defName: string): 'pistol'|'smg'|'rifle'|'shotgun'|'sniper'|'minigun'|'rocket'|'bow'|'turret' {
+  const n = defName.toLowerCase();
+  if (n.includes('bow')) return 'bow';
+  if (n.includes('rocket')) return 'rocket';
+  if (n.includes('minigun')) return 'minigun';
+  if (n.includes('shotgun')) return 'shotgun';
+  if (n.includes('sniper')) return 'sniper';
+  if (n.includes('smg') || n.includes('machinepistol')) return 'smg';
+  if (n.includes('pistol') || n === 'revolver') return 'pistol';
+  return 'rifle';
 }
 
 function pickTarget(game: Game, c: Colonist, range: number): Enemy | null {
@@ -161,6 +173,9 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     return;
   }
 
+  const eq: any = c.inventory?.equipment || {};
+  const defName = eq.weapon?.defName || '';
+  const kind = weaponFxKind(defName);
   const bullet: any = {
     x: c.x, y: c.y, tx: ax, ty: ay,
     t: 0.12,
@@ -168,14 +183,15 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     dmg: stats.damage,
     life: 0,
     maxLife: Math.max(0.12, dist / stats.speed + 0.12),
-    owner: 'colonist'
+    owner: 'colonist',
+    kind
   };
   const dx = ax - c.x, dy = ay - c.y; const L = Math.hypot(dx, dy) || 1;
   bullet.vx = (dx / L) * stats.speed;
   bullet.vy = (dy / L) * stats.speed;
   bullet.particles = createProjectileTrail(bullet);
   game.bullets.push(bullet);
-  const muzzle = createMuzzleFlash(c.x, c.y, ang);
+  const muzzle = createMuzzleFlash(c.x, c.y, ang, kind);
   game.particles.push(...muzzle);
 
   (c as any).burstLeft -= 1;

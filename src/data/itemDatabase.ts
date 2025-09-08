@@ -119,6 +119,167 @@ export class ItemDatabase {
         },
         
         // Weapons
+          {
+            defName: 'Revolver',
+            label: 'revolver',
+            description: 'Simple revolver. Reliable sidearm.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 120, weight: 1.1,
+            damage: 22, range: 16, accuracy: 0.68,
+            burstCount: 1, warmup: 0.4, burstSpacing: 0.0, cooldown: 0.55,
+            projectileSpeed: 660
+          },
+          {
+            defName: 'Autopistol',
+            label: 'autopistol',
+            description: 'Compact automatic pistol.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 180, weight: 1.25,
+            damage: 20, range: 16, accuracy: 0.68,
+            burstCount: 2, warmup: 0.35, burstSpacing: 0.08, cooldown: 0.5,
+            projectileSpeed: 680
+          },
+          {
+            defName: 'MachinePistol',
+            label: 'machine pistol',
+            description: 'Very-fast-firing compact gun.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 220, weight: 1.6,
+            damage: 18, range: 16, accuracy: 0.63,
+            burstCount: 3, warmup: 0.35, burstSpacing: 0.07, cooldown: 0.55,
+            projectileSpeed: 700
+          },
+          {
+            defName: 'HeavySMG',
+            label: 'heavy SMG',
+            description: 'Heavy submachine gun with decent range.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 90, value: 320, weight: 3.2,
+            damage: 24, range: 20, accuracy: 0.7,
+            burstCount: 3, warmup: 0.45, burstSpacing: 0.09, cooldown: 0.7,
+            projectileSpeed: 700
+          },
+          {
+            defName: 'LMG',
+            label: 'light machine gun',
+            description: 'Suppressive-fire capable LMG.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 100, value: 550, weight: 5.5,
+            damage: 22, range: 28, accuracy: 0.65,
+            burstCount: 6, warmup: 0.6, burstSpacing: 0.08, cooldown: 1.2,
+            projectileSpeed: 700
+          },
+          {
+            defName: 'Minigun',
+            label: 'minigun',
+            description: 'Devastating rotary gun with huge burst.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 100, value: 1200, weight: 8.0,
+            damage: 16, range: 24, accuracy: 0.5,
+            burstCount: 12, warmup: 0.8, burstSpacing: 0.06, cooldown: 1.8,
+            projectileSpeed: 700
+          },
+          {
+            defName: 'Shotgun',
+            label: 'shotgun',
+            description: 'Close-range powerhouse.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 240, weight: 3.0,
+            damage: 40, range: 12, accuracy: 0.75,
+            burstCount: 1, warmup: 0.5, burstSpacing: 0.0, cooldown: 0.9,
+            projectileSpeed: 620, minRange: 1.2
+          },
+          {
+            defName: 'ChainShotgun',
+            label: 'chain shotgun',
+            description: 'Rapid-firing shotgun at close range.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 300, weight: 3.4,
+            damage: 30, range: 12, accuracy: 0.7,
+            burstCount: 3, warmup: 0.5, burstSpacing: 0.08, cooldown: 1.0,
+            projectileSpeed: 620, minRange: 1.2
+          },
+          {
+            defName: 'BoltActionRifle',
+            label: 'bolt-action rifle',
+            description: 'Long-range rifle with high stopping power.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 100, value: 380, weight: 3.8,
+            damage: 48, range: 35, accuracy: 0.85,
+            burstCount: 1, warmup: 0.7, burstSpacing: 0.0, cooldown: 1.1,
+            projectileSpeed: 720
+          },
+          {
+            defName: 'SniperRifle',
+            label: 'sniper rifle',
+            description: 'Extremely accurate long-range rifle.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 100, value: 700, weight: 4.5,
+            damage: 60, range: 40, accuracy: 0.9,
+            burstCount: 1, warmup: 0.9, burstSpacing: 0.0, cooldown: 1.3,
+            projectileSpeed: 740
+          },
+          {
+            defName: 'AssaultRifle',
+            label: 'assault rifle',
+            description: 'General-purpose automatic rifle.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 100, value: 500, weight: 3.8,
+            damage: 33, range: 30, accuracy: 0.8,
+            burstCount: 3, warmup: 0.6, burstSpacing: 0.1, cooldown: 0.7,
+            projectileSpeed: 700
+          },
+          {
+            defName: 'RocketLauncher',
+            label: 'rocket launcher',
+            description: 'High-damage explosive launcher.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 70, value: 1000, weight: 6.5,
+            damage: 120, range: 28, accuracy: 0.6,
+            burstCount: 1, warmup: 1.2, burstSpacing: 0.0, cooldown: 2.0,
+            projectileSpeed: 380, minRange: 1.6
+          },
+          {
+            defName: 'ThumpCannon',
+            label: 'thump cannon',
+            description: 'Concussive-impact launcher.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 850, weight: 5.0,
+            damage: 80, range: 30, accuracy: 0.7,
+            burstCount: 1, warmup: 1.0, burstSpacing: 0.0, cooldown: 1.6,
+            projectileSpeed: 420, minRange: 1.5
+          },
+          {
+            defName: 'BowShort',
+            label: 'short bow',
+            description: 'Simple short bow.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 60, value: 80, weight: 1.0,
+            damage: 18, range: 20, accuracy: 0.65,
+            burstCount: 1, warmup: 0.55, burstSpacing: 0.0, cooldown: 0.8,
+            projectileSpeed: 520
+          },
+          {
+            defName: 'BowRecurve',
+            label: 'recurve bow',
+            description: 'Improved bow with better range.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 70, value: 120, weight: 1.1,
+            damage: 22, range: 24, accuracy: 0.7,
+            burstCount: 1, warmup: 0.58, burstSpacing: 0.0, cooldown: 0.85,
+            projectileSpeed: 540
+          },
+          {
+            defName: 'BowGreat',
+            label: 'great bow',
+            description: 'Large bow with strong draw.',
+            category: 'Weapon', equipSlot: 'weapon', stackable: false,
+            maxDurability: 80, value: 160, weight: 1.3,
+            damage: 26, range: 26, accuracy: 0.72,
+            burstCount: 1, warmup: 0.62, burstSpacing: 0.0, cooldown: 0.9,
+            projectileSpeed: 560
+          },
+          // Existing simple set
         {
           defName: 'Pistol',
           label: 'pistol',
@@ -498,32 +659,119 @@ export class ItemDatabase {
   // Get items suitable for a specific background
   getItemsForBackground(background: string): string[] {
     const items: string[] = [];
-    
-    switch (background.toLowerCase()) {
-      case 'farmer':
+    const bg = background.toLowerCase();
+    const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+    const chance = (p: number) => Math.random() < p;
+    const weightedPick = (pairs: Array<[string, number]>): string => {
+      const total = pairs.reduce((a, [, w]) => a + w, 0);
+      let r = Math.random() * total;
+      for (const [val, w] of pairs) {
+        if ((r -= w) <= 0) return val;
+      }
+      return pairs[pairs.length - 1][0];
+    };
+
+    // Base by background (cover both canonical and synonyms)
+    switch (bg) {
+      case 'farmer': {
         items.push('Hoe', 'WheatSeeds', 'WorkClothes');
+        if (chance(0.25)) items.push(weightedPick([
+          ['BowShort', 0.7],
+          ['Revolver', 0.3]
+        ]));
         break;
-      case 'soldier':
-        items.push('Rifle', 'TacticalArmor', 'TacticalHelmet', 'MedicineKit');
+      }
+      case 'soldier': {
+        // Prefer modern firearms with weights
+        const primary = weightedPick([
+          ['AssaultRifle', 40],
+          ['HeavySMG', 20],
+          ['LMG', 15],
+          ['Shotgun', 10],
+          ['MachinePistol', 10],
+          ['Revolver', 5]
+        ]);
+        items.push(primary, 'TacticalArmor', 'TacticalHelmet');
+        if (chance(0.5)) items.push('MedicineKit');
         break;
+      }
       case 'doctor':
+      case 'medic': {
         items.push('MedicineKit', 'Bandages');
+        if (chance(0.1)) items.push('Revolver');
         break;
-      case 'engineer':
+      }
+      case 'engineer': {
         items.push('Hammer', 'ComponentElectronic', 'ComponentMechanical');
+        if (chance(0.5)) items.push(weightedPick([
+          ['Autopistol', 60],
+          ['Revolver', 40]
+        ]));
         break;
+      }
       case 'miner':
+      case 'laborer': {
         items.push('Pickaxe', 'SimpleHelmet', 'WorkClothes');
+        if (chance(0.15)) items.push('Revolver');
         break;
+      }
       case 'trader':
+      case 'merchant': {
         items.push('Gold', 'Silver');
+        if (chance(0.2)) items.push('Revolver');
         break;
-      default:
-        items.push('Knife', 'Bread');
+      }
+      case 'hunter': {
+        const primary = weightedPick([
+          ['BoltActionRifle', 45],
+          ['BowRecurve', 25],
+          ['BowGreat', 15],
+          ['BowShort', 10],
+          ['SniperRifle', 5]
+        ]);
+        items.push(primary, 'Knife');
         break;
+      }
+      case 'scholar': {
+        // No weapon by default
+        break;
+      }
+      case 'noble': {
+        if (chance(0.35)) items.push('Revolver');
+        break;
+      }
+      case 'assassin': {
+        items.push(chance(0.65) ? 'MachinePistol' : 'Revolver', 'Knife');
+        break;
+      }
+      case 'witch': {
+        // Flavor only; no practical items
+        break;
+      }
+      case 'hero': {
+        const primary = weightedPick([
+          ['AssaultRifle', 60],
+          ['HeavySMG', 20],
+          ['Shotgun', 15],
+          ['Minigun', 5]
+        ]);
+        items.push(primary);
+        if (chance(0.4)) items.push('TacticalArmor');
+        break;
+      }
+      case 'mastermind': {
+        if (chance(0.5)) items.push('Revolver');
+        break;
+      }
+      default: {
+        // Generic fallback
+        items.push('Knife');
+        if (chance(0.25)) items.push('Autopistol');
+      }
     }
-    
-    return items;
+
+    // Filter out undefined defs if any flavor placeholders were added
+    return items.filter(def => !!this.getItemDef(def));
   }
 }
 
