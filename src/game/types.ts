@@ -43,7 +43,7 @@ export type Building = BuildingDef & {
   rot?: 0 | 90 | 180 | 270; // orientation in degrees
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'medical' | 'seekMedical' | 'medicalMultiple';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -77,6 +77,48 @@ export interface ColonistInventory {
   currentWeight: number;
 }
 
+// Health and injury system types
+export type BodyPartType = 'head' | 'torso' | 'left_arm' | 'right_arm' | 'left_leg' | 'right_leg';
+
+export interface BodyPart {
+  type: BodyPartType;
+  label: string;
+  maxHp: number;
+  currentHp: number;
+  coverage: number; // 0-1, chance of being hit
+  vital: boolean; // death if destroyed
+  efficiency: number; // 0-1, how well it functions
+}
+
+export type InjuryType = 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' | 'infection';
+
+export interface Injury {
+  id: string;
+  type: InjuryType;
+  bodyPart: BodyPartType;
+  severity: number; // 0-1, higher = worse
+  pain: number; // 0-1, pain caused
+  bleeding: number; // 0-1, blood loss rate
+  healRate: number; // HP recovered per day
+  permanent: boolean; // leaves scar/disability
+  timeCreated: number; // game time when injury occurred
+  description: string;
+  treatedBy?: string; // colonist who treated it
+  infected: boolean;
+  infectionChance: number; // 0-1, chance to become infected
+}
+
+export interface ColonistHealth {
+  bodyParts: BodyPart[];
+  injuries: Injury[];
+  totalPain: number; // calculated from all injuries
+  bloodLevel: number; // 0-1, blood loss
+  consciousness: number; // 0-1, affects all actions
+  mobility: number; // 0-1, movement speed multiplier
+  manipulation: number; // 0-1, work speed multiplier
+  immunity: number; // 0-1, resistance to infections
+}
+
 export type Colonist = { 
   x: number; y: number; r: number; hp: number; speed: number; 
   task: string | null; target: any; carrying: any; hunger: number; 
@@ -102,6 +144,9 @@ export type Colonist = {
   
   // Enhanced inventory system
   inventory?: ColonistInventory;
+  
+  // Health and injury system
+  health?: ColonistHealth;
 };
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };

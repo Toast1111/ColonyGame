@@ -1,6 +1,8 @@
 import { dist2, norm, sub } from "../../core/utils";
 import { WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState } from "../types";
+import { initializeColonistHealth, updateHealthStats, healInjuries, calculateOverallHealth } from "../health/healthSystem";
+import { medicalSystem } from "../health/medicalSystem";
 
 // Helper function to check if a position would collide with buildings
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -181,6 +183,37 @@ function checkAndRescueStuckColonist(game: any, c: Colonist): boolean {
 
 // Finite State Machine update for a single colonist
 export function updateColonistFSM(game: any, c: Colonist, dt: number) {
+  // Initialize health system if not present (for existing colonists)
+  if (!c.health) {
+    initializeColonistHealth(c);
+  }
+  
+  // Update health system (heal injuries, update stats)
+  if (c.health) {
+    healInjuries(c.health, dt);
+    updateHealthStats(c.health);
+    
+    // Sync legacy HP with new health system
+    const overallHealth = calculateOverallHealth(c.health);
+    c.hp = overallHealth;
+    
+    // Apply pain-based penalties to colonist performance
+    const painPenalty = c.health.totalPain;
+    const consciousnessPenalty = 1.0 - c.health.consciousness;
+    
+    // Movement speed penalty from pain and leg injuries
+    const baseFatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
+    (c as any).fatigueSlow = baseFatigueSlow * c.health.mobility * (1.0 - painPenalty * 0.3);
+    
+    // Store health multipliers for work speed calculations
+    (c as any).manipulationMultiplier = c.health.manipulation * (1.0 - painPenalty * 0.2);
+    (c as any).consciousnessMultiplier = c.health.consciousness;
+  } else {
+    // Fallback for colonists without health system
+    (c as any).fatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
+    (c as any).manipulationMultiplier = 1.0;
+    (c as any).consciousnessMultiplier = 1.0;
+  }
   if (!c.alive) return; c.t += dt;
   if (!c.state) changeState('seekTask', 'initial state');
   c.stateSince = (c.stateSince || 0) + dt;
@@ -211,8 +244,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   // Only reduce fatigue when actually inside a building or in the resting state, NOT when just seeking sleep
   if (c.inside || c.state === 'resting') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
   else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
-  // Movement penalty from fatigue
-  (c as any).fatigueSlow = (c.fatigue || 0) > 66 ? 0.8 : (c.fatigue || 0) > 33 ? 0.9 : 1.0;
   // Starvation damage if very hungry (reduced from 4 to 2 damage per second)
   if ((c.hunger || 0) >= 95) { 
     const damage = 2 * dt;
@@ -264,7 +295,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     if (c.state !== newState) {
       // Clear work task/target when changing to non-work states to prevent navigation conflicts
-      if (newState === 'sleep' || newState === 'flee' || newState === 'heal' || newState === 'goToSleep' || newState === 'eat' || newState === 'resting') {
+      if (newState === 'sleep' || newState === 'flee' || newState === 'heal' || newState === 'goToSleep' || 
+          newState === 'eat' || newState === 'resting' || newState === 'seekMedical' || 
+          newState === 'medical' || newState === 'medicalMultiple') {
         const oldTask = c.task;
         if (oldTask && (oldTask === 'chop' || oldTask === 'mine' || oldTask === 'build' || oldTask === 'harvestFarm' || oldTask === 'harvestWell')) {
           // Release any reservations for work tasks
@@ -340,7 +373,33 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     };
     // Highest first
     if (!c.inside && danger) set('flee', 100, 'danger detected');
-    if (!c.inside && !danger && (c.hp || 0) < 35) set('heal', 90 - Math.max(0, c.hp) * 0.1, 'low health');
+    
+    // Medical needs - check if colonist needs treatment or can provide it
+    if (!c.inside && !danger && c.health && c.health.totalPain > 0.2) {
+      // Check if this colonist has medical skills (simplified check for now)
+      const hasMedicalSkill = c.profile?.personality?.some(trait => 
+        trait.toLowerCase().includes('medical') || 
+        trait.toLowerCase().includes('doctor') || 
+        trait.toLowerCase().includes('nurse')
+      ) || false;
+      const medicalSystem = (game as any).medicalSystem;
+      
+      if (hasMedicalSkill && medicalSystem) {
+        // This colonist can provide medical care
+        const availableJob = medicalSystem.assignMedicalJob(c);
+        if (availableJob) {
+          set('seekMedical', 92, 'can provide medical care');
+        }
+      } else if (medicalSystem) {
+        // This colonist needs medical care
+        const needsTreatment = medicalSystem.colonistNeedsTreatment(c);
+        if (needsTreatment) {
+          set('seekMedical', 90 + Math.min(10, c.health.totalPain * 30), 'needs medical treatment');
+        }
+      }
+    }
+    
+    if (!c.inside && !danger && (c.hp || 0) < 35) set('heal', 85 - Math.max(0, c.hp) * 0.1, 'low health');
     if (!c.inside && !danger && game.isNight()) set('sleep', 80, 'night time');
     if (!c.inside && !danger && !game.isNight() && (c.fatigue || 0) >= fatigueEnterThreshold)
       set('goToSleep', 70 + Math.min(20, (c.fatigue || 0) - fatigueEnterThreshold), 'high fatigue');
@@ -357,6 +416,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     const statePriority = (s: ColonistState | undefined): number => {
       switch (s) {
         case 'flee': return 100;
+        case 'medical': return 95; // High priority for active medical work
+        case 'seekMedical': return 92; // High priority to find medical work
+        case 'medicalMultiple': return 94; // High priority for comprehensive care
         case 'heal': return 90;
         case 'sleep': return 80;
         case 'goToSleep': return 75;
@@ -374,7 +436,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     };
     const intent = evaluateIntent();
     if (intent && intent.state !== c.state) {
-      const critical = intent.state === 'flee' || intent.state === 'heal' || (intent.state === 'sleep' && game.isNight());
+      const critical = intent.state === 'flee' || intent.state === 'heal' || 
+                      intent.state === 'seekMedical' || intent.state === 'medical' || intent.state === 'medicalMultiple' ||
+                      (intent.state === 'sleep' && game.isNight());
       const curPrio = statePriority(c.state as ColonistState);
       const shouldSwitch = critical || (intent.prio > curPrio && canChangeState);
       if (shouldSwitch) changeState(intent.state, intent.reason);
@@ -421,6 +485,107 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       } else {
         // Move toward infirmary center using pathfinding
         game.moveAlongPath(c, dt, ic, range * 0.9);
+      }
+      break;
+    }
+    case 'seekMedical': {
+      // Look for medical work to do
+      const medicalJob = medicalSystem.findMedicalWork(c, game.colonists);
+      if (medicalJob) {
+        c.task = 'medical';
+        (c as any).medicalJob = medicalJob;
+        changeState('medical', 'found medical work');
+      } else {
+        // No medical work available, return to normal tasks
+        changeState('seekTask', 'no medical work available');
+      }
+      break;
+    }
+    case 'medical': {
+      const medicalJob = (c as any).medicalJob;
+      if (!medicalJob) {
+        changeState('seekTask', 'no medical job assigned');
+        break;
+      }
+
+      // Find the patient
+      const patient = game.colonists.find((col: any) => 
+        (col as any).id === medicalJob.patientId
+      );
+      
+      if (!patient || !patient.health) {
+        changeState('seekTask', 'patient not found or healthy');
+        (c as any).medicalJob = null;
+        break;
+      }
+
+      // Move to patient
+      const distance = Math.hypot(c.x - patient.x, c.y - patient.y);
+      if (distance > 40) {
+        game.moveAlongPath(c, dt, { x: patient.x, y: patient.y }, 40);
+      } else {
+        // Close enough to perform treatment
+        if (c.stateSince > medicalJob.treatment.duration / 1000) {
+          // Perform the treatment
+          const success = medicalSystem.performTreatment(c, patient, medicalJob, dt);
+          const treatmentName = medicalJob.treatment.name;
+          
+          if (success) {
+            game.msg(`${c.profile?.name || 'Doctor'} successfully applied ${treatmentName}`, 'good');
+          } else {
+            game.msg(`${c.profile?.name || 'Doctor'} failed to apply ${treatmentName}`, 'warn');
+          }
+          
+          medicalSystem.completeMedicalJob(medicalJob.id);
+          (c as any).medicalJob = null;
+          changeState('seekTask', 'treatment completed');
+        }
+      }
+      break;
+    }
+    case 'medicalMultiple': {
+      // Handle comprehensive medical care
+      const targetData = c.target;
+      if (!targetData?.patient) {
+        changeState('seekTask', 'no patient for comprehensive care');
+        break;
+      }
+
+      const patient = targetData.patient;
+      if (!patient.health?.injuries?.length) {
+        changeState('seekTask', 'patient has no injuries');
+        (patient as any).needsComprehensiveCare = false;
+        break;
+      }
+
+      // Move to patient
+      const distance = Math.hypot(c.x - patient.x, c.y - patient.y);
+      if (distance > 40) {
+        game.moveAlongPath(c, dt, { x: patient.x, y: patient.y }, 40);
+      } else {
+        // Find next treatment needed
+        const availableJobs = medicalSystem.findAvailableTreatments(patient, game.getColonistMedicalSkill(c));
+        if (availableJobs.length > 0) {
+          const nextJob = availableJobs[0]; // Take highest priority
+          
+          if (c.stateSince > nextJob.treatment.duration / 1000) {
+            const success = medicalSystem.performTreatment(c, patient, nextJob, dt);
+            const treatmentName = nextJob.treatment.name;
+            
+            if (success) {
+              game.msg(`${c.profile?.name || 'Doctor'} applied ${treatmentName}`, 'good');
+            } else {
+              game.msg(`${c.profile?.name || 'Doctor'} failed ${treatmentName}`, 'warn');
+            }
+            
+            // Reset timer for next treatment
+            c.stateSince = 0;
+          }
+        } else {
+          // No more treatments available
+          (patient as any).needsComprehensiveCare = false;
+          changeState('seekTask', 'comprehensive care completed');
+        }
       }
       break;
     }

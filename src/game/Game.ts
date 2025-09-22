@@ -14,6 +14,8 @@ import { drawContextMenu as drawContextMenuUI, showContextMenu as showContextMen
 import { drawPlacementUI as drawPlacementUIUI } from "./ui/placement";
 import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
+import { initializeColonistHealth } from "./health/healthSystem";
+import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
@@ -196,7 +198,12 @@ export class Game {
     }
     // Modest cap to avoid extremes
     bonus = Math.min(0.8, Math.max(0, bonus));
-    return 1 + bonus;
+    
+    // Apply health-based penalties
+    const manipulationMultiplier = (c as any).manipulationMultiplier || 1.0;
+    const consciousnessMultiplier = (c as any).consciousnessMultiplier || 1.0;
+    
+    return (1 + bonus) * manipulationMultiplier * consciousnessMultiplier;
   }
 
   // Armor damage reduction from helmet/armor; returns fraction reduced (0..0.8)
@@ -927,6 +934,10 @@ export class Game {
       profile: profile,
       inventory: JSON.parse(JSON.stringify(profile.startingInventory)) // Deep copy the starting inventory
     };
+    
+    // Initialize the detailed health system
+    initializeColonistHealth(c);
+    
     this.colonists.push(c); 
     this.msg(`${getColonistDescription(profile)} has joined the colony!`, 'good');
     return c;
@@ -1957,6 +1968,11 @@ export class Game {
     
     switch (actionId) {
       // Prioritize actions
+      case 'prioritize_medical':
+        // Set high priority for medical work
+        this.setColonistMedicalPriority(colonist, true);
+        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing medical work`, 'info');
+        break;
       case 'prioritize_work':
         this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing work tasks`, 'info');
@@ -2005,6 +2021,21 @@ export class Game {
         break;
         
       // Medical actions
+      case 'medical_bandage':
+        this.assignMedicalTreatment(colonist, 'bandage_wound');
+        break;
+      case 'medical_treat_infection':
+        this.assignMedicalTreatment(colonist, 'treat_infection');
+        break;
+      case 'medical_surgery':
+        this.assignMedicalTreatment(colonist, 'remove_bullet');
+        break;
+      case 'medical_pain_relief':
+        this.assignMedicalTreatment(colonist, 'pain_management');
+        break;
+      case 'medical_treat_all':
+        this.assignComprehensiveMedicalCare(colonist);
+        break;
       case 'medical_treat':
         this.treatColonist(colonist);
         break;
@@ -2145,6 +2176,82 @@ export class Game {
       colonist.hp = Math.min(100, colonist.hp + 15);
       this.msg(`${colonist.profile?.name || 'Colonist'} received basic treatment`, 'good');
     }
+  }
+
+  // Set colonist medical priority
+  setColonistMedicalPriority(colonist: Colonist, highPriority: boolean) {
+    (colonist as any).medicalPriority = highPriority;
+    if (highPriority) {
+      // Clear current task to seek medical work
+      this.setTask(colonist, 'seekMedical', null);
+    }
+  }
+
+  // Assign specific medical treatment
+  assignMedicalTreatment(patient: Colonist, treatmentId: string) {
+    const job = medicalSystem.forceAssignTreatment(patient, treatmentId);
+    if (job) {
+      // Find a suitable doctor
+      const doctor = this.findBestDoctor(patient);
+      if (doctor) {
+        this.setTask(doctor, 'medical', { patient, treatment: job.treatment });
+        this.msg(`${doctor.profile?.name || 'Doctor'} treating ${patient.profile?.name || 'patient'} with ${job.treatment.name}`, 'info');
+      } else {
+        this.msg(`No available doctor for ${job.treatment.name}`, 'warn');
+      }
+    } else {
+      this.msg(`Cannot apply ${treatmentId} treatment`, 'warn');
+    }
+  }
+
+  // Assign comprehensive medical care
+  assignComprehensiveMedicalCare(patient: Colonist) {
+    if (!patient.health?.injuries?.length) {
+      this.msg(`${patient.profile?.name || 'Colonist'} has no injuries to treat`, 'info');
+      return;
+    }
+
+    const doctor = this.findBestDoctor(patient);
+    if (doctor) {
+      (patient as any).needsComprehensiveCare = true;
+      this.setTask(doctor, 'medicalMultiple', { patient });
+      this.msg(`${doctor.profile?.name || 'Doctor'} providing comprehensive care to ${patient.profile?.name || 'patient'}`, 'info');
+    } else {
+      this.msg('No available doctor for comprehensive care', 'warn');
+    }
+  }
+
+  // Find the best available doctor
+  findBestDoctor(patient: Colonist): Colonist | null {
+    const availableDoctors = this.colonists.filter(c => {
+      if (c === patient) return false; // Can't treat self
+      if (!c.alive) return false;
+      if (c.task && c.task !== 'idle' && c.task !== 'seekTask') return false; // Must be available
+      return true;
+    });
+
+    if (availableDoctors.length === 0) return null;
+
+    // Sort by medical skill (prioritize medics and those with First Aid)
+    availableDoctors.sort((a, b) => {
+      const skillA = this.getColonistMedicalSkill(a);
+      const skillB = this.getColonistMedicalSkill(b);
+      return skillB - skillA;
+    });
+
+    return availableDoctors[0];
+  }
+
+  // Get colonist's medical skill level
+  getColonistMedicalSkill(colonist: Colonist): number {
+    const firstAidSkill = colonist.profile?.detailedInfo.skills.includes('First Aid');
+    const medicBackground = colonist.profile?.background === 'Medic';
+    
+    let skill = 0;
+    if (firstAidSkill) skill += 3;
+    if (medicBackground) skill += 5;
+    
+    return skill;
   }
 
   // Context menu drawing moved to src/game/ui/contextMenu.ts

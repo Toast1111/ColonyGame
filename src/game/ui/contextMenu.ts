@@ -3,10 +3,45 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
   const isInjured = colonist.hp < 50;
   const isHungry = (colonist.hunger || 0) > 60;
   const isTired = (colonist.fatigue || 0) > 60;
+  
+  // Enhanced injury detection using new health system
+  const hasInjuries = colonist.health?.injuries?.length > 0;
+  const hasBleedingInjuries = colonist.health?.injuries?.some((inj: any) => inj.bleeding > 0) || false;
+  const hasInfection = colonist.health?.injuries?.some((inj: any) => inj.infected) || false;
+  const hasHighPain = (colonist.health?.totalPain || 0) > 0.3;
+  const needsSurgery = colonist.health?.injuries?.some((inj: any) => 
+    inj.type === 'gunshot' || (inj.type === 'fracture' && inj.severity > 0.6)
+  ) || false;
+
+  // Build dynamic medical submenu based on conditions
+  const medicalItems = [];
+  if (hasBleedingInjuries) {
+    medicalItems.push({ id: 'medical_bandage', label: 'Bandage Wounds', icon: '🩹', enabled: true });
+  }
+  if (hasInfection) {
+    medicalItems.push({ id: 'medical_treat_infection', label: 'Treat Infection', icon: '💊', enabled: true });
+  }
+  if (needsSurgery) {
+    medicalItems.push({ id: 'medical_surgery', label: 'Surgery', icon: '⚕️', enabled: true });
+  }
+  if (hasHighPain) {
+    medicalItems.push({ id: 'medical_pain_relief', label: 'Pain Relief', icon: '💉', enabled: true });
+  }
+  if (hasInjuries) {
+    medicalItems.push({ id: 'medical_treat_all', label: 'Treat All Injuries', icon: '🏥', enabled: true });
+    medicalItems.push({ id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: true });
+  }
+  
+  // Fallback if no specific treatments
+  if (medicalItems.length === 0 && isInjured) {
+    medicalItems.push({ id: 'medical_treat', label: 'Basic Treatment', icon: '🩹', enabled: true });
+  }
+
   game.contextMenu = {
     visible: true, x: screenX, y: screenY, target: colonist, openSubmenu: undefined,
     items: [
       { id: 'prioritize', label: 'Prioritize', icon: '⚡', enabled: true, submenu: [
+        { id: 'prioritize_medical', label: 'Medical Work', icon: '🏥', enabled: true },
         { id: 'prioritize_work', label: 'Work Tasks', icon: '🔨', enabled: true },
         { id: 'prioritize_build', label: 'Construction', icon: '🏗️', enabled: true },
         { id: 'prioritize_haul', label: 'Hauling', icon: '📦', enabled: true },
@@ -24,11 +59,7 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
         { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
         { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true },
       ]},
-      { id: 'medical', label: 'Medical', icon: '🏥', enabled: isInjured, submenu: [
-        { id: 'medical_treat', label: 'Treat Wounds', icon: '🩹', enabled: isInjured },
-        { id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: isInjured },
-        { id: 'medical_surgery', label: 'Surgery', icon: '⚕️', enabled: false },
-      ]},
+      { id: 'medical', label: 'Medical', icon: '🏥', enabled: hasInjuries || isInjured, submenu: medicalItems },
       { id: 'cancel', label: 'Cancel Current Task', icon: '❌', enabled: !!colonist.target },
       { id: 'follow', label: game.follow && game.selColonist === colonist ? 'Stop Following' : 'Follow', icon: '👁️', enabled: true },
     ]

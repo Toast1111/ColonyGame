@@ -445,13 +445,25 @@ export function getColonistMood(colonist: any): string {
   const hp = colonist.hp || 0;
   const hunger = colonist.hunger || 0;
   const fatigue = colonist.fatigue || 0;
+  const pain = colonist.health?.totalPain || 0;
+  const consciousness = colonist.health?.consciousness || 1.0;
   
+  // Pain-based moods (highest priority)
+  if (pain > 0.6) return "Agonizing pain";
+  if (pain > 0.4) return "In pain";
+  if (consciousness < 0.5) return "Barely conscious";
+  
+  // Existing health checks
   if (hp < 30) return "Injured";
   if (hunger > 80) return "Starving";
   if (fatigue > 80) return "Exhausted";
   if (colonist.inside) return "Resting";
   if (colonist.state === "flee") return "Terrified";
-  if (hp > 80 && hunger < 30 && fatigue < 30) return "Happy";
-  if (hp > 60 && hunger < 50 && fatigue < 50) return "Content";
+  
+  // Positive moods (factor in pain)
+  if (pain < 0.1 && hp > 80 && hunger < 30 && fatigue < 30) return "Happy";
+  if (pain < 0.2 && hp > 60 && hunger < 50 && fatigue < 50) return "Content";
+  if (pain > 0.2) return "Uncomfortable";
+  
   return "Okay";
 }
