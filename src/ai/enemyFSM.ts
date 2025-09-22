@@ -62,9 +62,24 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
   } else {
     const c = tgt as Colonist; const d = Math.hypot(e.x - c.x, e.y - c.y);
     if (d < e.r + 8) {
-      // Apply armor-aware damage
+      // Apply armor-aware damage with appropriate damage type
       if (typeof (game as any).applyDamageToColonist === 'function') {
-        (game as any).applyDamageToColonist(c, e.dmg * dt);
+        // Determine damage type based on enemy characteristics
+        let damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise';
+        
+        // Simple heuristic based on enemy color/type (you can expand this)
+        const enemyColor = e.color?.toLowerCase() || '';
+        if (enemyColor.includes('red') || enemyColor.includes('orange')) {
+          damageType = 'burn'; // Fire-based enemies
+        } else if (enemyColor.includes('green') || enemyColor.includes('brown')) {
+          damageType = 'bite'; // Beast-like enemies
+        } else if (e.dmg > 15) {
+          damageType = 'cut'; // High damage enemies with weapons
+        } else {
+          damageType = 'bruise'; // Default melee attacks
+        }
+        
+        (game as any).applyDamageToColonist(c, e.dmg * dt, damageType);
       } else {
         c.hp -= e.dmg * dt;
       }

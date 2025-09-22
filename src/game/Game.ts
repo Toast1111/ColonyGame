@@ -16,6 +16,7 @@ import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, pla
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { initializeColonistHealth } from "./health/healthSystem";
 import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
+import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth } from './health/healthSystem';
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
@@ -114,7 +115,7 @@ export class Game {
   // UI hit regions for colonist panel
   colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
-  colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'stats' | 'log' = 'bio';
+  colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'skills' | 'log' = 'bio';
   colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
   
   // Context menu system
@@ -160,6 +161,10 @@ export class Game {
     itemDatabase.loadItems();
   // Init debug console
   initDebugConsole(this);
+    // Expose damage API for external modules (combat, scripts)
+    (this as any).applyDamageToColonist = (colonist: any, dmg: number, type: any = 'cut') => {
+      applyDamageToColonist(this, colonist, dmg, type);
+    };
     
     requestAnimationFrame(this.frame);
   }
@@ -219,11 +224,166 @@ export class Game {
     return Math.min(0.8, Math.max(0, armor));
   }
 
-  // Apply damage to a colonist, considering armor
-  applyDamageToColonist(c: Colonist, rawDamage: number) {
-    const red = this.getArmorReduction(c);
-    const dmg = rawDamage * (1 - red);
-    c.hp = Math.max(0, c.hp - dmg);
+  // Enhanced combat damage system with localized injuries
+  applyDamageToColonist(colonist: Colonist, damage: number, damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise'): void {
+    // Initialize health system if not present
+    if (!colonist.health) {
+      initializeColonistHealth(colonist);
+    }
+
+    // Apply armor reduction first
+    const armorReduction = this.getArmorReduction(colonist);
+    const effectiveDamage = damage * (1 - armorReduction);
+
+    // Determine which body part is hit based on coverage
+    const bodyParts = colonist.health!.bodyParts;
+    const rand = Math.random();
+    let cumulativeCoverage = 0;
+    let hitBodyPart = bodyParts[0]; // Default to first body part
+
+    for (const part of bodyParts) {
+      cumulativeCoverage += part.coverage;
+      if (rand <= cumulativeCoverage) {
+        hitBodyPart = part;
+        break;
+      }
+    }
+
+    // Create injury based on damage type and amount
+    const injuryId = `${damageType}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const severity = Math.min(0.95, effectiveDamage / 30); // Normalize damage to 0-1 scale
+    
+    const injury = {
+      id: injuryId,
+      type: damageType,
+      bodyPart: hitBodyPart.type,
+      severity: severity,
+      pain: this.calculatePainFromDamage(damageType, severity),
+      bleeding: this.calculateBleedingFromDamage(damageType, severity),
+      healRate: this.calculateHealRate(damageType, severity),
+      permanent: severity > 0.7 && damageType !== 'bruise',
+      timeCreated: Date.now(), // Use timestamp for injury tracking
+      description: this.generateInjuryDescription(damageType, hitBodyPart.label, severity),
+      infected: false,
+      infectionChance: this.calculateInfectionChance(damageType, severity),
+      treatedBy: undefined
+    };
+
+    // Add injury to colonist
+    colonist.health!.injuries.push(injury);
+
+    // Apply immediate HP damage (reduced since we now have injury system)
+    const actualHpDamage = Math.min(effectiveDamage * 0.6, colonist.hp - 1); // Never kill directly, leave at 1 HP
+    // Route generic environmental damage through health system for consistency
+    if (colonist.health) {
+      applyDamageToColonist(this, colonist, actualHpDamage, 'bruise', { source: 'environment', damageMultiplier: 1 });
+    } else {
+      colonist.hp = Math.max(1, colonist.hp - actualHpDamage);
+    }
+
+    // Recalculate health stats
+    this.recalculateColonistHealth(colonist);
+
+    // Show damage message
+    const partName = hitBodyPart.label.toLowerCase();
+    this.msg(`${colonist.profile?.name || 'Colonist'} injured in ${partName} (${damageType})`, 'warn');
+  }
+
+  // Helper methods for injury calculation
+  private calculatePainFromDamage(damageType: string, severity: number): number {
+    const basePain = {
+      'cut': 0.3,
+      'bruise': 0.1,
+      'burn': 0.4,
+      'bite': 0.35,
+      'gunshot': 0.5,
+      'fracture': 0.6
+    };
+    return Math.min(1.0, (basePain[damageType as keyof typeof basePain] || 0.2) * severity);
+  }
+
+  private calculateBleedingFromDamage(damageType: string, severity: number): number {
+    const baseBleed = {
+      'cut': 0.4,
+      'bruise': 0.0,
+      'burn': 0.1,
+      'bite': 0.3,
+      'gunshot': 0.5,
+      'fracture': 0.2
+    };
+    return Math.min(1.0, (baseBleed[damageType as keyof typeof baseBleed] || 0.1) * severity);
+  }
+
+  private calculateHealRate(damageType: string, severity: number): number {
+    const baseHealRate = {
+      'cut': 0.8,
+      'bruise': 1.2,
+      'burn': 0.6,
+      'bite': 0.7,
+      'gunshot': 0.4,
+      'fracture': 0.3
+    };
+    return (baseHealRate[damageType as keyof typeof baseHealRate] || 0.8) * (1.0 - severity * 0.5);
+  }
+
+  private calculateInfectionChance(damageType: string, severity: number): number {
+    const baseInfection = {
+      'cut': 0.15,
+      'bruise': 0.0,
+      'burn': 0.25,
+      'bite': 0.4,
+      'gunshot': 0.3,
+      'fracture': 0.1
+    };
+    return Math.min(0.8, (baseInfection[damageType as keyof typeof baseInfection] || 0.1) * severity);
+  }
+
+  private generateInjuryDescription(damageType: string, bodyPart: string, severity: number): string {
+    const severityDesc = severity < 0.2 ? 'minor' : severity < 0.5 ? 'moderate' : severity < 0.8 ? 'severe' : 'critical';
+    const descriptions = {
+      'cut': `${severityDesc} laceration on ${bodyPart}`,
+      'bruise': `${severityDesc} bruising on ${bodyPart}`,
+      'burn': `${severityDesc} burn on ${bodyPart}`,
+      'bite': `${severityDesc} bite wound on ${bodyPart}`,
+      'gunshot': `${severityDesc} gunshot wound in ${bodyPart}`,
+      'fracture': `${severityDesc} fracture in ${bodyPart}`
+    };
+    return descriptions[damageType as keyof typeof descriptions] || `${severityDesc} injury to ${bodyPart}`;
+  }
+
+  private recalculateColonistHealth(colonist: Colonist): void {
+    if (!colonist.health) return;
+
+    // Calculate total pain from all injuries
+    let totalPain = 0;
+    let totalBleeding = 0;
+    
+    for (const injury of colonist.health.injuries) {
+      totalPain += injury.pain;
+      totalBleeding += injury.bleeding;
+    }
+
+    colonist.health.totalPain = Math.min(1.0, totalPain);
+    colonist.health.bloodLevel = Math.max(0.0, 1.0 - totalBleeding);
+    
+    // Calculate consciousness (affected by pain and blood loss)
+    colonist.health.consciousness = Math.max(0.1, 1.0 - (totalPain * 0.3) - ((1.0 - colonist.health.bloodLevel) * 0.5));
+    
+    // Calculate mobility (movement speed)
+    const legInjuries = colonist.health.injuries.filter(i => i.bodyPart === 'left_leg' || i.bodyPart === 'right_leg');
+    let mobilityPenalty = 0;
+    for (const injury of legInjuries) {
+      mobilityPenalty += injury.severity * 0.3;
+    }
+    colonist.health.mobility = Math.max(0.2, 1.0 - mobilityPenalty - totalPain * 0.2);
+    
+    // Calculate manipulation (work speed)
+    const armInjuries = colonist.health.injuries.filter(i => i.bodyPart === 'left_arm' || i.bodyPart === 'right_arm');
+    let manipulationPenalty = 0;
+    for (const injury of armInjuries) {
+      manipulationPenalty += injury.severity * 0.4;
+    }
+    colonist.health.manipulation = Math.max(0.1, 1.0 - manipulationPenalty - totalPain * 0.3);
   }
 
   // Try to consume one Food item from inventory; returns true if eaten
@@ -934,6 +1094,11 @@ export class Game {
       profile: profile,
       inventory: JSON.parse(JSON.stringify(profile.startingInventory)) // Deep copy the starting inventory
     };
+
+    // Attach skills from profile.initialSkills if present
+    if ((profile as any).initialSkills) {
+      c.skills = (profile as any).initialSkills;
+    }
     
     // Initialize the detailed health system
     initializeColonistHealth(c);
@@ -1377,6 +1542,11 @@ export class Game {
     }
     this.dayTick(dt);
   for (const c of this.colonists) { if (c.alive) {
+      // Initialize health system for existing colonists (backward compatibility)
+      if (!c.health) {
+        initializeColonistHealth(c);
+      }
+      
       // RimWorld-like pawn combat runs before FSM so states can react to being in combat
       updateColonistCombat(this, c, dt * this.fastForward);
       updateColonistFSM(this, c, dt * this.fastForward);
@@ -2043,6 +2213,61 @@ export class Game {
         this.forceColonistToRest(colonist);
         this.msg(`${colonist.profile?.name || 'Colonist'} ordered to bed rest`, 'info');
         break;
+      case 'medical_injury_summary':
+        if (colonist.health) {
+          const summary = getInjurySummary(colonist.health);
+          this.msg(`${colonist.profile?.name || 'Colonist'}: ${summary}`, 'info');
+        } else {
+          this.msg('No health data', 'warn');
+        }
+        break;
+      case 'medical_bandage_all_bleeding':
+        if (colonist.health) {
+          let count = 0;
+            for (const inj of colonist.health.injuries) {
+              if (inj.bleeding > 0 && !inj.bandaged) { inj.bandaged = true; inj.bleeding *= 0.2; inj.infectionChance *= 0.5; count++; }
+            }
+          this.msg(count ? `Applied bandages to ${count} wound${count>1?'s':''}` : 'No bleeding wounds', count? 'good':'info');
+        }
+        break;
+      case 'prioritize_treat_patient': {
+        // Active selection is doctor; colonist param is patient
+        const doctor = this.selColonist;
+        if (doctor && doctor !== colonist) {
+          // Ensure doctor has some medical capability (placeholder skill check)
+            (doctor as any).assignedMedicalPatientId = (colonist as any).id || ((colonist as any).id = `colonist_${Date.now()}_${Math.random().toString(36).slice(2,9)}`);
+            (doctor as any).medicalPriorityUntil = doctor.t + 60; // expires in ~60s game time
+            this.msg(`${doctor.profile?.name || 'Doctor'} will prioritize treating ${colonist.profile?.name || 'Patient'}`, 'info');
+        }
+        break; }
+      case 'clear_prioritize_treat': {
+        const doctor = this.selColonist;
+        if (doctor && (doctor as any).assignedMedicalPatientId) {
+          (doctor as any).assignedMedicalPatientId = undefined;
+          (doctor as any).medicalPriorityUntil = undefined;
+          this.msg(`${doctor.profile?.name || 'Doctor'} cleared treatment priority`, 'info');
+        }
+        break; }
+      case 'medical_bandage': // keep existing single bandage behavior fallback
+        this.assignMedicalTreatment(colonist, 'bandage_wound');
+        break;
+      case 'medical_rescue':
+        // Find best doctor or nearest healthy colonist to rescue
+        const rescuer = this.findBestDoctor(colonist) || this.colonists.find(c=>c!==colonist && c.alive && c.state!=='downed');
+        if (rescuer) {
+          // Placeholder: just move colonist to nearest bed instantly for now
+          const bed = this.buildings.find(b=>b.kind==='house' || b.kind==='tent');
+          if (bed) {
+            colonist.x = bed.x + bed.w/2;
+            colonist.y = bed.y + bed.h/2;
+            this.msg(`${colonist.profile?.name || 'Colonist'} rescued to bed`, 'good');
+          } else {
+            this.msg('No bed available for rescue', 'warn');
+          }
+        } else {
+          this.msg('No rescuer available', 'warn');
+        }
+        break;
         
       // Basic actions
       case 'cancel':
@@ -2172,9 +2397,14 @@ export class Game {
       this.setTask(colonist, 'medical', infirmary);
       this.msg(`${colonist.profile?.name || 'Colonist'} going for medical treatment`, 'info');
     } else {
-      // Basic field treatment
-      colonist.hp = Math.min(100, colonist.hp + 15);
-      this.msg(`${colonist.profile?.name || 'Colonist'} received basic treatment`, 'good');
+      if (colonist.health) {
+        const result = basicFieldTreatment(colonist.health);
+        colonist.hp = Math.min(100, calculateOverallHealth(colonist.health));
+        this.msg(`${colonist.profile?.name || 'Colonist'} field-treated (${result.bandaged} bandaged, pain -${result.painReduced.toFixed(2)})`, 'good');
+      } else {
+        colonist.hp = Math.min(100, colonist.hp + 10);
+        this.msg(`${colonist.profile?.name || 'Colonist'} received crude aid`, 'info');
+      }
     }
   }
 

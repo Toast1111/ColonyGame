@@ -1,5 +1,6 @@
 import type { Game } from "../Game";
 import { itemDatabase } from "../../data/itemDatabase";
+import { initializeColonistHealth } from "../health/healthSystem";
 
 type CommandHandler = (game: Game, args: string[]) => string | void;
 
@@ -25,7 +26,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -88,6 +89,113 @@ export function initDebugConsole(game: Game) {
     if (what === "bullets") { g.bullets.length = 0; return "cleared bullets"; }
     return "usage: clear messages|bullets";
   }, "clear messages|bullets — clear logs or bullets");
+
+  reg("injure", (g, args) => {
+    const damageType = (args[0] || "bruise").toLowerCase() as 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture';
+    
+    // Set realistic default damage based on injury type
+    const defaultDamage = {
+      'cut': 8,
+      'bruise': 6,
+      'burn': 12,
+      'bite': 10,
+      'gunshot': 25,  // Much higher default for gunshots
+      'fracture': 20
+    };
+    
+    const damage = Math.max(1, Math.min(50, parseInt(args[1] || defaultDamage[damageType].toString(), 10) || defaultDamage[damageType]));
+    const target = (args[2] || "selected").toLowerCase();
+    
+    // Validate damage type
+    const validTypes = ['cut', 'bruise', 'burn', 'bite', 'gunshot', 'fracture'];
+    if (!validTypes.includes(damageType)) {
+      return `invalid damage type '${damageType}'. Use: ${validTypes.join(', ')}`;
+    }
+    
+    // Get target colonist(s)
+    let targets: any[] = [];
+    if (target === "all") {
+      targets = g.colonists.filter(c => c.alive);
+    } else if (target === "selected") {
+      targets = g.selColonist ? [g.selColonist] : [];
+    } else {
+      // Try to find colonist by name
+      const found = g.colonists.find(c => c.alive && c.profile?.name?.toLowerCase().includes(target));
+      if (found) targets = [found];
+    }
+    
+    if (!targets.length) {
+      return target === "selected" ? "no colonist selected (use 'select next')" : `no colonist found matching '${target}'`;
+    }
+    
+    // Apply injuries
+    for (const colonist of targets) {
+      if (typeof g.applyDamageToColonist === 'function') {
+        g.applyDamageToColonist(colonist, damage, damageType);
+      } else {
+        return "damage system not available";
+      }
+    }
+    
+    return `applied ${damage} ${damageType} damage to ${targets.length} colonist(s)`;
+  }, "injure [type] [damage] [target] — injure colonist(s). Types: cut,bruise,burn,bite,gunshot,fracture. Target: selected,all,name");
+
+  reg("health", (g, args) => {
+    const action = (args[0] || "check").toLowerCase();
+    const target = (args[1] || "selected").toLowerCase();
+    
+    // Get target colonist(s)
+    let targets: any[] = [];
+    if (target === "all") {
+      targets = g.colonists.filter(c => c.alive);
+    } else if (target === "selected") {
+      targets = g.selColonist ? [g.selColonist] : [];
+    } else {
+      // Try to find colonist by name
+      const found = g.colonists.find(c => c.alive && c.profile?.name?.toLowerCase().includes(target));
+      if (found) targets = [found];
+    }
+    
+    if (!targets.length) {
+      return target === "selected" ? "no colonist selected (use 'select next')" : `no colonist found matching '${target}'`;
+    }
+    
+    if (action === "check") {
+      const colonist = targets[0];
+      const name = colonist.profile?.name || 'Unknown';
+      
+      if (!colonist.health) {
+        return `${name}: No health system initialized. Use 'health init' to initialize.`;
+      }
+      
+      const pain = Math.round((colonist.health.totalPain || 0) * 100);
+      const injuries = colonist.health.injuries?.length || 0;
+      const consciousness = Math.round((colonist.health.consciousness || 1) * 100);
+      const mobility = Math.round((colonist.health.mobility || 1) * 100);
+      const manipulation = Math.round((colonist.health.manipulation || 1) * 100);
+      
+      let status = `${name}: Pain=${pain}%, Injuries=${injuries}, Consciousness=${consciousness}%, Mobility=${mobility}%, Manipulation=${manipulation}%`;
+      
+      if (injuries > 0) {
+        const injuryList = colonist.health.injuries.slice(0, 3).map((inj: any) => `${inj.type}(${Math.round(inj.severity * 100)}%)`).join(', ');
+        status += ` | Injuries: ${injuryList}${injuries > 3 ? '...' : ''}`;
+      }
+      
+      return status;
+    } else if (action === "init") {
+      let initialized = 0;
+      for (const colonist of targets) {
+        if (!colonist.health) {
+          // Use the imported function directly
+          initializeColonistHealth(colonist);
+          initialized++;
+        }
+      }
+      return `initialized health system for ${initialized} colonist(s)`;
+    } else {
+      return "usage: health check|init [target]. Target: selected,all,name";
+    }
+  }, "health check|init [target] — check health status or initialize health system");
 }
 
 export function toggleDebugConsole(game: Game) {

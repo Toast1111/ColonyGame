@@ -1,4 +1,5 @@
 import type { Colonist, Injury, BodyPartType, InjuryType } from '../types';
+import { skillLevel } from '../skills/skills';
 import { damageBodyPart, createInjury, initializeColonistHealth } from './healthSystem';
 import { itemDatabase } from '../../data/itemDatabase';
 
@@ -147,11 +148,38 @@ export class MedicalSystem {
   private activeJobs: Map<string, MedicalJob> = new Map();
   private jobCounter = 0;
 
+  /**
+   * Criticality-oriented triage system:
+   *  - Each potential treatment is scored by severity, bleeding (bandage reduces), infection state/progress, pain, and head location.
+   *  - Downed patients receive an urgency bump (priority band reduced by 1, min band 1).
+   *  - Result mapped to MedicalPriority (1=EMERGENCY .. 5=ELECTIVE) for consistent downstream usage.
+   */
+
   // Find the most urgent medical work for a colonist
   findMedicalWork(doctor: Colonist, allColonists: Colonist[]): MedicalJob | null {
     const doctorSkill = this.getDoctorSkill(doctor);
     let bestJob: MedicalJob | null = null;
     let bestPriority = Infinity;
+
+    // If doctor has an assigned priority patient, attempt them first
+    const forcedPatientId = (doctor as any).assignedMedicalPatientId as string | undefined;
+    if (forcedPatientId) {
+      const patient = allColonists.find(c => (c as any).id === forcedPatientId);
+      if (!patient || !patient.alive || !patient.health) {
+        // Clear invalid assignment
+        (doctor as any).assignedMedicalPatientId = undefined;
+      } else if (!this.isPatientBeingTreated(patient)) {
+        const jobs = this.findAvailableTreatments(patient, doctorSkill);
+        if (jobs.length) {
+          // Take highest urgency job (already sorted)
+          const job = jobs[0];
+          return job;
+        } else {
+          // If no jobs remain for that patient, clear assignment
+          (doctor as any).assignedMedicalPatientId = undefined;
+        }
+      }
+    }
 
     for (const patient of allColonists) {
       if (!patient.health || patient === doctor) continue;
@@ -181,7 +209,9 @@ export class MedicalSystem {
       const treatments = this.getApplicableTreatments(injury, doctorSkill);
       
       for (const treatment of treatments) {
-        const priority = this.calculateTreatmentPriority(injury, treatment);
+        let priority = this.calculateTreatmentPriority(injury, treatment);
+        // Downed patients: bump urgency upward (numerically lower)
+        if ((patient.state as any) === 'downed' && priority > 1) priority = Math.max(1, priority - 1);
         
         jobs.push({
           id: `medical_${this.jobCounter++}`,
@@ -220,26 +250,22 @@ export class MedicalSystem {
 
   // Calculate treatment priority based on injury severity and type
   private calculateTreatmentPriority(injury: Injury, treatment: MedicalTreatment): MedicalPriority {
-    let priority = treatment.priority;
-    
-    // Increase priority for severe injuries
-    if (injury.severity > 0.8) priority -= 1;
-    if (injury.severity > 0.6) priority -= 0.5;
-    
-    // Bleeding injuries are more urgent
-    if (injury.bleeding > 0.3) priority -= 1;
-    if (injury.bleeding > 0.1) priority -= 0.5;
-    
-    // Infected injuries are urgent
-    if (injury.infected) priority -= 1;
-    
-    // High pain is urgent for quality of life
-    if (injury.pain > 0.5) priority -= 0.5;
-    
-    // Head injuries are more critical
-    if (injury.bodyPart === 'head') priority -= 0.5;
-    
-    return Math.max(1, Math.min(5, Math.round(priority))) as MedicalPriority;
+    // Start with baseline scaled score (lower output = higher urgency)
+    let score = treatment.priority * 10;
+    const effBleed = injury.bandaged ? injury.bleeding * 0.15 : injury.bleeding;
+    score -= injury.severity * 12;          // severity weight
+    score -= effBleed * 25;                 // bleeding urgency
+    if (injury.infected) {
+      score -= 12;                          // infected baseline
+      if ((injury as any).infectionProgress) score -= (injury as any).infectionProgress * 10;
+    } else if (injury.infectionChance > 0.2 && !injury.bandaged) {
+      score -= injury.infectionChance * 5;  // prophylactic urgency
+    }
+    score -= injury.pain * 4;               // pain QoL
+    if (injury.bodyPart === 'head') score -= 4; // head critical
+    // Map back to 1..5 priority band
+    const mapped = Math.max(1, Math.min(5, Math.round(score / 10)));
+    return mapped as MedicalPriority;
   }
 
   // Assign a medical job to a doctor
@@ -289,6 +315,17 @@ export class MedicalSystem {
     // Reduce bleeding
     if (treatment.id === 'bandage_wound') {
       injury.bleeding = Math.max(0, injury.bleeding * 0.2);
+      injury.bandaged = true;
+      injury.infectionChance = Math.max(0, injury.infectionChance * 0.5);
+    }
+
+    if (treatment.id === 'treat_burn') {
+      injury.bandaged = true;
+      injury.infectionChance = Math.max(0, injury.infectionChance * 0.6);
+    }
+
+    if (treatment.id === 'set_fracture') {
+      injury.bandaged = true; // splinted
     }
     
     // Remove infection
@@ -316,6 +353,10 @@ export class MedicalSystem {
     
     // Increase pain slightly from botched treatment
     injury.pain = Math.min(1.0, injury.pain + 0.1);
+    // Open wound gets slightly higher future infection chance
+    if (!injury.infected && injury.infectionChance > 0) {
+      injury.infectionChance = Math.min(1, injury.infectionChance + 0.05);
+    }
     
     console.log(`Failed to treat ${injury.description} with ${treatment.name}`);
   }
@@ -353,18 +394,9 @@ export class MedicalSystem {
 
   // Get doctor's medical skill level
   private getDoctorSkill(doctor: Colonist): number {
-    // Check for "First Aid" skill in profile
-    const firstAidSkill = doctor.profile?.detailedInfo.skills.includes('First Aid');
-    const medicBackground = doctor.profile?.background === 'Medic';
-    
-    let skill = 0;
-    if (firstAidSkill) skill += 3;
-    if (medicBackground) skill += 5;
-    
-    // Add random skill variation
-    skill += Math.floor(Math.random() * 3);
-    
-    return Math.max(0, Math.min(20, skill));
+    // Use Medicine skill level if present
+    const lvl = doctor.skills ? skillLevel(doctor, 'Medicine') : 0;
+    return lvl;
   }
 
   // Get colonist ID (create if needed)

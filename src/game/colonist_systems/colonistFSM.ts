@@ -1,7 +1,7 @@
 import { dist2, norm, sub } from "../../core/utils";
 import { WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState } from "../types";
-import { initializeColonistHealth, updateHealthStats, healInjuries, calculateOverallHealth } from "../health/healthSystem";
+import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
 
 // Helper function to check if a position would collide with buildings
@@ -190,12 +190,41 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   
   // Update health system (heal injuries, update stats)
   if (c.health) {
-    healInjuries(c.health, dt);
-    updateHealthStats(c.health);
+  // Progress bleeding/infections on cadence
+  updateHealthProgression(c.health, dt);
+  healInjuries(c.health, dt);
+  updateHealthStats(c.health);
     
     // Sync legacy HP with new health system
     const overallHealth = calculateOverallHealth(c.health);
     c.hp = overallHealth;
+    c.hp = overallHealth;
+
+    // Auto medical seeking trigger (basic): if bleeding significantly or severe injury
+    if (c.alive && (c.health.injuries.some(i => (i.bleeding > 0.25 && !i.bandaged) || i.severity > 0.7 || i.infected))) {
+      // Mark for medical only if not already in a medical related state
+      if (!['medical','seekMedical','medicalMultiple','resting','sleep'].includes(c.state || '')) {
+        // Could set a flag for medical system to pick up
+        (c as any).needsMedical = true;
+      }
+    } else {
+      (c as any).needsMedical = false;
+    }
+
+    // DOWNED STATE HANDLING -------------------------------------------------
+    if (c.alive) {
+      const shouldDown = (c.health.consciousness < 0.25) || (c.health.bloodLevel < 0.25) || c.health.injuries.some(i=>i.severity>0.85);
+      if (shouldDown && c.state !== 'downed') {
+        c.prevState = c.state;
+        c.state = 'downed';
+        c.task = null; c.target = null;
+        if ((game as any).msg) (game as any).msg(`${c.profile?.name || 'Colonist'} is downed`, 'warn');
+      } else if (!shouldDown && c.state === 'downed') {
+        // Recover if consciousness & blood recovered
+        if ((game as any).msg) (game as any).msg(`${c.profile?.name || 'Colonist'} has recovered from downed state`, 'good');
+        c.state = 'seekTask';
+      }
+    }
     
     // Apply pain-based penalties to colonist performance
     const painPenalty = c.health.totalPain;
@@ -215,6 +244,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     (c as any).consciousnessMultiplier = 1.0;
   }
   if (!c.alive) return; c.t += dt;
+  // If downed, skip most FSM logic besides passive timers
+  if (c.state === 'downed') {
+    // Minimal decay or future rescue logic could go here
+    return;
+  }
   if (!c.state) changeState('seekTask', 'initial state');
   c.stateSince = (c.stateSince || 0) + dt;
   

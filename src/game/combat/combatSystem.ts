@@ -159,7 +159,16 @@ export function updateProjectiles(game: Game, dt: number) {
 
       if (hitEnemy) {
         const dmg = Math.max(1, Math.round((b.dmg || 10)));
-        hitEnemy.hp -= dmg;
+        
+        // Check if this is hitting a colonist (for friendly fire)
+        const isColonist = (game.colonists as any[]).includes(hitEnemy);
+        if (isColonist) {
+          (game as any).applyDamageToColonist(hitEnemy, dmg, 'gunshot');
+        } else {
+          // Regular enemy damage
+          hitEnemy.hp -= dmg;
+        }
+        
         const impact = createImpactEffect(hitEnemy.x, hitEnemy.y);
         game.particles.push(...impact);
         game.bullets.splice(i, 1);

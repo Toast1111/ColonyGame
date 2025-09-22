@@ -43,7 +43,7 @@ export type Building = BuildingDef & {
   rot?: 0 | 90 | 180 | 270; // orientation in degrees
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'medical' | 'seekMedical' | 'medicalMultiple';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'medical' | 'seekMedical' | 'medicalMultiple' | 'downed';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -106,6 +106,9 @@ export interface Injury {
   treatedBy?: string; // colonist who treated it
   infected: boolean;
   infectionChance: number; // 0-1, chance to become infected
+  // Enhanced system fields
+  bandaged?: boolean; // bandaging reduces bleeding multiplier
+  infectionProgress?: number; // 0-1 progression toward severe infection
 }
 
 export interface ColonistHealth {
@@ -117,6 +120,25 @@ export interface ColonistHealth {
   mobility: number; // 0-1, movement speed multiplier
   manipulation: number; // 0-1, work speed multiplier
   immunity: number; // 0-1, resistance to infections
+  // Internal timers for bleeding/infection cadence
+  lastBleedCalcTime?: number;
+  lastInfectionTick?: number;
+}
+
+// Skill System
+export type SkillName = 'Medicine' | 'Construction' | 'Shooting' | 'Melee' | 'Plants' | 'Mining' | 'Crafting' | 'Social' | 'Cooking' | 'Research';
+
+export interface Skill {
+  name: SkillName;
+  level: number;      // 0-20
+  xp: number;         // current accumulated XP toward next level
+  passion?: 'none' | 'interested' | 'burning'; // affects xp gain rate
+  lastUsed?: number;  // game time last xp granted
+}
+
+export interface SkillSet {
+  byName: Record<SkillName, Skill>;
+  xpMultiplier?: number; // global modifiers (traits, mood)
 }
 
 export type Colonist = { 
@@ -147,6 +169,12 @@ export type Colonist = {
   
   // Health and injury system
   health?: ColonistHealth;
+  // Skill system
+  skills?: SkillSet;
+  
+  // Medical assignment system
+  assignedMedicalPatientId?: string; // If this colonist (doctor) is prioritizing a specific patient
+  medicalPriorityUntil?: number;     // Game time until forced priority expires (safety auto-clear)
 };
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };

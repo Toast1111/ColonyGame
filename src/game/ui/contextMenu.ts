@@ -13,10 +13,18 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
     inj.type === 'gunshot' || (inj.type === 'fracture' && inj.severity > 0.6)
   ) || false;
 
+  const isDowned = colonist.state === 'downed';
+
   // Build dynamic medical submenu based on conditions
   const medicalItems = [];
+  if (isDowned) {
+    // Rescue action: future enhancement could assign a rescue job; currently teleports to bed via Game handler
+    medicalItems.push({ id: 'medical_rescue', label: 'Rescue (Carry to Bed)', icon: '🚑', enabled: true });
+  }
   if (hasBleedingInjuries) {
     medicalItems.push({ id: 'medical_bandage', label: 'Bandage Wounds', icon: '🩹', enabled: true });
+  // Batch bandage convenience (applies quick bandage to all bleeding wounds)
+  medicalItems.push({ id: 'medical_bandage_all_bleeding', label: 'Bandage All Bleeding', icon: '🩸', enabled: true });
   }
   if (hasInfection) {
     medicalItems.push({ id: 'medical_treat_infection', label: 'Treat Infection', icon: '💊', enabled: true });
@@ -30,6 +38,8 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
   if (hasInjuries) {
     medicalItems.push({ id: 'medical_treat_all', label: 'Treat All Injuries', icon: '🏥', enabled: true });
     medicalItems.push({ id: 'medical_rest', label: 'Bed Rest', icon: '🛌', enabled: true });
+    // Quick textual summary of injuries pushed to message log
+    medicalItems.push({ id: 'medical_injury_summary', label: 'Injury Summary', icon: '📋', enabled: true });
   }
   
   // Fallback if no specific treatments
@@ -46,6 +56,15 @@ export function showContextMenu(game: any, colonist: any, screenX: number, scree
         { id: 'prioritize_build', label: 'Construction', icon: '🏗️', enabled: true },
         { id: 'prioritize_haul', label: 'Hauling', icon: '📦', enabled: true },
         { id: 'prioritize_research', label: 'Research', icon: '🔬', enabled: true },
+        // If a different colonist is currently selected (potential doctor) allow prioritizing treatment of this target
+        ...(game.selColonist && game.selColonist !== colonist ? (() => {
+          const doctor = game.selColonist;
+          const already = doctor.assignedMedicalPatientId && doctor.assignedMedicalPatientId === colonist.id;
+          if (hasInjuries || isInjured) {
+            return [{ id: already ? 'clear_prioritize_treat' : 'prioritize_treat_patient', label: already ? `Clear Treat ${colonist.profile?.name||'Patient'}` : `Treat ${colonist.profile?.name||'Patient'} First`, icon: '🩺', enabled: true }];
+          }
+          return [];
+        })() : [])
       ]},
       { id: 'force', label: 'Force', icon: '❗', enabled: true, submenu: [
         { id: 'force_rest', label: 'Rest Now', icon: '😴', enabled: isTired },

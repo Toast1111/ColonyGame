@@ -129,7 +129,17 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
       if (((c as any).meleeCd || 0) <= 0) {
         const dmg = stats?.damage || 10;
-        target.hp -= dmg;
+        
+        // Check if hitting a colonist (friendly fire in melee)
+        const isColonist = (game.colonists as any[]).includes(target);
+        if (isColonist) {
+          const meleeType = stats?.isMelee ? 'cut' : 'bruise';
+          (game as any).applyDamageToColonist(target, dmg, meleeType);
+        } else {
+          // Regular enemy damage
+          target.hp -= dmg;
+        }
+        
         (c as any).meleeCd = 0.8; // attack every 0.8s
       }
     }
@@ -158,7 +168,16 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
     if (((c as any).meleeCd || 0) <= 0) {
       const meleeDmg = Math.max(8, Math.round(stats.damage * 0.6));
-      target.hp -= meleeDmg;
+      
+      // Check if hitting a colonist (friendly fire)
+      const isColonist = (game.colonists as any[]).includes(target);
+      if (isColonist) {
+        (game as any).applyDamageToColonist(target, meleeDmg, 'bruise');
+      } else {
+        // Regular enemy damage
+        target.hp -= meleeDmg;
+      }
+      
       (c as any).meleeCd = 0.9;
       // Small cooldown before resuming ranged
       (c as any).fireCooldown = Math.max((c as any).fireCooldown || 0, 0.3);

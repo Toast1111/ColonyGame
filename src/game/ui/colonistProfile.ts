@@ -5,12 +5,22 @@ export function drawColonistProfile(game: any, c: any) {
   const cw = game.canvas.width; 
   const ch = game.canvas.height; 
 
-  const W = Math.min(game.scale(550), cw * 0.65);
-  const H = Math.min(game.scale(450), ch * 0.7);
-  const PAD = game.scale(12);
-  const X = PAD; 
+  // Responsive sizing - scale down for smaller screens
+  const baseW = 550;
+  const baseH = 450;
+  const minW = 320; // Minimum width for mobile
+  const minH = 280; // Minimum height for mobile
+  
+  const scaleW = Math.max(0.5, Math.min(0.85, cw / 800)); // Scale based on screen width
+  const scaleH = Math.max(0.5, Math.min(0.85, ch / 600)); // Scale based on screen height
+  const scale = Math.min(scaleW, scaleH); // Use smaller scale to fit both dimensions
+  
+  const W = Math.max(minW, Math.min(game.scale(baseW * scale), cw * 0.9));
+  const H = Math.max(minH, Math.min(game.scale(baseH * scale), ch * 0.85));
+  const PAD = game.scale(8);
+  const X = Math.max(PAD, (cw - W) / 2); // Center horizontally on smaller screens
   const Y = game.scale(54);
-  const finalY = Math.min(Y, ch - H - PAD);
+  const finalY = Math.max(PAD, Math.min(Y, ch - H - PAD));
 
   ctx.save();
   ctx.fillStyle = '#0b1220cc'; 
@@ -38,7 +48,7 @@ export function drawColonistProfile(game: any, c: any) {
     { id: 'health', label: 'Health', icon: '❤️' },
     { id: 'gear', label: 'Gear', icon: '🎒' },
     { id: 'social', label: 'Social', icon: '👥' },
-    { id: 'stats', label: 'Stats', icon: '📊' },
+    { id: 'skills', label: 'Skills', icon: '🛠️' },
     { id: 'log', label: 'Log', icon: '📜' }
   ];
 
@@ -81,8 +91,8 @@ export function drawColonistProfile(game: any, c: any) {
     case 'social':
       drawSocialTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
-    case 'stats':
-      drawStatsTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
+    case 'skills':
+      drawSkillsTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'log':
       drawLogTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
@@ -191,21 +201,264 @@ function drawBioTab(game: any, c: any, x: number, y: number, w: number, h: numbe
 function drawHealthTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   let textY = y + game.scale(8);
+  
+  // Responsive font scaling based on panel width
+  const baseFontScale = Math.max(0.7, Math.min(1.0, w / 400));
+  const headerSize = Math.round(16 * baseFontScale);
+  const textSize = Math.round(12 * baseFontScale);
+  const smallSize = Math.round(10 * baseFontScale);
+  
+  // Basic health stats
   const hp = Math.max(0, Math.min(100, c.hp | 0));
   const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
   const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
   const mood = (game as any).getColonistMood ? (game as any).getColonistMood(c) : 'OK';
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left';
-  ctx.fillText('Overall Condition', x, textY); textY += game.scale(24);
-  const barSpacing = game.scale(22);
-  game.barRow(x, textY, 'Health', hp, '#22c55e'); textY += barSpacing;
-  game.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); textY += barSpacing;
-  game.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); textY += barSpacing;
+  
+  ctx.fillStyle = '#f1f5f9'; 
+  ctx.font = game.getScaledFont(headerSize, '600'); 
+  ctx.textAlign = 'left';
+  ctx.fillText('Overall Condition', x, textY); 
+  textY += game.scale(Math.round(24 * baseFontScale));
+  
+  const barSpacing = game.scale(Math.round(22 * baseFontScale));
+  game.barRow(x, textY, 'Health', hp, '#22c55e'); 
+  textY += barSpacing;
+  game.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); 
+  textY += barSpacing;
+  game.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); 
+  textY += barSpacing;
+  
+  // Enhanced health system display
+  if (c.health) {
+    textY += game.scale(Math.round(16 * baseFontScale));
+    ctx.fillStyle = '#f1f5f9'; 
+    ctx.font = game.getScaledFont(headerSize, '600');
+    ctx.fillText('Detailed Health', x, textY); 
+    textY += game.scale(Math.round(20 * baseFontScale));
+    
+    // Overall health status with better mobile layout
+    const totalPain = Math.round((c.health.totalPain || 0) * 100);
+    const consciousness = Math.round((c.health.consciousness || 1) * 100);
+    const mobility = Math.round((c.health.mobility || 1) * 100);
+    const manipulation = Math.round((c.health.manipulation || 1) * 100);
+    
+    ctx.fillStyle = '#94a3b8'; 
+    ctx.font = game.getScaledFont(textSize, '500');
+    ctx.fillText(`Pain Level: ${totalPain}%`, x, textY);
+    ctx.fillStyle = totalPain > 30 ? '#ef4444' : totalPain > 15 ? '#f59e0b' : '#22c55e';
+    const painLabel = totalPain > 50 ? ' (Severe)' : totalPain > 30 ? ' (Moderate)' : totalPain > 15 ? ' (Mild)' : ' (None)';
+    const painLabelX = Math.min(x + game.scale(Math.round(80 * baseFontScale)), x + w - game.scale(60));
+    ctx.fillText(painLabel, painLabelX, textY);
+    textY += game.scale(Math.round(16 * baseFontScale));
+    
+    game.barRow(x, textY, 'Consciousness', consciousness, consciousness > 80 ? '#22c55e' : consciousness > 60 ? '#f59e0b' : '#ef4444'); 
+    textY += barSpacing;
+    game.barRow(x, textY, 'Mobility', mobility, mobility > 80 ? '#22c55e' : mobility > 60 ? '#f59e0b' : '#ef4444'); 
+    textY += barSpacing;
+    game.barRow(x, textY, 'Manipulation', manipulation, manipulation > 80 ? '#22c55e' : manipulation > 60 ? '#f59e0b' : '#ef4444'); 
+    textY += barSpacing;
+    
+    // Body parts and injuries with responsive layout
+    if (c.health.bodyParts && c.health.bodyParts.length > 0) {
+      textY += game.scale(Math.round(16 * baseFontScale));
+      ctx.fillStyle = '#f1f5f9'; 
+      ctx.font = game.getScaledFont(Math.round(14 * baseFontScale), '600');
+      ctx.fillText('Body Parts', x, textY); 
+      textY += game.scale(Math.round(18 * baseFontScale));
+      
+      for (const bodyPart of c.health.bodyParts) {
+        const partHealth = Math.round((bodyPart.currentHp / bodyPart.maxHp) * 100);
+        const efficiency = Math.round(bodyPart.efficiency * 100);
+        
+        ctx.fillStyle = '#cbd5e1'; 
+        ctx.font = game.getScaledFont(Math.round(11 * baseFontScale), '500');
+        ctx.fillText(bodyPart.label, x, textY);
+        
+        // Health bar for body part - responsive sizing
+        const barWidth = Math.min(game.scale(80), w * 0.3);
+        const barHeight = game.scale(8);
+        const barX = x + Math.min(game.scale(80), w * 0.25);
+        
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
+        
+        const healthColor = partHealth > 80 ? '#22c55e' : partHealth > 50 ? '#f59e0b' : '#ef4444';
+        ctx.fillStyle = healthColor;
+        ctx.fillRect(barX, textY - game.scale(6), barWidth * (partHealth / 100), barHeight);
+        
+        ctx.fillStyle = '#9ca3af'; 
+        ctx.font = game.getScaledFont(smallSize, '400');
+        ctx.fillText(`${partHealth}%`, barX + barWidth + game.scale(8), textY);
+        
+        if (efficiency < 100 && w > 300) { // Only show efficiency on wider screens
+          ctx.fillStyle = '#f59e0b'; 
+          const efficiencyX = Math.min(barX + barWidth + game.scale(40), x + w - game.scale(60));
+          ctx.fillText(`(${efficiency}%)`, efficiencyX, textY);
+        }
+        
+        textY += game.scale(Math.round(14 * baseFontScale));
+      }
+    }
+    
+    // Active injuries with responsive layout
+    if (c.health.injuries && c.health.injuries.length > 0) {
+      textY += game.scale(Math.round(12 * baseFontScale));
+      ctx.fillStyle = '#f1f5f9'; 
+      ctx.font = game.getScaledFont(Math.round(14 * baseFontScale), '600');
+      ctx.fillText('Active Injuries', x, textY); 
+      textY += game.scale(Math.round(18 * baseFontScale));
+      
+      const maxInjuries = w < 350 ? 4 : 6; // Show fewer injuries on small screens
+      for (const injury of c.health.injuries.slice(0, maxInjuries)) {
+        const severity = Math.round(injury.severity * 100);
+        const pain = Math.round(injury.pain * 100);
+        
+        // Injury type icon
+        const typeIcons = {
+          'cut': '🔪',
+          'bruise': '🟣', 
+          'burn': '🔥',
+          'bite': '🦷',
+          'gunshot': '🔫',
+          'fracture': '🦴'
+        };
+        
+        const icon = typeIcons[injury.type as keyof typeof typeIcons] || '⚕️';
+        ctx.fillStyle = '#f87171'; 
+        ctx.font = game.getScaledFont(textSize, '500');
+        
+        // Truncate injury description on small screens
+        const description = w < 350 ? injury.description.substring(0, 25) + '...' : injury.description;
+        ctx.fillText(`${icon} ${description}`, x, textY);
+        
+        ctx.fillStyle = '#94a3b8'; 
+        ctx.font = game.getScaledFont(smallSize, '400');
+        const statusText = `Severity: ${severity}%, Pain: ${pain}%`;
+        ctx.fillText(statusText, x + game.scale(8), textY + game.scale(12));
+        
+        if (injury.bleeding > 0 && w > 300) {
+          ctx.fillStyle = '#dc2626'; 
+          const bleedingX = Math.min(x + game.scale(150), x + w - game.scale(80));
+          ctx.fillText(`Bleeding: ${Math.round(injury.bleeding * 100)}%`, bleedingX, textY + game.scale(12));
+        }
+        
+        if (injury.infected && w > 250) {
+          ctx.fillStyle = '#7c2d12'; 
+          const infectedX = Math.min(x + game.scale(220), x + w - game.scale(60));
+          ctx.fillText('INFECTED', infectedX, textY + game.scale(12));
+        }
+        
+        textY += game.scale(Math.round(26 * baseFontScale));
+        
+        // Stop if we're running out of space
+        if (textY > y + h - game.scale(40)) break;
+      }
+      
+      if (c.health.injuries.length > 6) {
+        ctx.fillStyle = '#6b7280'; 
+        ctx.font = game.getScaledFont(10, '400');
+        ctx.fillText(`...and ${c.health.injuries.length - 6} more injuries`, x, textY);
+      }
+    } else if (c.health.bodyParts) {
+      // Show "no injuries" if health system is active but no injuries
+      textY += game.scale(12);
+      ctx.fillStyle = '#22c55e'; 
+      ctx.font = game.getScaledFont(12, '500');
+      ctx.fillText('✓ No active injuries', x, textY);
+    }
+  } else {
+    // Show that enhanced health system is not initialized
+    textY += game.scale(16);
+    ctx.fillStyle = '#6b7280'; 
+    ctx.font = game.getScaledFont(12, '400');
+    ctx.fillText('Enhanced health system not initialized', x, textY);
+  }
+  
   textY += game.scale(16);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600');
-  ctx.fillText('Mental State', x, textY); textY += game.scale(18);
-  ctx.fillStyle = '#9fb3c8'; ctx.font = game.getScaledFont(12, '400');
+  ctx.fillStyle = '#f1f5f9'; 
+  ctx.font = game.getScaledFont(14, '600');
+  ctx.fillText('Mental State', x, textY); 
+  textY += game.scale(18);
+  ctx.fillStyle = '#9fb3c8'; 
+  ctx.font = game.getScaledFont(12, '400');
   ctx.fillText(`Current Mood: ${mood}`, x + game.scale(8), textY);
+}
+
+function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: number) {
+  const ctx = game.ctx as CanvasRenderingContext2D;
+  ctx.save();
+  let rowY = y + game.scale(4);
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = game.getScaledFont(16, '600');
+  ctx.textAlign = 'left';
+  ctx.fillText('Skills', x, rowY); rowY += game.scale(22);
+
+  if (!c.skills) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = game.getScaledFont(12, '400');
+    ctx.fillText('No skills data', x, rowY);
+    ctx.restore();
+    return;
+  }
+
+  const skills = Object.values(c.skills.byName) as any[];
+  skills.sort((a,b)=> b.level - a.level);
+  const barHeight = game.scale(14);
+  const barWidth = w - game.scale(180);
+  ctx.font = game.getScaledFont(11, '400');
+  const hoverRects: any[] = [];
+  for (const s of skills) {
+    if (rowY + barHeight > y + h - game.scale(8)) break;
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillText(s.name, x, rowY + barHeight * 0.8);
+    ctx.fillStyle = '#60a5fa';
+    ctx.fillText(String(s.level).padStart(2,' '), x + game.scale(110), rowY + barHeight * 0.8);
+    let passionColor = '#475569';
+    let passionGlyph = '';
+    if (s.passion === 'interested') { passionColor = '#fbbf24'; passionGlyph = '★'; }
+    else if (s.passion === 'burning') { passionColor = '#f97316'; passionGlyph = '★★'; }
+    if (passionGlyph) { ctx.fillStyle = passionColor; ctx.fillText(passionGlyph, x + game.scale(140), rowY + barHeight * 0.8); }
+    const bx = x + game.scale(170);
+    const by = rowY + game.scale(2);
+    ctx.fillStyle = '#1e293b'; ctx.fillRect(bx, by, barWidth, barHeight - game.scale(4));
+    ctx.fillStyle = '#0f172a'; ctx.fillRect(bx+1, by+1, barWidth-2, barHeight - game.scale(6));
+    const needed = 100 + Math.pow(s.level+1, 1.6) * 40;
+    const pct = Math.max(0, Math.min(1, s.xp / needed));
+    const fillW = Math.round((barWidth-4) * pct);
+    ctx.fillStyle = '#3b82f6'; ctx.fillRect(bx+2, by+2, fillW, barHeight - game.scale(8));
+    ctx.fillStyle = '#cbd5e1'; ctx.font = game.getScaledFont(9, '400'); ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(pct*100)}%`, bx + barWidth/2, by + (barHeight - game.scale(8))/2 + game.scale(2));
+    ctx.textAlign = 'left';
+    hoverRects.push({ x: bx, y: by, w: barWidth, h: barHeight - game.scale(4), skill: s, needed });
+    rowY += barHeight + game.scale(6);
+  }
+
+  // Tooltip when hovering over a skill progress bar
+  const mx = game.mouse.x * game.DPR; const my = game.mouse.y * game.DPR;
+  for (const hr of hoverRects) {
+    if (mx >= hr.x && mx <= hr.x + hr.w && my >= hr.y && my <= hr.y + hr.h) {
+      const s = hr.skill; const needed = hr.needed; const remaining = Math.max(0, Math.round(needed - s.xp));
+      const mult = s.passion === 'burning' ? 'x200%' : s.passion === 'interested' ? 'x150%' : 'x100%';
+      const lines = [
+        `${s.name} (Level ${s.level})`,
+        `XP: ${Math.round(s.xp)}/${Math.round(needed)}`,
+        `To next: ${remaining}`,
+        `Passion: ${s.passion || 'none'} (${mult})`,
+        `Work Speed: ${((0.6 + Math.pow(s.level, 0.9) * 0.06) * 100).toFixed(0)}%`
+      ];
+      const pad = game.scale(6); ctx.font = game.getScaledFont(11,'400');
+      let wMax = 0; for (const ln of lines) { const m = ctx.measureText(ln).width; if (m>wMax) wMax = m; }
+      const boxW = wMax + pad*2; const boxH = lines.length * game.scale(14) + pad*2;
+      let tx = hr.x + game.scale(10); let ty = hr.y - boxH - game.scale(4);
+      if (ty < y) ty = hr.y + game.scale(18); if (tx + boxW > x + w) tx = x + w - boxW;
+      ctx.fillStyle = 'rgba(15,23,42,0.92)'; ctx.fillRect(tx, ty, boxW, boxH);
+      ctx.strokeStyle = '#334155'; ctx.strokeRect(tx+0.5, ty+0.5, boxW-1, boxH-1);
+      let ly = ty + pad;
+      for (const ln of lines) { ctx.fillStyle = '#e2e8f0'; ctx.fillText(ln, tx + pad, ly + game.scale(11)); ly += game.scale(14); }
+      break;
+    }
+  }
+  ctx.restore();
 }
 
 function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: number) {
@@ -275,33 +528,7 @@ function drawSocialTab(game: any, c: any, x: number, y: number, w: number, h: nu
   } else { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(11, '400'); ctx.fillText('No other colonists in colony', x + game.scale(8), textY); }
 }
 
-function drawStatsTab(game: any, c: any, x: number, y: number, w: number, h: number) {
-  const ctx = game.ctx as CanvasRenderingContext2D; let textY = y + game.scale(8);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left'; ctx.fillText('Skills & Abilities', x, textY); textY += game.scale(24);
-  const profile = c.profile;
-  if (profile && profile.stats) {
-    const stats = [
-      { name: 'Work Speed', value: Math.round(profile.stats.workSpeed * 100), suffix: '%' },
-      { name: 'Social Bonus', value: Math.round(profile.stats.socialBonus * 100), suffix: '%' },
-      { name: 'Hunger Rate', value: Math.round(profile.stats.hungerRate * 100), suffix: '%' },
-      { name: 'Fatigue Rate', value: Math.round(profile.stats.fatigueRate * 100), suffix: '%' }
-    ];
-    for (const stat of stats) {
-      ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(12, '500'); ctx.fillText(`${stat.name}:`, x, textY);
-      ctx.fillStyle = '#dbeafe'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText(`${stat.value}${stat.suffix}`, x + game.scale(120), textY);
-      textY += game.scale(18);
-    }
-  }
-  textY += game.scale(16);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Skills', x, textY); textY += game.scale(18);
-  const skills = [ 'Construction', 'Farming', 'Mining', 'Research', 'Combat' ].map(name => ({ name, level: Math.floor(Math.random() * 10) + 1 }));
-  for (const skill of skills) {
-    ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(11, '400'); ctx.fillText(`${skill.name}:`, x + game.scale(8), textY);
-    const levelColor = skill.level >= 8 ? '#22c55e' : skill.level >= 5 ? '#eab308' : '#6b7280';
-    ctx.fillStyle = levelColor; ctx.fillText(`Level ${skill.level}`, x + game.scale(100), textY);
-    textY += game.scale(16);
-  }
-}
+// Stats tab removed
 
 function drawLogTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D; let textY = y + game.scale(8);

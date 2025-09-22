@@ -1,5 +1,17 @@
 import type { Colonist, BodyPart, BodyPartType, ColonistHealth, Injury, InjuryType } from '../types';
 
+// --------------------------------------------------------------------------------------
+// HEALTH / INJURY CORE
+// Unified damage + progression helpers intended to make the system "just work".
+// Design goals (RimWorld-inspired):
+//  - Localized body part damage with coverage based selection
+//  - Bleeding causes gradual blood loss -> consciousness -> death
+//  - Infection chance on open / untreated wounds with progression & immunity check
+//  - Clear death causes (vital destruction, exsanguination, infection)
+//  - Single public API: applyDamageToColonist(game, colonist, amount, type, source)
+//  - Minimal per-frame cost (aggregate bleeding once per tick, light math)
+// --------------------------------------------------------------------------------------
+
 // Default body part configurations
 export const DEFAULT_BODY_PARTS: BodyPart[] = [
   {
@@ -70,7 +82,9 @@ export function initializeColonistHealth(colonist: Colonist): void {
     consciousness: 1.0,
     mobility: 1.0,
     manipulation: 1.0,
-    immunity: 1.0
+    immunity: 1.0,
+    lastBleedCalcTime: 0,
+    lastInfectionTick: 0
   };
 }
 
@@ -90,8 +104,8 @@ export function updateHealthStats(health: ColonistHealth): void {
   health.totalPain = Math.min(1.0, health.injuries.reduce((sum, injury) => sum + injury.pain, 0));
   
   // Calculate blood level from bleeding injuries
-  const totalBleeding = health.injuries.reduce((sum, injury) => sum + injury.bleeding, 0);
-  health.bloodLevel = Math.max(0, health.bloodLevel - totalBleeding * 0.001); // Slow blood loss
+  const totalBleeding = health.injuries.reduce((sum, injury) => sum + (injury.bandaged ? injury.bleeding * 0.15 : injury.bleeding), 0);
+  // Blood is not reduced here anymore; moved to tickBleeding() for deterministic timing.
   
   // Calculate consciousness (affected by pain, blood loss, head injuries)
   const headPart = health.bodyParts.find(p => p.type === 'head');
@@ -201,7 +215,7 @@ export function createInjury(
       description = `${type} on ${bodyPart.replace('_', ' ')}`;
   }
   
-  return {
+  const injury: Injury = {
     id,
     type,
     bodyPart,
@@ -213,8 +227,11 @@ export function createInjury(
     timeCreated: gameTime,
     description,
     infected: false,
-    infectionChance: infectionChance * severity
+    infectionChance: infectionChance * severity,
+    bandaged: false,
+    infectionProgress: 0
   };
+  return injury;
 }
 
 // Apply damage to a specific body part
@@ -247,6 +264,118 @@ export function damageBodyPart(
   }
   
   return false;
+}
+
+// --------------------------------------------------------------------------------------
+// Unified damage application API
+// --------------------------------------------------------------------------------------
+
+export interface DamageOptions {
+  type?: InjuryType;
+  bodyPart?: BodyPartType; // Force specific part
+  source?: string;         // e.g., 'turret', 'enemy', 'friendly_fire'
+  armorPenetration?: number; // Future use
+  createInjury?: boolean;    // default true
+  damageMultiplier?: number; // situational modifiers
+}
+
+// Applies damage, creates injury, updates death + returns whether colonist died
+export function applyDamageToColonist(
+  game: any,
+  colonist: Colonist,
+  rawDamage: number,
+  injuryType: InjuryType = 'cut',
+  options: DamageOptions = {}
+): { died: boolean; bodyPart: BodyPartType; fatal: boolean; cause?: string } {
+  if (!colonist.alive) return { died: false, bodyPart: 'torso', fatal: false } as any;
+  initializeColonistHealth(colonist);
+  const health = colonist.health!;
+
+  // Select body part
+  const part = options.bodyPart ? health.bodyParts.find(p => p.type === options.bodyPart)! : selectRandomBodyPart(health);
+  const dmg = Math.max(0, rawDamage * (options.damageMultiplier ?? 1));
+  const fatal = damageBodyPart(health, part.type, dmg, injuryType, performance.now());
+
+  // If colonist died from vital part destruction
+  if (fatal) {
+    handleColonistDeath(game, colonist, `Destroyed vital ${part.label}`);
+    return { died: true, bodyPart: part.type, fatal: true, cause: 'vital_part' };
+  }
+
+  // Sync legacy hp (0-100 scale)
+  colonist.hp = calculateOverallHealth(health);
+
+  // Extra death checks (exsanguination or consciousness collapse)
+  if (health.bloodLevel <= 0.01) {
+    handleColonistDeath(game, colonist, 'Blood loss');
+    return { died: true, bodyPart: part.type, fatal: true, cause: 'blood_loss' };
+  }
+  if (health.consciousness <= 0.05) {
+    // Not immediate death; could be unconsciousness placeholder
+    // Future: implement downed state. For now, mark near-death.
+  }
+
+  return { died: false, bodyPart: part.type, fatal: false };
+}
+
+// Centralized death handler
+export function handleColonistDeath(game: any, colonist: Colonist, reason: string) {
+  colonist.alive = false;
+  colonist.task = null;
+  colonist.state = 'idle';
+  if (game && typeof game.msg === 'function') {
+    game.msg(`${colonist.profile?.name || 'Colonist'} died (${reason})`, 'bad');
+  }
+}
+
+// --------------------------------------------------------------------------------------
+// Bleeding & Infection Progression
+// --------------------------------------------------------------------------------------
+
+// Advance bleeding on a fixed timestep (called from game loop ideally once per second)
+export function tickBleeding(health: ColonistHealth, elapsedSeconds: number) {
+  const totalBleeding = health.injuries.reduce((sum, i) => sum + (i.bandaged ? i.bleeding * 0.15 : i.bleeding), 0);
+  if (totalBleeding <= 0) return;
+  // Blood loss scaling: 1.0 -> lose 100% in ~300s if bleeding=1
+  const bleedRate = totalBleeding * (elapsedSeconds / 300);
+  health.bloodLevel = Math.max(0, health.bloodLevel - bleedRate);
+}
+
+// Infection logic: wounds with infectionChance accumulate progress; immunity counters it
+export function tickInfections(health: ColonistHealth, elapsedSeconds: number) {
+  for (const inj of health.injuries) {
+    if (inj.infected) {
+      // Infection progresses toward 1; immunity pushes back
+      const immune = health.immunity;
+  inj.infectionProgress = Math.min(1, (inj.infectionProgress || 0) + (elapsedSeconds / 600) * (1 - immune * 0.8));
+      // Severe infection -> systemic effects (reduce blood & add pain)
+  if ((inj.infectionProgress || 0) > 0.7) {
+        health.bloodLevel = Math.max(0, health.bloodLevel - 0.0005 * elapsedSeconds);
+        inj.pain = Math.min(1, inj.pain + 0.05 * (elapsedSeconds / 60));
+      }
+    } else if (inj.infectionChance > 0 && inj.severity > 0.2 && !inj.bandaged) {
+      // Chance to become infected over time
+      const chance = inj.infectionChance * (elapsedSeconds / 400);
+      if (Math.random() < chance) {
+        inj.infected = true;
+        inj.infectionProgress = 0.05;
+      }
+    }
+  }
+}
+
+// High level periodic update (called each frame)
+export function updateHealthProgression(health: ColonistHealth, dt: number) {
+  health.lastBleedCalcTime = (health.lastBleedCalcTime || 0) + dt;
+  health.lastInfectionTick = (health.lastInfectionTick || 0) + dt;
+  if (health.lastBleedCalcTime >= 1) { // 1s cadence
+    tickBleeding(health, health.lastBleedCalcTime);
+    health.lastBleedCalcTime = 0;
+  }
+  if (health.lastInfectionTick >= 4) { // every 4s
+    tickInfections(health, health.lastInfectionTick);
+    health.lastInfectionTick = 0;
+  }
 }
 
 // Get health status description
@@ -294,4 +423,46 @@ export function healInjuries(health: ColonistHealth, deltaTime: number): void {
   }
   
   updateHealthStats(health);
+}
+
+// Convenience helper for UI summaries
+export function getInjurySummary(health: ColonistHealth): string {
+  if (!health.injuries.length) return 'No injuries';
+  const bleeding = health.injuries.filter(i => i.bleeding > 0 && !i.bandaged).length;
+  const infected = health.injuries.filter(i => i.infected).length;
+  const severe = health.injuries.filter(i => i.severity > 0.6).length;
+  return [
+    `${health.injuries.length} wound${health.injuries.length!==1?'s':''}`,
+    bleeding?`${bleeding} bleeding`:null,
+    severe?`${severe} severe`:null,
+    infected?`${infected} infected`:null
+  ].filter(Boolean).join(', ');
+}
+
+export function getMostCriticalInjury(health: ColonistHealth): Injury | undefined {
+  return [...health.injuries].sort((a,b)=>{
+    const as = (a.bleeding*2)+(a.severity)+(a.infected?0.5:0);
+    const bs = (b.bleeding*2)+(b.severity)+(b.infected?0.5:0);
+    return bs - as;
+  })[0];
+}
+
+// Basic field treatment: quick, low-skill stabilization when no doctor available.
+export function basicFieldTreatment(health: ColonistHealth): { bandaged: number; painReduced: number } {
+  let bandaged = 0; let painReduced = 0;
+  for (const inj of health.injuries) {
+    if (inj.bleeding > 0 && !inj.bandaged) {
+      inj.bandaged = true;
+      inj.bleeding *= 0.35; // Not as effective as proper bandage
+      inj.infectionChance *= 0.7;
+      bandaged++;
+    }
+    if (inj.pain > 0.4) {
+      const before = inj.pain;
+      inj.pain *= 0.85; // mild reduction
+      painReduced += before - inj.pain;
+    }
+  }
+  updateHealthStats(health);
+  return { bandaged, painReduced: Number(painReduced.toFixed(2)) };
 }

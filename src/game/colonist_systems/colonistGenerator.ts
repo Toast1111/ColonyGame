@@ -11,6 +11,7 @@ import {
   randomChoice,
   type ColonistTraits
 } from './traits';
+import { createDefaultSkillSet, addStartingSkillVariance } from '../skills/skills';
 import type { InventoryItem, Equipment, ColonistInventory } from '../types';
 
 // Enhanced interface with detailed personal information
@@ -431,6 +432,11 @@ export function generateColonistProfile(): ColonistProfile {
   
   // Generate rich backstory using all the detailed information
   profile.backstory = createRichBackstory(profile);
+
+  // Attach initial skill set (game will later copy to colonist entity)
+  const initialSkillSet = createDefaultSkillSet();
+  addStartingSkillVariance(initialSkillSet);
+  (profile as any).initialSkills = initialSkillSet;
   
   return profile;
 }
