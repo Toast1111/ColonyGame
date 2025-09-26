@@ -110,11 +110,26 @@ function pickTarget(game: Game, c: Colonist, range: number): Enemy | null {
   return best;
 }
 
+/**
+ * Colonist combat update
+ * Implements RimWorld-like behavior:
+ *  - Ranged: colonist must remain stationary to progress warmup and fire. Any movement resets warmup/burst.
+ *  - Melee: discrete swings gated by meleeCd; requires being stationary on that tick to connect.
+ */
 export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   if (!c.alive || c.inside) return;
   const stats = getWeaponStats(c);
 
-  // Melee fallback when no weapon or melee weapon
+  // Track last position for stationary fire requirement (RimWorld style: must stand still to shoot)
+  const movedDist = (() => {
+    const lp = (c as any)._lastPos || { x: c.x, y: c.y };
+    const d = Math.hypot(c.x - lp.x, c.y - lp.y);
+    (c as any)._lastPos = { x: c.x, y: c.y };
+    return d;
+  })();
+  const movedThisTick = movedDist > 0.5; // small threshold to ignore tiny jitter
+
+  // Melee fallback when no weapon or melee weapon (still requires cooldown; movement does not block melee like ranged)
   if (!stats || stats.isMelee) {
     // Find nearest enemy within melee reach
     const T = 32;
@@ -125,6 +140,8 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       if (d < bestD) { bestD = d; target = e; }
     }
     if (target && bestD <= reach) {
+      // Require being mostly stationary to land a melee blow (aligning with RimWorld style stop & swing)
+      if (movedThisTick) return;
       // Simple melee cooldown on colonist
       (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
       if (((c as any).meleeCd || 0) <= 0) {
@@ -146,7 +163,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     return;
   }
 
-  // Ranged combat
+  // Ranged combat (requires being stationary to progress warmup or fire)
   (c as any).fireCooldown = Math.max(0, ((c as any).fireCooldown || 0) - dt);
   (c as any).betweenShots = Math.max(0, ((c as any).betweenShots || 0) - dt);
   (c as any).warmup = Math.max(0, ((c as any).warmup || 0) - dt);
@@ -185,7 +202,16 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     return;
   }
 
-  // Wait for warmup
+  // If the pawn moved, reset warmup & burst (simulates needing to stop to aim)
+  if (movedThisTick) {
+    // Cancel current burst and reset warmup so the colonist must aim again when stopping
+    (c as any).burstLeft = 0;
+    // Only reset warmup if we were already warming up or readying; give a small penalty
+    (c as any).warmup = Math.max((c as any).warmup || 0, stats.warmup * 0.6);
+    return;
+  }
+
+  // Wait for warmup (only counts down if stationary which we already enforced above)
   if (((c as any).warmup || 0) > 0) return;
 
   // Handle bursts
