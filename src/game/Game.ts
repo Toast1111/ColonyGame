@@ -2553,7 +2553,9 @@ export class Game {
     
     const w = this.scale(140); 
     const h = this.scale(10); 
-    const labelWidth = this.scale(70);
+    // Push the bar further right: use measured label width + padding, but keep a sensible minimum
+    const measured = ctx.measureText(label).width; 
+    const labelWidth = Math.max(this.scale(86), measured + this.scale(14));
     
     ctx.fillStyle = '#0f172a'; 
     ctx.fillRect(x + labelWidth, y - this.scale(8), w, h); 

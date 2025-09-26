@@ -28,18 +28,11 @@ export function drawColonistProfile(game: any, c: any) {
   ctx.strokeStyle = '#1e293b'; 
   ctx.strokeRect(X + .5, finalY + .5, W - 1, H - 1);
 
-  const closeSize = game.scale(26);
-  const closePad = game.scale(8);
-  const closeX = X + W - closePad - closeSize;
-  const closeY = finalY + closePad;
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(closeX, closeY, closeSize, closeSize);
-  ctx.strokeStyle = '#1e293b';
-  ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
-  ctx.fillStyle = '#dbeafe';
-  ctx.font = game.getScaledFont(16, '700');
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + game.scale(1));
+  // Close button will now be rendered at the bottom-right after the content so it layers above tabs/content.
+  let closeSize: number; // declared here, assigned later before drawing
+  let closePad: number;
+  let closeX: number;
+  let closeY: number;
 
   const tabHeight = game.scale(32);
   const tabY = finalY + game.scale(12);
@@ -100,6 +93,21 @@ export function drawColonistProfile(game: any, c: any) {
   }
   ctx.restore();
 
+  // Draw close button (moved from top-right to bottom-right) AFTER restoring clip for proper z-order
+  closeSize = game.scale(26);
+  closePad = game.scale(8);
+  closeX = X + W - closePad - closeSize;
+  closeY = finalY + H - closePad - closeSize;
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(closeX, closeY, closeSize, closeSize);
+  ctx.strokeStyle = '#1e293b';
+  ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
+  ctx.fillStyle = '#dbeafe';
+  ctx.font = game.getScaledFont(16, '700');
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + game.scale(1));
+
+  // Follow status text (bottom-left) - keep after close button for clarity
   ctx.fillStyle = '#4b5563';
   ctx.font = game.getScaledFont(9);
   ctx.textAlign = 'left';
@@ -220,6 +228,7 @@ function drawHealthTab(game: any, c: any, x: number, y: number, w: number, h: nu
   ctx.fillText('Overall Condition', x, textY); 
   textY += game.scale(Math.round(24 * baseFontScale));
   
+  // Increased spacing between overall condition bars for improved readability (was 22 * baseFontScale)
   const barSpacing = game.scale(Math.round(22 * baseFontScale));
   game.barRow(x, textY, 'Health', hp, '#22c55e'); 
   textY += barSpacing;
