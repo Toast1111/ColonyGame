@@ -1,5 +1,6 @@
 import type { Game } from "../Game";
 import type { Colonist, Enemy } from "../types";
+import { grantSkillXP, skillLevel } from "../skills/skills";
 import { itemDatabase } from "../../data/itemDatabase";
 import { createMuzzleFlash, createProjectileTrail } from "../../core/particles";
 
@@ -145,7 +146,8 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       // Simple melee cooldown on colonist
       (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
       if (((c as any).meleeCd || 0) <= 0) {
-        const dmg = stats?.damage || 10;
+        const meleeLvl = c.skills ? skillLevel(c, 'Melee') : 0;
+        const dmg = Math.round((stats?.damage || 10) * (1 + meleeLvl * 0.03));
         
         // Check if hitting a colonist (friendly fire in melee)
         const isColonist = (game.colonists as any[]).includes(target);
@@ -157,6 +159,8 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
           target.hp -= dmg;
         }
         
+        // XP for landing a melee hit
+        if (c.skills) grantSkillXP(c, 'Melee', 18, (c as any).t || 0);
         (c as any).meleeCd = 0.8; // attack every 0.8s
       }
     }
@@ -225,7 +229,9 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
 
   // Fire one shot in burst
   // Accuracy reduced by distance and cover near target
-  const baseAcc = stats.accuracy;
+  // Shooting skill influences accuracy
+  const shootLvl = c.skills ? skillLevel(c, 'Shooting') : 0;
+  const baseAcc = Math.min(0.98, stats.accuracy * (1 + shootLvl * 0.02));
   const distFactor = Math.max(0.5, 1 - (dist / stats.rangePx) * 0.5); // 50% reduction at max range
   const cover = coverPenalty(game, c, target);
   const acc = Math.max(0.1, baseAcc * distFactor * (1 - cover));
@@ -245,10 +251,11 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     x: c.x, y: c.y, tx: ax, ty: ay,
     t: 0.12,
     speed: stats.speed,
-    dmg: stats.damage,
+    dmg: Math.round(stats.damage * (1 + shootLvl * 0.02)),
     life: 0,
     maxLife: Math.max(0.12, dist / stats.speed + 0.12),
-    owner: 'colonist'
+    owner: 'colonist',
+    shooterId: (c as any).id || ((c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
   };
   const dx = ax - c.x, dy = ay - c.y; const L = Math.hypot(dx, dy) || 1;
   bullet.vx = (dx / L) * stats.speed;
@@ -264,4 +271,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     (c as any).fireCooldown = stats.cooldown;
     (c as any).combatTarget = null; // reacquire to allow target swapping
   }
+
+  // Small XP per shot fired (reward practice even on miss)
+  if (c.skills) grantSkillXP(c, 'Shooting', 2.5, (c as any).t || 0);
 }

@@ -134,6 +134,8 @@ export interface Skill {
   xp: number;         // current accumulated XP toward next level
   passion?: 'none' | 'interested' | 'burning'; // affects xp gain rate
   lastUsed?: number;  // game time last xp granted
+  // recent xp gains for UI tooltips (pairs of game time and amount)
+  xpDeltas?: { t: number; amount: number }[];
 }
 
 export interface SkillSet {
@@ -190,6 +192,7 @@ export type Bullet = {
   life?: number;            // current lifespan
   maxLife?: number;         // max lifespan before despawn
   owner?: 'turret' | 'colonist' | 'enemy';
+  shooterId?: string;       // colonist id for XP attribution (if owner is colonist)
   particles?: Particle[];
 };
 

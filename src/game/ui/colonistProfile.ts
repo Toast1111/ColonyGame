@@ -447,11 +447,23 @@ function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: nu
   for (const hr of hoverRects) {
     if (mx >= hr.x && mx <= hr.x + hr.w && my >= hr.y && my <= hr.y + hr.h) {
       const s = hr.skill; const needed = hr.needed; const remaining = Math.max(0, Math.round(needed - s.xp));
+      // Compute recent XP gained in the last few seconds for live feedback
+      const now = (game.t || 0);
+      const recentWindow = 3; // seconds
+      let recent = 0;
+      if (s.xpDeltas && s.xpDeltas.length) {
+        for (let i = s.xpDeltas.length - 1; i >= 0; i--) {
+          const d = s.xpDeltas[i];
+          if (d.t >= now - recentWindow) recent += d.amount;
+          else break;
+        }
+      }
       const mult = s.passion === 'burning' ? 'x200%' : s.passion === 'interested' ? 'x150%' : 'x100%';
       const lines = [
         `${s.name} (Level ${s.level})`,
         `XP: ${Math.round(s.xp)}/${Math.round(needed)}`,
         `To next: ${remaining}`,
+        ...(recent > 0 ? [`Recent gain: +${recent.toFixed(1)} XP (last ${recentWindow}s)`] : []),
         `Passion: ${s.passion || 'none'} (${mult})`,
         `Work Speed: ${((0.6 + Math.pow(s.level, 0.9) * 0.06) * 100).toFixed(0)}%`
       ];

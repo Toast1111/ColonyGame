@@ -1,6 +1,7 @@
 import { dist2, norm, sub } from "../../core/utils";
 import { WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState } from "../types";
+import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "../skills/skills";
 import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
 
@@ -1047,9 +1048,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       c.lastDistToNode = distToTarget;
       
       if (game.moveAlongPath(c, dt, pt, 12)) {
-  // Apply equipment work speed bonuses (Construction)
-  const workMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Construction') : 1;
-  b.buildLeft -= 25 * dt * workMult;
+        // Apply equipment work speed bonuses (Construction) and skill multiplier
+        const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Construction') : 1;
+        const lvl = c.skills ? skillLevel(c, 'Construction') : 0;
+        const skillMult = skillWorkSpeedMultiplier(lvl);
+        const workMult = equipMult * skillMult;
+        b.buildLeft -= 25 * dt * workMult;
+        // Grant construction XP over time while actively building
+        if (c.skills) {
+          // Base XP per second while building
+          grantSkillXP(c, 'Construction', 6 * dt, c.t || 0);
+        }
         if (b.buildLeft <= 0) {
           b.done = true; if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
           
@@ -1107,15 +1116,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       const pt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
       if (game.moveAlongPath(c, dt, pt, 12)) { 
+        // Plants skill influences harvest yield slightly
+        const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
+        const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02); // up to +50% at lvl 25 (capped)
         if (f.kind === 'farm') {
           f.ready = false; 
           f.growth = 0; 
-          const harvested = game.addResource('food', 10);
+          const harvested = game.addResource('food', Math.round(10 * yieldMult));
           if (harvested > 0) {
             game.msg(`Farm harvested (+${harvested} food)`, 'good');
           }
+          if (c.skills) grantSkillXP(c, 'Plants', 20, c.t || 0); // big tick on harvest
         } else if (f.kind === 'well') {
-          const collected = game.addResource('food', 5);
+          const collected = game.addResource('food', Math.round(5 * yieldMult * 0.6));
           if (collected > 0) {
             game.msg(`Well collected (+${collected} food)`, 'good');
           }
@@ -1140,11 +1153,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (distance <= interact + slack + 0.1) {
         // Close enough to chop
-  // Apply equipment work speed bonuses (Woodcutting)
-  const workMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Woodcutting') : 1;
-  t.hp -= 18 * dt * workMult;
+        const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Woodcutting') : 1;
+        const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0; // use Plants for woodcutting
+        const skillMult = skillWorkSpeedMultiplier(plantsLvl);
+        const workMult = equipMult * skillMult;
+        t.hp -= 18 * dt * workMult;
+        if (c.skills) grantSkillXP(c, 'Plants', 4 * dt, c.t || 0); // trickle while chopping
         if (t.hp <= 0) {
-          const collected = game.addResource('wood', 6);
+          const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02);
+          const collected = game.addResource('wood', Math.round(6 * yieldMult));
           (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
           if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
           if (collected > 0) {
@@ -1207,11 +1224,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (distance <= interact + slack + 0.1) {
         // Close enough to mine
-  // Apply equipment work speed bonuses (Mining)
-  const workMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Mining') : 1;
-  r.hp -= 16 * dt * workMult;
+        const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Mining') : 1;
+        const miningLvl = c.skills ? skillLevel(c, 'Mining') : 0;
+        const skillMult = skillWorkSpeedMultiplier(miningLvl);
+        const workMult = equipMult * skillMult;
+        r.hp -= 16 * dt * workMult;
+        if (c.skills) grantSkillXP(c, 'Mining', 4 * dt, c.t || 0); // trickle while mining
         if (r.hp <= 0) {
-          const collected = game.addResource('stone', 5);
+          const yieldMult = 1 + Math.min(0.5, miningLvl * 0.02);
+          const collected = game.addResource('stone', Math.round(5 * yieldMult));
           (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
           if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
           if (collected > 0) {

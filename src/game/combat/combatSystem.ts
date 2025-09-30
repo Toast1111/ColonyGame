@@ -1,5 +1,6 @@
 import type { Game } from "../Game";
 import type { Building, Bullet, Enemy } from "../types";
+import { grantSkillXP } from "../skills/skills";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles } from "../../core/particles";
 import { dist2 } from "../../core/utils";
 
@@ -169,6 +170,16 @@ export function updateProjectiles(game: Game, dt: number) {
           hitEnemy.hp -= dmg;
         }
         
+        // Shooting XP for the colonist who fired this bullet
+        if (b.owner === 'colonist' && (b as any).shooterId) {
+          const shooter = game.colonists.find(c => (c as any).id === (b as any).shooterId);
+          if (shooter && shooter.skills) {
+            grantSkillXP(shooter as any, 'Shooting', 8, (shooter as any).t || 0);
+            if (hitEnemy.hp <= 0) {
+              grantSkillXP(shooter as any, 'Shooting', 20, (shooter as any).t || 0);
+            }
+          }
+        }
         const impact = createImpactEffect(hitEnemy.x, hitEnemy.y);
         game.particles.push(...impact);
         game.bullets.splice(i, 1);

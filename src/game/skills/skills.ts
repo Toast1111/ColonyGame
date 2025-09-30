@@ -52,6 +52,15 @@ export function grantSkillXP(colonist: Colonist, name: SkillName, baseAmount: nu
   if (colonist.skills.xpMultiplier) amount *= colonist.skills.xpMultiplier;
   skill.xp += amount;
   skill.lastUsed = gameTime;
+  // Track recent xp deltas for UI tooltips (keep last ~5 seconds)
+  if (!skill.xpDeltas) skill.xpDeltas = [];
+  if (gameTime != null) {
+    skill.xpDeltas.push({ t: gameTime, amount });
+    // prune anything older than 5s window and cap length
+    const cutoff = gameTime - 5;
+    if (cutoff > 0) skill.xpDeltas = skill.xpDeltas.filter(d => d.t >= cutoff);
+    if (skill.xpDeltas.length > 64) skill.xpDeltas.splice(0, skill.xpDeltas.length - 64);
+  }
   // Level up loop
   while (skill.level < 20) {
     const needed = LEVEL_XP[skill.level+1];

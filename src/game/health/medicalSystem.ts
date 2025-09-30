@@ -1,5 +1,5 @@
 import type { Colonist, Injury, BodyPartType, InjuryType } from '../types';
-import { skillLevel } from '../skills/skills';
+import { skillLevel, grantSkillXP } from '../skills/skills';
 import { damageBodyPart, createInjury, initializeColonistHealth } from './healthSystem';
 import { itemDatabase } from '../../data/itemDatabase';
 
@@ -294,10 +294,19 @@ export class MedicalSystem {
     if (success) {
       this.applySuccessfulTreatment(patient, job.targetInjury, treatment);
       this.consumeItems(doctor, job.requiredItems);
+      // Grant Medicine XP; more for harder treatments
+      if (doctor.skills) {
+        const base = 20 + treatment.skillRequired * 4;
+        grantSkillXP(doctor, 'Medicine', base, (doctor as any).t || 0);
+      }
       return true;
     } else {
       this.applyFailedTreatment(patient, job.targetInjury, treatment);
       this.consumeItems(doctor, job.requiredItems);
+      if (doctor.skills) {
+        const amt = 8 + Math.max(0, treatment.skillRequired - doctorSkill) * 2;
+        grantSkillXP(doctor, 'Medicine', amt, (doctor as any).t || 0);
+      }
       return false;
     }
   }
