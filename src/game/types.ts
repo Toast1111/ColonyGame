@@ -181,7 +181,14 @@ export type Colonist = {
   restingOn?: Building | null;       // Furniture (like a bed) the colonist is currently using
 };
 
-export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };
+export type Enemy = { 
+  x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string;
+  path?: import('../core/utils').Vec2[];
+  pathIndex?: number;
+  pathGoal?: import('../core/utils').Vec2;
+  repath?: number;
+  stuckTimer?: number;
+};
 
 export type Bullet = {
   x: number; y: number;

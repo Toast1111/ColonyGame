@@ -1,4 +1,5 @@
-import { dist2, norm, sub } from "../core/utils";
+import { dist2 } from "../core/utils";
+import { T } from "../game/constants";
 import type { Building, Enemy, Colonist } from "../game/types";
 
 // Helper function to check if a position would collide with buildings (for enemies)
@@ -17,6 +18,149 @@ function wouldCollideWithBuildings(game: any, x: number, y: number, radius: numb
       return true;
     }
   }
+  return false;
+}
+
+const GOAL_REPATH_EPS = 24;
+const PATH_NODE_EPS = 0.75;
+const PATH_SPEED_BONUS = 25;
+const STUCK_RESET_TIME = 0.75;
+
+function ensureEnemyPath(game: any, e: Enemy, target: { x: number; y: number }, dt: number): boolean {
+  const enemyAny = e as any;
+  const distToGoal = Math.hypot(target.x - e.x, target.y - e.y);
+  if (distToGoal <= e.r + 4) {
+    enemyAny.path = undefined;
+    enemyAny.pathIndex = undefined;
+    return false;
+  }
+
+  enemyAny.repath = Math.max(0, (enemyAny.repath ?? 0) - dt);
+  const goal = enemyAny.pathGoal;
+  const goalChanged = !goal || Math.hypot(goal.x - target.x, goal.y - target.y) > GOAL_REPATH_EPS;
+  const pathInvalid = !enemyAny.path || enemyAny.pathIndex == null || enemyAny.pathIndex >= enemyAny.path.length;
+
+  if (goalChanged || pathInvalid || (enemyAny.repath ?? 0) <= 0) {
+    if (typeof game.computePath !== "function") return false;
+    const newPath = game.computePath(e.x, e.y, target.x, target.y);
+    if (newPath && newPath.length) {
+      while (newPath.length && Math.hypot(newPath[0].x - e.x, newPath[0].y - e.y) < 8) {
+        newPath.shift();
+      }
+      if (!newPath.length) {
+        enemyAny.path = undefined;
+        enemyAny.pathIndex = undefined;
+        return false;
+      }
+      enemyAny.path = newPath;
+      enemyAny.pathIndex = 0;
+      enemyAny.pathGoal = { x: target.x, y: target.y };
+      enemyAny.repath = 0.9 + Math.random() * 0.6;
+      return true;
+    }
+    enemyAny.path = undefined;
+    enemyAny.pathIndex = undefined;
+    enemyAny.repath = 0.3 + Math.random() * 0.3;
+    return false;
+  }
+
+  return true;
+}
+
+function moveEnemyAlongPath(game: any, e: Enemy, dt: number): number {
+  const enemyAny = e as any;
+  const path: { x: number; y: number }[] | undefined = enemyAny.path;
+  const pathIndex: number = enemyAny.pathIndex ?? 0;
+
+  if (!path || pathIndex >= path.length) {
+    enemyAny.path = undefined;
+    enemyAny.pathIndex = undefined;
+    return 0;
+  }
+
+  const node = path[pathIndex];
+  if (!node) {
+    enemyAny.path = undefined;
+    enemyAny.pathIndex = undefined;
+    return 0;
+  }
+
+  const prevX = e.x;
+  const prevY = e.y;
+  const dx = node.x - e.x;
+  const dy = node.y - e.y;
+  const dist = Math.hypot(dx, dy);
+
+  let speed = e.speed;
+  if (game.grid) {
+    const gx = Math.floor(e.x / T);
+    const gy = Math.floor(e.y / T);
+    if (gx >= 0 && gy >= 0 && gx < game.grid.cols && gy < game.grid.rows) {
+      const idx = gy * game.grid.cols + gx;
+      if (game.grid.cost[idx] <= 0.7) {
+        speed += PATH_SPEED_BONUS;
+      }
+    }
+  }
+
+  const step = speed * dt;
+
+  const tolerance = Math.max(step + 0.1, PATH_NODE_EPS);
+  if (dist <= tolerance) {
+    e.x = node.x;
+    e.y = node.y;
+    enemyAny.pathIndex = pathIndex + 1;
+    if (enemyAny.pathIndex >= path.length) {
+      enemyAny.path = undefined;
+      enemyAny.pathIndex = undefined;
+    }
+  } else if (dist > 0) {
+    const inv = 1 / dist;
+    e.x += dx * inv * step;
+    e.y += dy * inv * step;
+  }
+
+  return Math.hypot(e.x - prevX, e.y - prevY);
+}
+
+function moveDirectlyWithCollision(game: any, e: Enemy, target: { x: number; y: number }, dt: number): boolean {
+  const dx = target.x - e.x;
+  const dy = target.y - e.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 1e-3) return false;
+
+  const step = e.speed * dt;
+  const nx = dx / distance;
+  const ny = dy / distance;
+
+  const newX = e.x + nx * step;
+  const newY = e.y + ny * step;
+
+  if (!wouldCollideWithBuildings(game, newX, newY, e.r)) {
+    e.x = newX;
+    e.y = newY;
+    return true;
+  }
+
+  const perpX = -ny;
+  const perpY = nx;
+
+  const slideRightX = e.x + perpX * step * 0.5;
+  const slideRightY = e.y + perpY * step * 0.5;
+  if (!wouldCollideWithBuildings(game, slideRightX, slideRightY, e.r)) {
+    e.x = slideRightX;
+    e.y = slideRightY;
+    return true;
+  }
+
+  const slideLeftX = e.x - perpX * step * 0.5;
+  const slideLeftY = e.y - perpY * step * 0.5;
+  if (!wouldCollideWithBuildings(game, slideLeftX, slideLeftY, e.r)) {
+    e.x = slideLeftX;
+    e.y = slideLeftY;
+    return true;
+  }
+
   return false;
 }
 
@@ -39,37 +183,46 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
   const HQ = (game.buildings as Building[]).find(b => b.kind === 'hq')!;
   let tgt: any = HQ; let bestD = dist2(e as any, game.centerOf(HQ) as any);
   for (const c of game.colonists as Colonist[]) { const d = dist2(e as any, c as any); if (d < bestD) { bestD = d; tgt = c; } }
-  const pt = (tgt as Building).w ? game.centerOf(tgt as Building) : tgt;
-  const dir = norm(sub(pt as any, e as any) as any);
-  
-  // Apply collision-aware movement
-  const newX = e.x + dir.x * e.speed * dt;
-  const newY = e.y + dir.y * e.speed * dt;
-  
-  if (!wouldCollideWithBuildings(game, newX, newY, e.r)) {
-    e.x = newX;
-    e.y = newY;
-  } else {
-    // Try to slide around obstacles
-    const perpDirX = -dir.y;
-    const perpDirY = dir.x;
-    
-    // Try sliding right
-    const slideRightX = e.x + perpDirX * e.speed * dt * 0.5;
-    const slideRightY = e.y + perpDirY * e.speed * dt * 0.5;
-    if (!wouldCollideWithBuildings(game, slideRightX, slideRightY, e.r)) {
-      e.x = slideRightX;
-      e.y = slideRightY;
-    } else {
-      // Try sliding left
-      const slideLeftX = e.x - perpDirX * e.speed * dt * 0.5;
-      const slideLeftY = e.y - perpDirY * e.speed * dt * 0.5;
-      if (!wouldCollideWithBuildings(game, slideLeftX, slideLeftY, e.r)) {
-        e.x = slideLeftX;
-        e.y = slideLeftY;
-      }
-      // If both slides fail, enemy stays in place (stuck against wall)
+  const targetPos = (tgt as Building).w
+    ? game.centerOf(tgt as Building)
+    : { x: (tgt as Colonist).x, y: (tgt as Colonist).y };
+  e.target = tgt;
+
+  let distanceToTarget = Math.hypot(targetPos.x - e.x, targetPos.y - e.y);
+  let attemptedPath = false;
+  let pathDisplacement = 0;
+
+  if (distanceToTarget > e.r + 4) {
+    attemptedPath = ensureEnemyPath(game, e, targetPos, dt);
+    if (attemptedPath) {
+      pathDisplacement = moveEnemyAlongPath(game, e, dt);
+      distanceToTarget = Math.hypot(targetPos.x - e.x, targetPos.y - e.y);
     }
+  } else {
+    (e as any).path = undefined;
+    (e as any).pathIndex = undefined;
+  }
+
+  let directMoved = false;
+  if (distanceToTarget > e.r + 4 && (pathDisplacement < 0.5 || !attemptedPath)) {
+    directMoved = moveDirectlyWithCollision(game, e, targetPos, dt);
+    if (!directMoved && attemptedPath && (e as any).path) {
+      (e as any).stuckTimer = ((e as any).stuckTimer || 0) + dt;
+      if ((e as any).stuckTimer > STUCK_RESET_TIME) {
+        (e as any).path = undefined;
+        (e as any).pathIndex = undefined;
+        (e as any).repath = 0;
+        (e as any).stuckTimer = 0;
+      }
+    } else if (attemptedPath) {
+      (e as any).stuckTimer = 0;
+    }
+  } else if (attemptedPath) {
+    (e as any).stuckTimer = 0;
+  }
+
+  if (!attemptedPath) {
+    (e as any).stuckTimer = 0;
   }
   
   if ((tgt as Building).w) {

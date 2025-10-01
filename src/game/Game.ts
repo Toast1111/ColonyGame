@@ -1755,6 +1755,34 @@ export class Game {
         }
       }
       ctx.restore();
+
+      // draw enemy paths
+      ctx.save();
+      ctx.strokeStyle = '#f87171';
+      ctx.lineWidth = 2;
+      for (const enemy of this.enemies) {
+        const path = (enemy as any).path as import('../core/utils').Vec2[] | undefined;
+        if (!path || !path.length) continue;
+        const startIndex = ((enemy as any).pathIndex ?? 0) as number;
+        ctx.beginPath();
+        ctx.moveTo(enemy.x, enemy.y);
+        for (let i = startIndex; i < path.length; i++) {
+          const p = path[i];
+          ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+
+        if (startIndex < path.length) {
+          const nextNode = path[startIndex];
+          ctx.save();
+          ctx.fillStyle = '#ef4444';
+          ctx.beginPath();
+          ctx.arc(nextNode.x, nextNode.y, 6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+      ctx.restore();
       
       // draw colonist states and targets
       ctx.save();
