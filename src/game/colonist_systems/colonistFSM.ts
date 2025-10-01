@@ -9,7 +9,7 @@ import { medicalSystem } from "../health/medicalSystem";
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
   for (const b of game.buildings) {
     // Skip HQ, paths, houses, and farms as they don't block movement
-    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
+  if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
     
     // Check circle-rectangle collision
     const closestX = Math.max(b.x, Math.min(x, b.x + b.w));
@@ -483,6 +483,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   switch (c.state) {
     case 'resting': {
       c.hideTimer = Math.max(0, (c.hideTimer || 0) - dt);
+      if (c.inside && c.inside.kind === 'bed') {
+        const bed = c.inside;
+        const centerX = bed.x + bed.w / 2;
+        const centerY = bed.y + bed.h / 2;
+        c.x = centerX;
+        c.y = centerY;
+        if ((c as any).sleepFacing != null) {
+          c.direction = (c as any).sleepFacing;
+        }
+      }
       // Rest recovers fatigue quickly and heals slowly
       c.hp = Math.min(100, c.hp + 1.2 * dt);
       
@@ -787,11 +797,20 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         (c as any).sleepTargetLockUntil = now + 3.0; // lock for 3s
         return best;
       };
-      const protectedHouses = (game.buildings as Building[]).filter(b => b.kind === 'house' && b.done && game.isProtectedByTurret(b) && game.buildingHasSpace(b));
+      const protectedHouses = (game.buildings as Building[]).filter(b => 
+        (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent') && 
+        b.done && 
+        game.isProtectedByTurret(b) && 
+        game.buildingHasSpace(b)
+      );
       
       // If no protected houses available, try any house or HQ, or sleep in place near HQ
       if (protectedHouses.length === 0) {
-        const anyHouse = (game.buildings as Building[]).filter(b => (b.kind === 'house' || b.kind === 'hq') && b.done && game.buildingHasSpace(b));
+        const anyHouse = (game.buildings as Building[]).filter(b => 
+          (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq') && 
+          b.done && 
+          game.buildingHasSpace(b)
+        );
         
         if (anyHouse.length > 0) {
           // Try any available house/HQ (with brief target lock to prevent flipping)
@@ -872,7 +891,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       (c as any).sleepTarget = undefined;
       (c as any).sleepTargetLockUntil = 0;
           const next = (game.buildings as Building[])
-            .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'))
+            .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq'))
             .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
           if (next) { 
             const nc = game.centerOf(next); 
@@ -897,7 +916,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'goToSleep': {
       // Seek houses or infirmaries for daytime rest when very tired
       const restBuildings = (game.buildings as Building[]).filter(b => 
-        (b.kind === 'house' || b.kind === 'infirmary') && b.done && game.buildingHasSpace(b)
+        (b.kind === 'house' || b.kind === 'bed' || b.kind === 'infirmary' || b.kind === 'tent' || b.kind === 'hq') && 
+        b.done && 
+        game.buildingHasSpace(b)
       );
       
       // Simple threshold: only give up if fatigue drops to exit threshold (20) or below

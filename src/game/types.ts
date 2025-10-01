@@ -6,7 +6,7 @@ export type Resources = { wood: number; stone: number; food: number };
 
 export type Circle = { x: number; y: number; r: number; hp: number; type: "tree" | "rock" };
 
-export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path";
+export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed";
 
 export type BuildingDef = {
   name: string;
@@ -17,7 +17,7 @@ export type BuildingDef = {
   size: { w: number; h: number };
   build: number;
   color: string;
-  category?: 'Housing' | 'Production' | 'Defense' | 'Utility';
+  category?: 'Housing' | 'Production' | 'Defense' | 'Utility' | 'Furniture';
   // optional mechanics
   popCap?: number;
   growTime?: number;
@@ -177,6 +177,8 @@ export type Colonist = {
   // Medical assignment system
   assignedMedicalPatientId?: string; // If this colonist (doctor) is prioritizing a specific patient
   medicalPriorityUntil?: number;     // Game time until forced priority expires (safety auto-clear)
+  // Furniture interactions
+  restingOn?: Building | null;       // Furniture (like a bed) the colonist is currently using
 };
 
 export type Enemy = { x: number; y: number; r: number; hp: number; speed: number; dmg: number; target: any; color: string };
@@ -206,7 +208,7 @@ export type Message = { text: string; t: number; kind: "info" | "warn" | "good" 
 
 export type Colors = {
   sky: string; ground: string; grass: string; water: string; wood: string; stone: string; food: string; metal: string;
-  colonist: string; enemy: string; tree: string; rock: string; ghost: string; wall: string; bld: string; turret: string; farm: string; house: string; stock: string; tent: string;
+  colonist: string; enemy: string; tree: string; rock: string; ghost: string; wall: string; bld: string; turret: string; farm: string; house: string; stock: string; tent: string; bed: string;
 };
 
 export type World = { w: number; h: number };

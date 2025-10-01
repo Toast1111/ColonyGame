@@ -31,7 +31,7 @@ function lineIntersectsRect(x1: number, y1: number, x2: number, y2: number, r: {
 function hasLineOfFire(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): boolean {
   for (const b of game.buildings) {
     // Allow shooting through HQ, paths, houses, and farms (soft cover only); block by walls and finished solids
-    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || !b.done) continue;
+  if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
     // If the shooter is inside this building (e.g., a turret), ignore this rectangle for LoS
     const fromInside = from.x >= b.x && from.x <= b.x + b.w && from.y >= b.y && from.y <= b.y + b.h;
     if (fromInside) continue;

@@ -123,6 +123,18 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     color: '#475569',
     speedBonus: 1.5
   },
+  bed: {
+    category: 'Furniture',
+    name: 'Bed',
+    description: 'Gives a colonist a comfortable spot to sleep. Restores fatigue faster than the ground.',
+    key: 'B',
+    cost: { wood: 12 },
+    hp: 80,
+    size: { w: 1, h: 2 },
+    build: 40,
+    color: COLORS.bed,
+    popCap: 1
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {

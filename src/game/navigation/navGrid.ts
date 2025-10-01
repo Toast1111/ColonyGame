@@ -7,7 +7,7 @@ export function rebuildNavGrid(game: Game) {
   clearGrid(game.grid);
   // Buildings
   for (const b of game.buildings) {
-    if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm') {
+    if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm' && b.kind !== 'bed') {
       markRectSolid(game.grid, b.x, b.y, b.w, b.h);
     }
     if (b.kind === 'path') {

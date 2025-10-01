@@ -52,9 +52,11 @@ export class Game {
   }
 
   getPopulationCap(): number {
-    return (this.buildings.find(b => b.kind === 'hq') ? 3 : 0) + 
-           this.buildings.filter(b => b.kind === 'house' && b.done)
-                        .reduce((a, b) => a + ((b as any).popCap || 0), 0);
+    const base = this.buildings.find(b => b.kind === 'hq') ? 3 : 0;
+    const lodging = this.buildings
+      .filter(b => b.done && typeof b.popCap === 'number')
+      .reduce((sum, b) => sum + (b.popCap || 0), 0);
+    return base + lodging;
   }
 
   addResource(type: keyof Resources, amount: number): number {
@@ -1007,7 +1009,9 @@ export class Game {
 
   findColonistAt(x: number, y: number): Colonist | null {
     for (let i = this.colonists.length - 1; i >= 0; i--) {
-      const c = this.colonists[i]; if (!c.alive || c.inside) continue;
+      const c = this.colonists[i];
+      const hiddenInside = c.inside && c.inside.kind !== 'bed';
+      if (!c.alive || hiddenInside) continue;
       const d2 = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
       if (d2 <= (c.r + 2) * (c.r + 2)) return c;
     }
@@ -1144,6 +1148,7 @@ export class Game {
   buildingCapacity(b: Building): number {
     if (b.kind === 'hq') return 8; // generous lobby
     if (b.kind === 'house') return 3; // requested: 3 slots per house
+    if (typeof b.popCap === 'number') return b.popCap;
     return 1;
   }
   buildingHasSpace(b: Building): boolean {
@@ -1155,13 +1160,28 @@ export class Game {
     if (!b.done) return false;
     if (!this.buildingHasSpace(b)) return false;
     this.insideCounts.set(b, (this.insideCounts.get(b) || 0) + 1);
-    c.inside = b; c.hideTimer = 0; return true;
+    c.inside = b; c.hideTimer = 0;
+    if (b.kind === 'bed') {
+      const center = this.centerOf(b);
+      c.x = center.x;
+      c.y = center.y;
+      c.restingOn = b;
+      // Align sprite to a horizontal pose while sleeping
+      (c as any).sleepFacing = Math.PI / 2;
+    } else {
+      c.restingOn = null;
+    }
+    return true;
   }
   leaveBuilding(c: Colonist) {
     const b = c.inside;
     if (b) {
       const cur = (this.insideCounts.get(b) || 1) - 1;
       if (cur <= 0) this.insideCounts.delete(b); else this.insideCounts.set(b, cur);
+    }
+    if (b && b.kind === 'bed') {
+      c.restingOn = null;
+      (c as any).sleepFacing = undefined;
     }
     c.inside = null; c.hideTimer = 0;
   }
@@ -1465,8 +1485,8 @@ export class Game {
         } 
       } 
     }
-    const tent = this.buildings.find(b => b.kind === 'tent' && b.done);
-    const cap = (this.buildings.find(b => b.kind === 'hq') ? 3 : 0) + this.buildings.filter(b => b.kind === 'house' && b.done).reduce((a, b) => a + ((b as any).popCap || 0), 0);
+  const tent = this.buildings.find(b => b.kind === 'tent' && b.done);
+  const cap = this.getPopulationCap();
     if (tent && this.colonists.length < cap && this.RES.food >= 15) { this.RES.food -= 15; this.spawnColonist({ x: HQ_POS.x + rand(-20, 20), y: HQ_POS.y + rand(-20, 20) }); this.msg('A new colonist joined! (-15 food)', 'info'); }
     if (this.day > 20) { this.win(); }
   }
@@ -1623,7 +1643,12 @@ export class Game {
     // Draw person icons under buildings that have hidden colonists inside
     {
       const counts = new Map<Building, number>();
-      for (const c of this.colonists) { if (c.inside && c.alive) counts.set(c.inside, (counts.get(c.inside) || 0) + 1); }
+      for (const c of this.colonists) {
+        if (!c.alive) continue;
+        if (c.inside && c.inside.kind !== 'bed') {
+          counts.set(c.inside, (counts.get(c.inside) || 0) + 1);
+        }
+      }
       ctx.save();
       for (const [b, n] of counts) {
         if (!n) continue; const maxIcons = 8;
@@ -1633,7 +1658,7 @@ export class Game {
         const y = b.y + b.h + 8;
         // health-tinted glyphs: low hp -> red, mid -> yellow, high -> green
         // compute average health of those inside (approximate by sampling colonists list)
-        const insideCols = this.colonists.filter(c => c.inside === b);
+        const insideCols = this.colonists.filter(c => c.inside === b && c.inside.kind !== 'bed');
         for (let i = 0; i < toDraw; i++) {
           const sample = insideCols[i % insideCols.length];
           const hp = sample ? sample.hp : 100;
@@ -1646,7 +1671,13 @@ export class Game {
       }
       ctx.restore();
     }
-  for (const c of this.colonists) { if (!c.inside && c.alive) drawColonistAvatar(ctx, c.x, c.y, c, c.r, this.selColonist === c); }
+  for (const c of this.colonists) {
+    if (!c.alive) continue;
+    const hiddenInside = c.inside && c.inside.kind !== 'bed';
+    if (!hiddenInside) {
+      drawColonistAvatar(ctx, c.x, c.y, c, c.r, this.selColonist === c);
+    }
+  }
 
   // Optional: combat debug visuals
   if ((this.debug as any).combat) {
@@ -1732,7 +1763,9 @@ export class Game {
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 2;
       for (const c of this.colonists) {
-        if (c.inside || !c.alive) continue;
+        if (!c.alive) continue;
+        const hiddenInside = c.inside && c.inside.kind !== 'bed';
+        if (hiddenInside) continue;
         const stateText = `${c.task || c.state || 'idle'}`;
         const x = c.x - 20;
         const y = c.y - c.r - 8;
@@ -1759,7 +1792,9 @@ export class Game {
       // Draw danger memory visualization
       ctx.save();
       for (const c of this.colonists) {
-        if (c.inside || !c.alive) continue;
+        if (!c.alive) continue;
+        const hiddenInside = c.inside && c.inside.kind !== 'bed';
+        if (hiddenInside) continue;
         const dangerMemory = (c as any).dangerMemory;
         if (!dangerMemory || !Array.isArray(dangerMemory)) continue;
         
@@ -1819,7 +1854,9 @@ export class Game {
       ctx.lineWidth = 1;
       
       for (const c of this.colonists) {
-        if (c.inside || !c.alive) continue;
+        if (!c.alive) continue;
+        const hiddenInside = c.inside && c.inside.kind !== 'bed';
+        if (hiddenInside) continue;
         
         // Enhanced colonist state display
         const x = c.x - 35;
@@ -1938,7 +1975,7 @@ export class Game {
     }
     ctx.restore();
   const cap = this.getPopulationCap();
-  const hiding = this.colonists.filter(c => !!c.inside).length;
+  const hiding = this.colonists.filter(c => c.inside && c.inside.kind !== 'bed').length;
   const storageUsed = this.RES.wood + this.RES.stone + this.RES.food;
   const storageMax = this.getStorageCapacity();
   const hotbar = this.hotbar.map(k => ({ key: String(k), name: BUILD_TYPES[k].name, cost: this.costText(BUILD_TYPES[k].cost || {}), selected: this.selectedBuild === k }));
@@ -2256,7 +2293,7 @@ export class Game {
         const rescuer = this.findBestDoctor(colonist) || this.colonists.find(c=>c!==colonist && c.alive && c.state!=='downed');
         if (rescuer) {
           // Placeholder: just move colonist to nearest bed instantly for now
-          const bed = this.buildings.find(b=>b.kind==='house' || b.kind==='tent');
+          const bed = this.buildings.find(b => b.kind === 'bed' && b.done) || this.buildings.find(b=>b.kind==='house' || b.kind==='tent');
           if (bed) {
             colonist.x = bed.x + bed.w/2;
             colonist.y = bed.y + bed.h/2;
@@ -2314,8 +2351,10 @@ export class Game {
   }
 
   forceColonistToRest(colonist: Colonist) {
-    // Find nearest house or tent
+    // Prefer dedicated beds, then fallback to other sleeping options
     const restBuilding = this.buildings.find(b => 
+      b.kind === 'bed' && b.done && this.buildingHasSpace(b)
+    ) || this.buildings.find(b => 
       (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq') && 
       b.done && 
       this.buildingHasSpace(b)
@@ -2363,14 +2402,16 @@ export class Game {
 
   sendColonistToBed(colonist: Colonist) {
     const bed = this.buildings.find(b => 
-      (b.kind === 'house' || b.kind === 'tent') && 
+      b.kind === 'bed' && b.done && this.buildingHasSpace(b)
+    ) || this.buildings.find(b => 
+      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq') && 
       b.done && 
       this.buildingHasSpace(b)
     );
-    
+
     if (bed) {
       this.setTask(colonist, 'rest', bed);
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to bed`, 'info');
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to ${bed.kind === 'bed' ? 'bed' : 'shelter'}`, 'info');
     } else {
       this.msg('No available beds', 'warn');
     }

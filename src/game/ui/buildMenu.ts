@@ -118,7 +118,7 @@ export function drawBuildMenu(game: any) {
   // Instructions
   ctx.fillStyle = '#9fb3c8'; 
   ctx.font = game.getScaledFont(isTouch ? 16 : 14);
-  const instructionText = 'Click a building to select • Hover for details • Press B to close';
+  const instructionText = 'Click an item to select • Hover for details • Press B to close';
   const textWidth = ctx.measureText(instructionText).width;
   ctx.fillText(instructionText, (cw - textWidth) / 2, Y + H + game.scale(isTouch ? 30 : 24));
 

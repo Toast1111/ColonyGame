@@ -378,9 +378,10 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     else if (b.kind === 'wall') letter = 'W';
     else if (b.kind === 'stock') letter = 'S';
     else if (b.kind === 'tent') letter = 'R';
-    else if ((b as any).kind === 'warehouse') letter = 'WH';
-    else if ((b as any).kind === 'well') letter = 'WL';
-    else if ((b as any).kind === 'infirmary') letter = 'I';
+  else if ((b as any).kind === 'warehouse') letter = 'WH';
+  else if ((b as any).kind === 'well') letter = 'WL';
+  else if ((b as any).kind === 'infirmary') letter = 'I';
+  else if ((b as any).kind === 'bed') letter = '🛏';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(letter, cx, cy);
   }
 

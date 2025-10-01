@@ -220,7 +220,7 @@ function rebuildSection(grid: Grid, sectionX: number, sectionY: number, building
   for (const b of buildings) {
     if (intersectsRect(b.x, b.y, b.w, b.h, startWorldX, startWorldY, endWorldX - startWorldX, endWorldY - startWorldY)) {
       // Block buildings except HQ, paths, houses, and farms
-      if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm') {
+  if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm' && b.kind !== 'bed') {
         markRectSolidNoUpdate(grid, b.x, b.y, b.w, b.h);
       }
       // Path tiles reduce traversal cost using proper road cost system
