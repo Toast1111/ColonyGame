@@ -329,6 +329,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       return; // ignore low-priority flip
     }
     if (c.state !== newState) {
+      const leavingSleepPipeline = (c.state === 'sleep' || c.state === 'goToSleep') && newState !== 'sleep' && newState !== 'goToSleep';
+      if (leavingSleepPipeline) {
+        game.releaseSleepReservation && game.releaseSleepReservation(c);
+        (c as any).sleepTarget = undefined;
+        (c as any).sleepTargetLockUntil = 0;
+      }
       // Clear work task/target when changing to non-work states to prevent navigation conflicts
       if (newState === 'sleep' || newState === 'flee' || newState === 'heal' || newState === 'goToSleep' || 
           newState === 'eat' || newState === 'resting' || newState === 'seekMedical' || 
@@ -730,10 +736,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const tgtTurret = danger ? game.findSafeTurret(c, danger) : null;
       if (tgtTurret) {
         const range = (tgtTurret as any).range || 120; const tc = game.centerOf(tgtTurret);
-        const house = (game.buildings as Building[]).find(b => b.kind === 'house' && b.done && game.buildingHasSpace(b) && dist2(game.centerOf(b) as any, tc as any) < range * range);
+        const house = (game.buildings as Building[]).find(b => b.kind === 'house' && b.done && game.buildingHasSpace(b, c) && dist2(game.centerOf(b) as any, tc as any) < range * range);
         if (house) { buildingDest = house; dest = game.centerOf(house); }
       }
-      if (!dest) { const hq = (game.buildings as Building[]).find((b: Building) => b.kind === 'hq' && game.buildingHasSpace(b)); if (hq) { buildingDest = hq; dest = game.centerOf(hq); } }
+      if (!dest) { const hq = (game.buildings as Building[]).find((b: Building) => b.kind === 'hq' && game.buildingHasSpace(b, c)); if (hq) { buildingDest = hq; dest = game.centerOf(hq); } }
       if (!dest && tgtTurret) dest = game.centerOf(tgtTurret);
   if (dest) {
         // Use direct movement instead of pathfinding
@@ -747,7 +753,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     c.hideTimer = 3; changeState('resting', 'hid from danger');
           } else {
             // Retarget: find closest house with space, else HQ
-            const choices = (game.buildings as Building[]).filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'hq'));
+            const choices = (game.buildings as Building[]).filter((b: Building) => b.done && game.buildingHasSpace(b, c) && (b.kind === 'house' || b.kind === 'hq'));
             if (choices.length) {
               const next = choices.sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
               const nc = game.centerOf(next);
@@ -776,32 +782,64 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const selectSleepTarget = (options: Building[]): Building | null => {
         if (!options.length) return null;
         const now = c.t || 0;
-        const remembered: Building | undefined = (c as any).sleepTarget;
+
+        // If we already have a reservation that's still valid, stick with it
+        if (c.reservedSleepFor && options.includes(c.reservedSleepFor)) {
+          (c as any).sleepTarget = c.reservedSleepFor;
+          (c as any).sleepTargetLockUntil = now + 5.0;
+          return c.reservedSleepFor;
+        }
+
+        let remembered: Building | undefined = (c as any).sleepTarget;
         const lockUntil: number = (c as any).sleepTargetLockUntil || 0;
-        if (remembered && options.includes(remembered) && now < lockUntil) {
-          return remembered;
+
+        if (remembered && !options.includes(remembered)) {
+          if (c.reservedSleepFor === remembered) {
+            game.releaseSleepReservation(c);
+          }
+          remembered = undefined;
+          (c as any).sleepTarget = undefined;
+          (c as any).sleepTargetLockUntil = 0;
         }
-        // Compute best by available space and distance
-        let best = options[0];
-        let bestScore = -Infinity;
-        for (const house of options) {
-          const distance = dist2(c as any, game.centerOf(house) as any);
-          const capacity = game.buildingCapacity(house);
-          const current = game.insideCounts.get(house) || 0;
-          const spaceAvailable = capacity - current;
-          const score = spaceAvailable * 100 - Math.sqrt(distance);
-          if (score > bestScore) { bestScore = score; best = house; }
+
+        if (remembered && now < lockUntil) {
+          if (game.reserveSleepSpot(c, remembered)) {
+            return remembered;
+          }
+          if (c.reservedSleepFor === remembered) {
+            game.releaseSleepReservation(c);
+          }
+          remembered = undefined;
+          (c as any).sleepTarget = undefined;
+          (c as any).sleepTargetLockUntil = 0;
         }
-        // Remember choice for a short time to reduce thrashing
-        (c as any).sleepTarget = best;
-        (c as any).sleepTargetLockUntil = now + 3.0; // lock for 3s
-        return best;
+
+        const scored = options
+          .map(house => {
+            const distance = Math.sqrt(dist2(c as any, game.centerOf(house) as any));
+            const capacity = game.buildingCapacity(house);
+            const current = game.insideCounts.get(house) || 0;
+            const spaceAvailable = Math.max(0, capacity - current);
+            const score = spaceAvailable * 100 - distance;
+            return { house, score };
+          })
+          .sort((a, b) => b.score - a.score);
+
+        for (const { house } of scored) {
+          if (game.reserveSleepSpot(c, house)) {
+            (c as any).sleepTarget = house;
+            (c as any).sleepTargetLockUntil = now + 5.0;
+            return house;
+          }
+        }
+
+        return null;
       };
       const protectedHouses = (game.buildings as Building[]).filter(b => 
         (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent') && 
         b.done && 
         game.isProtectedByTurret(b) && 
-        game.buildingHasSpace(b)
+        game.buildingHasSpace(b, c)
       );
       
       // If no protected houses available, try any house or HQ, or sleep in place near HQ
@@ -809,7 +847,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const anyHouse = (game.buildings as Building[]).filter(b => 
           (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq') && 
           b.done && 
-          game.buildingHasSpace(b)
+          game.buildingHasSpace(b, c)
         );
         
         if (anyHouse.length > 0) {
@@ -830,6 +868,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               // Entry failed (maybe filled meanwhile) - allow immediate re-pick
               (c as any).sleepTarget = undefined;
               (c as any).sleepTargetLockUntil = 0;
+              game.releaseSleepReservation(c);
               // If can't enter, sleep nearby
               changeState('resting', 'sleeping outside shelter');
             }
@@ -890,13 +929,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Allow immediate re-pick if entry failed
       (c as any).sleepTarget = undefined;
       (c as any).sleepTargetLockUntil = 0;
-          const next = (game.buildings as Building[])
-            .filter((b: Building) => b.done && game.buildingHasSpace(b) && (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq'))
-            .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
+          game.releaseSleepReservation(c);
+          const alternatives = (game.buildings as Building[])
+            .filter((b: Building) => b.done && game.buildingHasSpace(b, c) && (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq'));
+          const next = selectSleepTarget(alternatives);
           if (next) { 
-            const nc = game.centerOf(next); 
             best = next; 
-            hc = nc; 
+            hc = game.centerOf(next); 
             /* retarget without clearing path */ 
           } else { 
             changeState('seekTask', 'no bed available'); 
@@ -918,7 +957,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const restBuildings = (game.buildings as Building[]).filter(b => 
         (b.kind === 'house' || b.kind === 'bed' || b.kind === 'infirmary' || b.kind === 'tent' || b.kind === 'hq') && 
         b.done && 
-        game.buildingHasSpace(b)
+        game.buildingHasSpace(b, c)
       );
       
       // Simple threshold: only give up if fatigue drops to exit threshold (20) or below
@@ -926,6 +965,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const shouldGiveUp = (c.fatigue || 0) <= fatigueExitThreshold && c.stateSince >= minTryTime;
       
       if (restBuildings.length === 0) {
+        game.releaseSleepReservation(c);
         // No rest buildings available, rest in place if very tired
         if (c.stateSince > 3.0) {
           if (shouldGiveUp) {
@@ -938,14 +978,33 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break;
       }
       
-      // Find closest rest building
-      let best = restBuildings[0]; 
-      let bestD = dist2(c as any, game.centerOf(best) as any);
-      for (let i = 1; i < restBuildings.length; i++) { 
-        const d = dist2(c as any, game.centerOf(restBuildings[i]) as any); 
-        if (d < bestD) { bestD = d; best = restBuildings[i]; } 
+      const chooseRestBuilding = (): Building | null => {
+        if (c.reservedSleepFor && restBuildings.includes(c.reservedSleepFor)) {
+          (c as any).sleepTarget = c.reservedSleepFor;
+          (c as any).sleepTargetLockUntil = (c.t || 0) + 5.0;
+          return c.reservedSleepFor;
+        }
+        const sorted = restBuildings
+          .map(b => ({ b, d: dist2(c as any, game.centerOf(b) as any) }))
+          .sort((a, b) => a.d - b.d);
+        for (const { b } of sorted) {
+          if (game.reserveSleepSpot(c, b)) {
+            (c as any).sleepTarget = b;
+            (c as any).sleepTargetLockUntil = (c.t || 0) + 5.0;
+            return b;
+          }
+        }
+        return null;
+      };
+
+      const best = chooseRestBuilding();
+      if (!best) {
+        if (shouldGiveUp) {
+          changeState('seekTask', 'no available rest buildings, fatigue recovered');
+        }
+        break;
       }
-      
+
       const bc = game.centerOf(best);
       const distance = Math.hypot(bc.x - c.x, bc.y - c.y);
       const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
@@ -955,19 +1014,14 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           c.hideTimer = 0; 
           changeState('resting', 'entered rest building');
         } else {
-          // Try another building with space
-          const next = restBuildings
-            .filter((b: Building) => b !== best && game.buildingHasSpace(b))
-            .sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
-          if (next) { 
-            const nc = game.centerOf(next); 
-            game.clearPath(c); 
-            // Continue trying to find rest
-          } else { 
-            // No buildings available - check if we should give up
+          game.releaseSleepReservation(c);
+          const next = chooseRestBuilding();
+          if (!next) {
             if (shouldGiveUp) {
               changeState('seekTask', 'no available rest buildings, fatigue recovered');
             }
+          } else if (next !== best) {
+            game.clearPath(c);
           }
         }
       } else {

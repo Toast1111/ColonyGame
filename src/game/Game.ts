@@ -1067,6 +1067,7 @@ export class Game {
   this.colonists.length = this.enemies.length = this.trees.length = this.rocks.length = this.buildings.length = this.bullets.length = this.messages.length = 0;
   this.buildReservations.clear();
   this.insideCounts.clear();
+  this.sleepReservations.clear();
   this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - (this.canvas.width / this.DPR) / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - (this.canvas.height / this.DPR) / (2 * this.camera.zoom);
     this.buildHQ();
     this.scatter();
@@ -1145,21 +1146,60 @@ export class Game {
   buildReservations = new Map<Building, number>();
   // Track how many colonists are inside a building (for capacity)
   insideCounts = new Map<Building, number>();
+  // Hold pending sleep assignments so colonists don't steal beds mid-walk
+  sleepReservations = new Map<Building, Set<Colonist>>();
   buildingCapacity(b: Building): number {
     if (b.kind === 'hq') return 8; // generous lobby
     if (b.kind === 'house') return 3; // requested: 3 slots per house
     if (typeof b.popCap === 'number') return b.popCap;
     return 1;
   }
-  buildingHasSpace(b: Building): boolean {
+  private getReservedSleepCount(b: Building, ignoreColonist?: Colonist): number {
+    const reservations = this.sleepReservations.get(b);
+    if (!reservations || reservations.size === 0) return 0;
+    if (ignoreColonist && reservations.has(ignoreColonist)) {
+      return Math.max(0, reservations.size - 1);
+    }
+    return reservations.size;
+  }
+  buildingHasSpace(b: Building, ignoreColonist?: Colonist): boolean {
     const cap = this.buildingCapacity(b);
     const cur = this.insideCounts.get(b) || 0;
-    return cur < cap;
+    const reserved = this.getReservedSleepCount(b, ignoreColonist);
+    return cur + reserved < cap;
+  }
+  reserveSleepSpot(c: Colonist, b: Building): boolean {
+    if (!b.done) return false;
+    if (c.reservedSleepFor === b) return true;
+    if (c.reservedSleepFor && c.reservedSleepFor !== b) {
+      this.releaseSleepReservation(c);
+    }
+    const cap = this.buildingCapacity(b);
+    const inside = this.insideCounts.get(b) || 0;
+    const reservations = this.sleepReservations.get(b) || new Set<Colonist>();
+    if (inside + reservations.size >= cap) {
+      return false;
+    }
+    reservations.add(c);
+    this.sleepReservations.set(b, reservations);
+    c.reservedSleepFor = b;
+    return true;
+  }
+  releaseSleepReservation(c: Colonist) {
+    const b = c.reservedSleepFor;
+    if (!b) return;
+    const reservations = this.sleepReservations.get(b);
+    if (reservations) {
+      reservations.delete(c);
+      if (reservations.size === 0) this.sleepReservations.delete(b);
+    }
+    c.reservedSleepFor = null;
   }
   tryEnterBuilding(c: Colonist, b: Building): boolean {
     if (!b.done) return false;
-    if (!this.buildingHasSpace(b)) return false;
+    if (!this.buildingHasSpace(b, c)) return false;
     this.insideCounts.set(b, (this.insideCounts.get(b) || 0) + 1);
+    this.releaseSleepReservation(c);
     c.inside = b; c.hideTimer = 0;
     if (b.kind === 'bed') {
       const center = this.centerOf(b);
@@ -1504,6 +1544,8 @@ export class Game {
     for (let i = this.colonists.length - 1; i >= 0; i--) {
       const c = this.colonists[i];
       if (!c.alive) {
+        this.releaseSleepReservation(c);
+        if (c.inside) this.leaveBuilding(c);
         // Remove dead colonists from the array
         this.colonists.splice(i, 1);
         continue;

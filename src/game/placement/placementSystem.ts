@@ -195,5 +195,10 @@ export function evictColonistsFrom(game: Game, b: Building) {
       c.x = clamp(cx + rx, 0, WORLD.w);
       c.y = clamp(cy + ry, 0, WORLD.h);
     }
+    if (c.reservedSleepFor === b) {
+      game.releaseSleepReservation(c);
+      (c as any).sleepTarget = undefined;
+      (c as any).sleepTargetLockUntil = 0;
+    }
   }
 }

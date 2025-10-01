@@ -154,6 +154,7 @@ export type Colonist = {
   inside?: import('./types').Building | null; hideTimer?: number; 
   safeTarget?: import('./types').Building | null; safeTimer?: number; 
   reservedBuildFor?: import('./types').Building | null; 
+  reservedSleepFor?: import('./types').Building | null;
   stuckTimer?: number; lastDistToNode?: number; jitterScore?: number; jitterWindow?: number; lastDistSign?: number;
   // FSM robustness helpers
   prevState?: ColonistState; // last state before current
