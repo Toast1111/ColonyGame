@@ -2,11 +2,11 @@ import type { Vec2 } from "../core/utils";
 
 export type Camera = { x: number; y: number; zoom: number };
 
-export type Resources = { wood: number; stone: number; food: number };
+export type Resources = { wood: number; stone: number; food: number; medicine?: number; herbal?: number };
 
 export type Circle = { x: number; y: number; r: number; hp: number; type: "tree" | "rock" };
 
-export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed";
+export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door";
 
 export type BuildingDef = {
   name: string;
@@ -41,9 +41,15 @@ export type Building = BuildingDef & {
   buildLeft: number; done: boolean; hp: number;
   growth?: number; ready?: boolean; cooldown?: number;
   rot?: 0 | 90 | 180 | 270; // orientation in degrees
+  // Door-specific properties
+  doorState?: 'closed' | 'opening' | 'open' | 'closing';
+  doorProgress?: number; // 0-1, how far through the animation
+  doorOpenTime?: number; // Game time when door started opening
+  doorCloseDelay?: number; // Time to wait before closing
+  doorQueue?: Array<{ id: string; type: 'colonist' | 'enemy' }>; // Entities waiting to pass
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'medical' | 'seekMedical' | 'medicalMultiple' | 'downed';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'medical' | 'seekMedical' | 'medicalMultiple' | 'downed' | 'waitingAtDoor';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -180,6 +186,11 @@ export type Colonist = {
   medicalPriorityUntil?: number;     // Game time until forced priority expires (safety auto-clear)
   // Furniture interactions
   restingOn?: Building | null;       // Furniture (like a bed) the colonist is currently using
+  
+  // Door interaction
+  waitingForDoor?: Building | null;  // Door the colonist is waiting to open
+  doorWaitStart?: number;            // Game time when started waiting for door
+  id?: string;                       // Unique identifier for door queue management
 };
 
 export type Enemy = { 
@@ -189,6 +200,10 @@ export type Enemy = {
   pathGoal?: import('../core/utils').Vec2;
   repath?: number;
   stuckTimer?: number;
+  // Door interaction
+  waitingForDoor?: Building | null;  // Door the enemy is waiting to break/open
+  doorWaitStart?: number;            // Game time when started waiting/attacking door
+  id?: string;                       // Unique identifier for door queue management
 };
 
 export type Bullet = {

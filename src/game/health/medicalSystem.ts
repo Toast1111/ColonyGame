@@ -409,7 +409,8 @@ export class MedicalSystem {
   }
 
   // Get colonist ID (create if needed)
-  private getColonistId(colonist: Colonist): string {
+  // Made public so FSM can access it
+  getColonistId(colonist: Colonist): string {
     if (!(colonist as any).id) {
       (colonist as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }

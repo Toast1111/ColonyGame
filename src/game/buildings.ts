@@ -135,6 +135,17 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     color: COLORS.bed,
     popCap: 1
   },
+  door: {
+    category: 'Defense',
+    name: 'Door',
+    description: 'Allows colonists to pass while blocking enemies. Must be opened before passing through.',
+    key: 'D',
+    cost: { wood: 10 },
+    hp: 100,
+    size: { w: 1, h: 1 },
+    build: 30,
+    color: '#8b4513'
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {

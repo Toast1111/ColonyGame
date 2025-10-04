@@ -2,15 +2,22 @@ import { aStar, clearGrid, markRectSolid, markCircleSolid, markRoadPath } from "
 import { T } from "../constants";
 import type { Colonist } from "../types";
 import type { Game } from "../Game";
+import { isDoorBlocking } from "../systems/doorSystem";
 
 export function rebuildNavGrid(game: Game) {
   clearGrid(game.grid);
   // Buildings
   for (const b of game.buildings) {
-    if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm' && b.kind !== 'bed') {
+    // Doors are treated as passable by pathfinding (colonists will open them)
+    // but blocking doors will slow movement temporarily
+    if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm' && b.kind !== 'bed' && b.kind !== 'door') {
       markRectSolid(game.grid, b.x, b.y, b.w, b.h);
     }
     if (b.kind === 'path') {
+      markRoadPath(game.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
+    }
+    if (b.kind === 'door' && b.done) {
+      // Doors are walkable tiles (colonists can path through them)
       markRoadPath(game.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
     }
     if (b.kind === 'house' && b.done) {
@@ -22,6 +29,12 @@ export function rebuildNavGrid(game: Game) {
   // Obstacles
   for (const tree of game.trees) markCircleSolid(game.grid, tree.x, tree.y, tree.r);
   for (const rock of game.rocks) markCircleSolid(game.grid, rock.x, rock.y, rock.r);
+  
+  // Rebuild regions after nav grid is updated
+  if (game.regionManager.isEnabled()) {
+    game.regionManager.onBuildingsChanged(game.buildings);
+    game.regionManager.updateObjectCaches(game.buildings, game.trees, game.rocks);
+  }
 }
 
 export function computePath(game: Game, sx: number, sy: number, tx: number, ty: number) {

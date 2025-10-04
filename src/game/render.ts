@@ -3,6 +3,7 @@ import type { Building, Bullet, Camera, Message, Particle } from "./types";
 import { ImageAssets } from "../assets/images";
 import { getColonistMood } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
+import { getDoorOpenAmount } from "./systems/doorSystem";
 
 export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -287,6 +288,76 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.fillStyle = '#1f2937';
     ctx.fillRect(b.x, b.y, b.w, b.h);
     ctx.strokeStyle = '#0b0f14cc'; ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
+    return;
+  }
+  
+  // Door visual: animated opening/closing
+  if (b.kind === 'door') {
+    const openAmount = getDoorOpenAmount(b);
+    
+    ctx.save();
+    ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
+    
+    // Door frame (always visible)
+    ctx.fillStyle = '#4a3520';
+    ctx.fillRect(-b.w / 2, -b.h / 2, b.w, 3); // Top frame
+    ctx.fillRect(-b.w / 2, b.h / 2 - 3, b.w, 3); // Bottom frame
+    ctx.fillRect(-b.w / 2, -b.h / 2, 3, b.h); // Left frame
+    ctx.fillRect(b.w / 2 - 3, -b.h / 2, 3, b.h); // Right frame
+    
+    // Door panels (slide horizontally when opening)
+    if (openAmount < 1) {
+      const leftOffset = -openAmount * (b.w / 2 - 4);
+      const rightOffset = openAmount * (b.w / 2 - 4);
+      
+      // Left panel
+      ctx.fillStyle = b.color;
+      ctx.fillRect(-b.w / 2 + 3 + leftOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      ctx.strokeStyle = '#2a1a10';
+      ctx.strokeRect(-b.w / 2 + 3 + leftOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      
+      // Right panel
+      ctx.fillStyle = b.color;
+      ctx.fillRect(3 - rightOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      ctx.strokeStyle = '#2a1a10';
+      ctx.strokeRect(3 - rightOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      
+      // Door details (vertical lines)
+      ctx.strokeStyle = '#3a2510';
+      ctx.lineWidth = 1;
+      for (let i = 1; i < 3; i++) {
+        const x1 = -b.w / 2 + 3 + leftOffset + (b.w / 2 - 6) * i / 3;
+        const x2 = 3 - rightOffset + (b.w / 2 - 6) * i / 3;
+        ctx.beginPath();
+        ctx.moveTo(x1, -b.h / 2 + 6);
+        ctx.lineTo(x1, b.h / 2 - 6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x2, -b.h / 2 + 6);
+        ctx.lineTo(x2, b.h / 2 - 6);
+        ctx.stroke();
+      }
+    }
+    
+    ctx.restore();
+    
+    // Build progress bar
+    if (!b.done) {
+      ctx.fillStyle = '#0b1220'; ctx.fillRect(b.x, b.y - 6, b.w, 4);
+      ctx.fillStyle = '#6ee7ff'; const pct = 1 - (b.buildLeft / b.build);
+      ctx.fillRect(b.x, b.y - 6, pct * b.w, 4);
+    }
+    
+    // HP bar if damaged
+    if (b.done && b.hp < 100) {
+      const maxHp = 100; // You may want to store this
+      const hpPct = b.hp / maxHp;
+      ctx.fillStyle = '#0b1220'; 
+      ctx.fillRect(b.x, b.y + b.h + 2, b.w, 3);
+      ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.25 ? '#fbbf24' : '#ef4444';
+      ctx.fillRect(b.x, b.y + b.h + 2, b.w * hpPct, 3);
+    }
+    
     return;
   }
 

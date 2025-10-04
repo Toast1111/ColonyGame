@@ -4,12 +4,34 @@ import type { Building, Colonist, Enemy, ColonistState } from "../types";
 import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "../skills/skills";
 import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
+import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor } from "../systems/doorSystem";
+
+// Helper to check if colonist should wait for a door
+function checkDoorInteraction(game: any, c: Colonist): Building | null {
+  // Find any doors near the colonist that are blocking
+  // Increased range to detect doors earlier
+  for (const b of game.buildings) {
+    if (b.kind === 'door' && b.done && isDoorBlocking(b)) {
+      const doorCenterX = b.x + b.w / 2;
+      const doorCenterY = b.y + b.h / 2;
+      const distance = Math.hypot(c.x - doorCenterX, c.y - doorCenterY);
+      
+      // Detect door from further away so colonist stops before reaching it
+      if (distance < 96) { // 3 tiles
+        return b;
+      }
+    }
+  }
+  return null;
+}
 
 // Helper function to check if a position would collide with buildings
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
   for (const b of game.buildings) {
     // Skip HQ, paths, houses, and farms as they don't block movement
-  if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
+    // Skip doors that are open
+    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
+    if (b.kind === 'door' && !isDoorBlocking(b)) continue;
     
     // Check circle-rectangle collision
     const closestX = Math.max(b.x, Math.min(x, b.x + b.w));
@@ -43,6 +65,16 @@ function getSpeedMultiplier(game: any, x: number, y: number): number {
 }
 
 function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: number, dt: number, speedMultiplier: number = 1): boolean {
+  // Check for doors that need to be opened
+  const blockingDoor = checkDoorInteraction(game, c);
+  if (blockingDoor) {
+    // Request door to open and wait
+    requestDoorOpen(blockingDoor, c, 'colonist');
+    c.waitingForDoor = blockingDoor;
+    c.doorWaitStart = c.t;
+    return false; // Don't move yet
+  }
+  
   const dx = targetX - c.x;
   const dy = targetY - c.y;
   const distance = Math.hypot(dx, dy);
@@ -415,28 +447,20 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     // Highest first
     if (!c.inside && danger) set('flee', 100, 'danger detected');
     
-    // Medical needs - check if colonist needs treatment or can provide it
+    // Medical work - ALL colonists can treat injuries (RimWorld style)
+    // Check if there are any injured colonists that need treatment
+    if (!c.inside && !danger && c.health && c.health.totalPain < 0.6) {
+      const medicalJob = medicalSystem.findMedicalWork(c, game.colonists);
+      if (medicalJob) {
+        set('medical', 95, 'medical work available');
+      }
+    }
+    
+    // Medical needs - check if THIS colonist needs treatment
     if (!c.inside && !danger && c.health && c.health.totalPain > 0.2) {
-      // Check if this colonist has medical skills (simplified check for now)
-      const hasMedicalSkill = c.profile?.personality?.some(trait => 
-        trait.toLowerCase().includes('medical') || 
-        trait.toLowerCase().includes('doctor') || 
-        trait.toLowerCase().includes('nurse')
-      ) || false;
-      const medicalSystem = (game as any).medicalSystem;
-      
-      if (hasMedicalSkill && medicalSystem) {
-        // This colonist can provide medical care
-        const availableJob = medicalSystem.assignMedicalJob(c);
-        if (availableJob) {
-          set('seekMedical', 92, 'can provide medical care');
-        }
-      } else if (medicalSystem) {
-        // This colonist needs medical care
-        const needsTreatment = medicalSystem.colonistNeedsTreatment(c);
-        if (needsTreatment) {
-          set('seekMedical', 90 + Math.min(10, c.health.totalPain * 30), 'needs medical treatment');
-        }
+      // Simple check: if colonist has any injuries, they need treatment
+      if (c.health.injuries && c.health.injuries.length > 0) {
+        set('seekMedical', 90 + Math.min(10, c.health.totalPain * 30), 'needs medical treatment');
       }
     }
     
@@ -457,6 +481,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     const statePriority = (s: ColonistState | undefined): number => {
       switch (s) {
         case 'flee': return 100;
+        case 'waitingAtDoor': return 98; // High priority - must wait
         case 'medical': return 95; // High priority for active medical work
         case 'seekMedical': return 92; // High priority to find medical work
         case 'medicalMultiple': return 94; // High priority for comprehensive care
@@ -475,6 +500,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         default: return 0;
       }
     };
+    
+    // Check if colonist needs to wait for a door
+    if (c.state !== 'waitingAtDoor' && c.waitingForDoor) {
+      changeState('waitingAtDoor', 'encountered closed door');
+    }
+    
     const intent = evaluateIntent();
     if (intent && intent.state !== c.state) {
       const critical = intent.state === 'flee' || intent.state === 'heal' || 
@@ -1135,7 +1166,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           grantSkillXP(c, 'Construction', 6 * dt, c.t || 0);
         }
         if (b.buildLeft <= 0) {
-          b.done = true; if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
+          b.done = true; 
+          if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
+          if (b.kind === 'door') { initializeDoor(b); }
           
           // Check if colonist is stuck inside the building and move them to safety
           if (wouldCollideWithBuildings(game, c.x, c.y, c.r)) {
@@ -1333,6 +1366,57 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         console.log(`Colonist stuck mining for ${c.stateSince.toFixed(1)}s, abandoning`);
         if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
         c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'mine timeout');
+      }
+      break;
+    }
+    case 'waitingAtDoor': {
+      // Colonist is waiting for a door to open
+      const door = c.waitingForDoor;
+      if (!door || door.kind !== 'door' || !door.done) {
+        // Door was destroyed or doesn't exist
+        c.waitingForDoor = null;
+        c.doorWaitStart = undefined;
+        changeState('seekTask', 'door no longer exists');
+        break;
+      }
+      
+      // Check if door is now passable
+      if (isDoorPassable(door)) {
+        // Door is open, can proceed
+        if (c.id) {
+          releaseDoorQueue(door, c.id);
+        }
+        c.waitingForDoor = null;
+        c.doorWaitStart = undefined;
+        
+        // Return to previous task state
+        if (c.task === 'build') {
+          changeState('build', 'door opened, resuming build');
+        } else if (c.task === 'chop') {
+          changeState('chop', 'door opened, resuming chop');
+        } else if (c.task === 'mine') {
+          changeState('mine', 'door opened, resuming mine');
+        } else if (c.task === 'harvestFarm' || c.task === 'harvestWell') {
+          changeState('harvest', 'door opened, resuming harvest');
+        } else {
+          changeState('move', 'door opened, resuming movement');
+        }
+      } else {
+        // Still waiting - check for timeout
+        const waitTime = c.doorWaitStart ? (c.t - c.doorWaitStart) : 0;
+        if (waitTime > 10) {
+          // Waited too long, give up
+          console.log(`Colonist gave up waiting at door after ${waitTime.toFixed(1)}s`);
+          if (c.id) {
+            releaseDoorQueue(door, c.id);
+          }
+          c.waitingForDoor = null;
+          c.doorWaitStart = undefined;
+          c.task = null;
+          c.target = null;
+          game.clearPath && game.clearPath(c);
+          changeState('seekTask', 'door wait timeout');
+        }
       }
       break;
     }

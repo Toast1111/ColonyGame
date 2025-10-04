@@ -1,12 +1,15 @@
 import { dist2 } from "../core/utils";
 import { T } from "../game/constants";
 import type { Building, Enemy, Colonist } from "../game/types";
+import { isDoorBlocking, isNearDoor, attackDoor } from "../game/systems/doorSystem";
 
 // Helper function to check if a position would collide with buildings (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
   for (const b of game.buildings) {
     // Enemies can walk through HQ, paths, houses, and farms, but not other buildings
-  if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
+    // Doors block enemies unless they're destroyed
+    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
+    if (b.kind === 'door' && !isDoorBlocking(b)) continue;
     
     // Check circle-rectangle collision
     const closestX = Math.max(b.x, Math.min(x, b.x + b.w));
@@ -205,7 +208,34 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
 
   let directMoved = false;
   if (distanceToTarget > e.r + 4 && (pathDisplacement < 0.5 || !attemptedPath)) {
-    directMoved = moveDirectlyWithCollision(game, e, targetPos, dt);
+    // Check if there's a door in the way
+    const nearbyDoor = (game.buildings as Building[]).find((b: Building) => 
+      b.kind === 'door' && b.done && isDoorBlocking(b) && isNearDoor(e, b)
+    );
+    
+    if (nearbyDoor) {
+      // Enemy attacks the door instead of moving
+      e.waitingForDoor = nearbyDoor;
+      if (!e.doorWaitStart) {
+        e.doorWaitStart = (game as any).time || 0;
+      }
+      
+      // Attack the door if melee cooldown is ready
+      if (!movedThisTick && (e as any).meleeCd <= 0) {
+        const doorDestroyed = attackDoor(nearbyDoor, e.dmg, game);
+        (e as any).meleeCd = 1.0;
+        
+        if (doorDestroyed) {
+          e.waitingForDoor = null;
+          e.doorWaitStart = undefined;
+        }
+      }
+    } else {
+      e.waitingForDoor = null;
+      e.doorWaitStart = undefined;
+      directMoved = moveDirectlyWithCollision(game, e, targetPos, dt);
+    }
+    
     if (!directMoved && attemptedPath && (e as any).path) {
       (e as any).stuckTimer = ((e as any).stuckTimer || 0) + dt;
       if ((e as any).stuckTimer > STUCK_RESET_TIME) {

@@ -1,11 +1,12 @@
-
 import { clamp, dist2, rand, randi } from "../core/utils";
 import { makeGrid } from "../core/pathfinding";
 import { rebuildNavGrid as rebuildNavGridNav, computePath as computePathNav, computePathWithDangerAvoidance as computePathWithDangerAvoidanceNav, cellIndexAt as cellIndexAtNav, isBlocked as isBlockedNav } from "./navigation/navGrid";
+import { RegionManager } from "./navigation/regionManager";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
+import { drawRegionDebug } from "./navigation/regionDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
@@ -22,6 +23,7 @@ import { updateTurret as updateTurretCombat, updateProjectiles as updateProjecti
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
+import { updateDoor, initializeDoor } from './systems/doorSystem';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -37,7 +39,7 @@ export class Game {
   isActuallyTouchDevice = false;
   lastInputWasTouch = false;
   
-  RES = { wood: 0, stone: 0, food: 0 };
+  RES = { wood: 0, stone: 0, food: 0, medicine: 5, herbal: 3 };
   BASE_STORAGE = 200; // Base storage capacity
   storageFullWarned = false; // Prevent spam warnings
 
@@ -94,7 +96,7 @@ export class Game {
   selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
   hotbar: Array<keyof typeof BUILD_TYPES> = ['house', 'farm', 'turret', 'wall', 'stock', 'tent', 'warehouse', 'well', 'infirmary'];
   showBuildMenu = false;
-  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false };
+  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false };
   // selection & camera follow
   selColonist: Colonist | null = null;
   follow = false;
@@ -152,6 +154,11 @@ export class Game {
     this.bindInput();
     this.newGame();
     this.rebuildNavGrid(); 
+    
+    // Initialize region system after nav grid is built
+    this.regionManager.initialize(this.buildings);
+    this.regionManager.updateObjectCaches(this.buildings, this.trees, this.rocks);
+    
     this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; 
     const viewW = this.canvas.width / this.DPR / this.camera.zoom; 
     const viewH = this.canvas.height / this.DPR / this.camera.zoom; 
@@ -1578,6 +1585,7 @@ export class Game {
   if (!consoleOpen && this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
+    if (!consoleOpen && this.keyPressed('r')) { this.debug.regions = !this.debug.regions; this.toast(this.debug.regions ? 'Debug: regions ON' : 'Debug: regions OFF'); }
     if (!consoleOpen && this.keyPressed('k')) { 
       this.debug.forceDesktopMode = !this.debug.forceDesktopMode; 
       this.toast(this.debug.forceDesktopMode ? 'Debug: Force Desktop Mode ON' : 'Debug: Force Desktop Mode OFF'); 
@@ -1616,6 +1624,11 @@ export class Game {
   for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; updateEnemyFSM(this, e, dt * this.fastForward); if (e.hp <= 0) { this.enemies.splice(i, 1); if (Math.random() < .5) this.RES.food += 1; } }
     for (const b of this.buildings) {
       if (b.kind === 'turret' && b.done) this.updateTurret(b, dt * this.fastForward);
+      
+      // Door updates
+      if (b.kind === 'door' && b.done) {
+        updateDoor(b, dt * this.fastForward, this.tDay);
+      }
       
       // infirmary healing
       if ((b as any).healRate && b.done) {
@@ -1738,6 +1751,13 @@ export class Game {
   
   // Draw long press progress circle
   this.drawLongPressProgress();
+  
+    // Region debug visualization
+    if (this.debug.regions) {
+      ctx.save();
+      drawRegionDebug(this);
+      ctx.restore();
+    }
   
     if (this.debug.nav) {
       // draw nav solids
@@ -2082,6 +2102,7 @@ export class Game {
 
   // Pathfinding grid and helpers
   grid = makeGrid();
+  regionManager = new RegionManager(this.grid);
   rebuildNavGrid() { rebuildNavGridNav(this); }
   computePath(sx: number, sy: number, tx: number, ty: number) { return computePathNav(this, sx, sy, tx, ty); }
   
@@ -2091,6 +2112,71 @@ export class Game {
   // Navigation helpers for AI
   private cellIndexAt(x: number, y: number) { return cellIndexAtNav(this, x, y); }
   isBlocked(x: number, y: number) { return isBlockedNav(this, x, y); }
+  
+  // Region-based object finding (much faster than global search)
+  findNearestBuildingByRegion(x: number, y: number, filter: (b: Building) => boolean): Building | null {
+    if (!this.regionManager.isEnabled()) {
+      // Fallback to global search if regions disabled
+      let best: Building | null = null;
+      let bestDist = Infinity;
+      for (const b of this.buildings) {
+        if (!filter(b)) continue;
+        const cx = b.x + b.w / 2;
+        const cy = b.y + b.h / 2;
+        const d = Math.hypot(x - cx, y - cy);
+        if (d < bestDist) {
+          bestDist = d;
+          best = b;
+        }
+      }
+      return best;
+    }
+    return this.regionManager.findNearestBuilding(x, y, filter);
+  }
+  
+  findNearestTreeByRegion(x: number, y: number): typeof this.trees[0] | null {
+    if (!this.regionManager.isEnabled()) {
+      // Fallback to global search
+      let best = null;
+      let bestDist = Infinity;
+      for (const t of this.trees) {
+        if (t.hp <= 0) continue;
+        const d = Math.hypot(x - t.x, y - t.y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = t;
+        }
+      }
+      return best;
+    }
+    const result = this.regionManager.findNearestTree(x, y, this.trees);
+    return result as typeof this.trees[0] | null;
+  }
+  
+  findNearestRockByRegion(x: number, y: number): typeof this.rocks[0] | null {
+    if (!this.regionManager.isEnabled()) {
+      // Fallback to global search
+      let best = null;
+      let bestDist = Infinity;
+      for (const r of this.rocks) {
+        if (r.hp <= 0) continue;
+        const d = Math.hypot(x - r.x, y - r.y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = r;
+        }
+      }
+      return best;
+    }
+    const result = this.regionManager.findNearestRock(x, y, this.rocks);
+    return result as typeof this.rocks[0] | null;
+  }
+  
+  // Check if destination is reachable (avoids expensive pathfinding for impossible paths)
+  isReachable(startX: number, startY: number, endX: number, endY: number): boolean {
+    if (!this.regionManager.isEnabled()) return true; // Assume reachable if regions disabled
+    return this.regionManager.isReachable(startX, startY, endX, endY);
+  }
   
   // Check if position is within interaction range of a circle (for direct interaction checks)
   isWithinInteractionRange(x: number, y: number, circle: { x: number; y: number; r: number }, interactDistance: number): boolean {
