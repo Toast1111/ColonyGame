@@ -28,6 +28,8 @@ import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
+import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
+import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor } from './systems/doorSystem';
 
@@ -524,6 +526,12 @@ export class Game {
       this.mouse.y = (e.clientY - rect.top);
       const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
       this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+      
+      // PRIORITY PANEL IS MODAL - Block world interactions when open
+      if (isWorkPriorityPanelOpen()) {
+        return;
+      }
+      
       // While adjusting a pending placement, drag follows cursor (grid-snap)
       if (this.pendingPlacement && this.mouse.down) {
         const def = BUILD_TYPES[this.pendingPlacement.key];
@@ -544,6 +552,16 @@ export class Game {
     c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
+      
+      // PRIORITY PANEL IS MODAL - Check first and block all other interactions
+      if (isWorkPriorityPanelOpen()) {
+        if (handleWorkPriorityPanelClick(e.offsetX * this.DPR, e.offsetY * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
+          return; // Panel handled the click (including closing via X or outside click)
+        }
+        // If panel is open but click wasn't handled, still block everything else
+        return;
+      }
+      
       if ((e as MouseEvent).button === 0) {
         this.mouse.down = true;
         // Desktop: close colonist panel via X or clicking outside panel
@@ -714,6 +732,13 @@ export class Game {
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
+      
+      // PRIORITY PANEL IS MODAL - Use wheel for scrolling panel when open
+      if (isWorkPriorityPanelOpen()) {
+        handleWorkPriorityPanelScroll(e.deltaY);
+        return;
+      }
+      
       const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
       // Zoom around cursor position
       const rect = c.getBoundingClientRect();
@@ -736,7 +761,7 @@ export class Game {
     if (!this.once.has(k)) this.once.add(k); 
     
     // Prevent default behavior for game shortcuts to avoid browser interference
-    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'g' || k === 'j' || k === 'k' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
+    if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'g' || k === 'j' || k === 'k' || k === 'p' || k === 'escape' || /^[1-9]$/.test(k) || k === 'w' || k === 'a' || k === 's' || k === 'd' || k === '+' || k === '=' || k === '-' || k === '_') {
       e.preventDefault();
     }
   });
@@ -915,6 +940,15 @@ export class Game {
     this.mouse.y = sy;
     const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
     this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+
+    // PRIORITY PANEL IS MODAL - Check first and block all other interactions
+    if (isWorkPriorityPanelOpen()) {
+      if (handleWorkPriorityPanelClick(sx * this.DPR, sy * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
+        return; // Panel handled the click (including closing via X or outside click)
+      }
+      // If panel is open but click wasn't handled, still block everything else
+      return;
+    }
 
     // If precise placement UI is active, handle its buttons or move/confirm by tapping
     if (this.pendingPlacement) {
@@ -1165,6 +1199,9 @@ export class Game {
     // Initialize the detailed health system
     initializeColonistHealth(c);
     
+    // Initialize work priorities (skill-based)
+    initializeWorkPriorities(c);
+    
     this.colonists.push(c); 
     this.msg(`${getColonistDescription(profile)} has joined the colony!`, 'good');
     return c;
@@ -1315,62 +1352,142 @@ export class Game {
     }
   }
   pickTask(c: Colonist) {
+    // Ensure colonist has work priorities initialized
+    if (!(c as any).workPriorities) {
+      initializeWorkPriorities(c);
+    }
+    
     // During night time, don't assign new tasks - colonists should be sleeping
     if (this.isNight()) {
       this.setTask(c, 'idle', { x: c.x, y: c.y }); // Stay in place, FSM will handle sleep transition
+      return;
     }
     
-    // Prefer an unfinished building with available crew slots
-    let site: Building | null = null; let bestD = Infinity;
-    for (const b of this.buildings) {
-      if (b.done) continue;
-      const cur = this.buildReservations.get(b) || 0;
-      if (cur >= this.getMaxCrew(b)) continue;
-      const d = dist2({ x: c.x, y: c.y } as any, this.centerOf(b) as any);
-      if (d < bestD) { bestD = d; site = b; }
-    }
-    if (site) { this.setTask(c, 'build', site); return; }
+    // Build a list of available work with priorities
+    const candidates: any[] = [];
     
-    // Check for ready farms to harvest
-    const readyFarm = this.buildings.find(b => b.kind === 'farm' && b.done && b.ready);
-    if (readyFarm) { this.setTask(c, 'harvestFarm', readyFarm); return; }
+    // Helper to get work priority
+    const getWorkPriority = (workType: string): number => {
+      const priorities = (c as any).workPriorities;
+      if (!priorities || !priorities[workType]) return 3; // Default priority
+      const p = priorities[workType];
+      return p === 0 ? 999 : p; // 0 = disabled
+    };
     
-    // Check for wells to collect from (limit frequency to avoid spam)
-    if (Math.random() < 0.1) { // 10% chance per frame to check wells
-      const availableWell = this.buildings.find(b => b.kind === 'well' && b.done);
-      if (availableWell) { this.setTask(c, 'harvestWell', availableWell); return; }
-    }
-    if (this.RES.food < Math.max(4, this.colonists.length * 2)) {
-      const nearTree = this.nearestCircle({ x: c.x, y: c.y }, this.trees.filter(t => !this.assignedTargets.has(t)) as any);
-      if (nearTree) { this.setTask(c, 'chop', nearTree); return; }
+    // Helper to check if colonist can do work
+    const canDoWork = (workType: string): boolean => {
+      const priorities = (c as any).workPriorities;
+      if (!priorities) return true;
+      const p = priorities[workType];
+      return p !== 0; // Can do if not disabled
+    };
+    
+    // 1. Construction work
+    if (canDoWork('Construction')) {
+      for (const b of this.buildings) {
+        if (b.done) continue;
+        const cur = this.buildReservations.get(b) || 0;
+        if (cur >= this.getMaxCrew(b)) continue;
+        
+        const distance = Math.hypot(c.x - (b.x + b.w/2), c.y - (b.y + b.h/2));
+        candidates.push({
+          workType: 'Construction',
+          task: 'build',
+          target: b,
+          distance,
+          priority: getWorkPriority('Construction')
+        });
+      }
     }
     
-    // Debug resource balancing logic
-    const availableTrees = this.trees.filter(t => !this.assignedTargets.has(t));
-    const availableRocks = this.rocks.filter(r => !this.assignedTargets.has(r));
-    if (Math.random() < 0.05) {
-      console.log(`Task assignment: wood=${this.RES.wood}, stone=${this.RES.stone}, trees=${availableTrees.length}, rocks=${availableRocks.length}`);
+    // 2. Growing work (harvesting)
+    if (canDoWork('Growing')) {
+      const readyFarm = this.buildings.find(b => b.kind === 'farm' && b.done && b.ready);
+      if (readyFarm) {
+        const distance = Math.hypot(c.x - (readyFarm.x + readyFarm.w/2), c.y - (readyFarm.y + readyFarm.h/2));
+        candidates.push({
+          workType: 'Growing',
+          task: 'harvestFarm',
+          target: readyFarm,
+          distance,
+          priority: getWorkPriority('Growing')
+        });
+      }
+      
+      // Well collection - limit frequency to avoid spam
+      if (Math.random() < 0.1) {
+        const availableWell = this.buildings.find(b => b.kind === 'well' && b.done);
+        if (availableWell) {
+          const distance = Math.hypot(c.x - (availableWell.x + availableWell.w/2), c.y - (availableWell.y + availableWell.h/2));
+          candidates.push({
+            workType: 'Growing',
+            task: 'harvestWell',
+            target: availableWell,
+            distance,
+            priority: getWorkPriority('Growing')
+          });
+        }
+      }
     }
     
-    if (this.RES.wood < this.RES.stone) {
-      const tr = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableTrees as any); 
-      if (tr) { 
-        if (Math.random() < 0.1) console.log('Assigning chop task');
-        this.setTask(c, 'chop', tr); return; 
-      } else {
-        if (Math.random() < 0.1) console.log('No trees available for chopping');
+    // 3. PlantCutting (chopping trees) - prioritize if low food
+    if (canDoWork('PlantCutting')) {
+      const needsFood = this.RES.food < Math.max(4, this.colonists.length * 2);
+      if (needsFood || this.RES.wood < this.RES.stone) {
+        const availableTrees = this.trees.filter(t => !this.assignedTargets.has(t));
+        const nearTree = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableTrees as any);
+        if (nearTree) {
+          const distance = Math.hypot(c.x - nearTree.x, c.y - nearTree.y);
+          candidates.push({
+            workType: 'PlantCutting',
+            task: 'chop',
+            target: nearTree,
+            distance,
+            priority: getWorkPriority('PlantCutting')
+          });
+        }
+      }
+    }
+    
+    // 4. Mining (extracting stone)
+    if (canDoWork('Mining')) {
+      if (this.RES.stone < this.RES.wood || this.RES.stone < 20) {
+        const availableRocks = this.rocks.filter(r => !this.assignedTargets.has(r));
+        const nearRock = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableRocks as any);
+        if (nearRock) {
+          const distance = Math.hypot(c.x - nearRock.x, c.y - nearRock.y);
+          candidates.push({
+            workType: 'Mining',
+            task: 'mine',
+            target: nearRock,
+            distance,
+            priority: getWorkPriority('Mining')
+          });
+        }
+      }
+    }
+    
+    // Sort candidates by priority (lower = better), then distance
+    candidates.sort((a, b) => {
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return a.distance - b.distance;
+    });
+    
+    if (candidates.length > 0) {
+      const bestWork = candidates[0];
+      this.setTask(c, bestWork.task, bestWork.target);
+      
+      // Debug logging
+      if (Math.random() < 0.1) {
+        console.log(`Colonist ${c.profile?.name || 'Unknown'} assigned ${bestWork.workType} (priority ${bestWork.priority}): ${bestWork.task}`);
       }
     } else {
-      const rk = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableRocks as any); 
-      if (rk) { 
-        if (Math.random() < 0.1) console.log('Assigning mine task to rock at:', rk);
-        this.setTask(c, 'mine', rk); return; 
-      } else {
-        if (Math.random() < 0.1) console.log('No rocks available for mining');
+      // No work available - idle
+      this.setTask(c, 'idle', { x: c.x + rand(-80, 80), y: c.y + rand(-80, 80) });
+      if (Math.random() < 0.05) {
+        console.log(`Colonist ${c.profile?.name || 'Unknown'} has no available work (idling)`);
       }
     }
-    if (Math.random() < 0.1) console.log('Assigning idle task');
-    this.setTask(c, 'idle', { x: c.x + rand(-80, 80), y: c.y + rand(-80, 80) });
   }
   nearestCircle<T extends { x: number; y: number }>(p: { x: number; y: number }, arr: T[]): T | null {
     let best: T | null = null, bestD = 1e9; for (const o of arr) { const d = dist2(p as any, o as any); if (d < bestD) { bestD = d; best = o; } } return best;
@@ -1643,10 +1760,27 @@ export class Game {
     // If debug console is open, ignore gameplay hotkeys (space, etc.)
     const dc = (this as any).debugConsole;
     const consoleOpen = !!(dc && dc.open);
+    
+    // PRIORITY PANEL IS MODAL - Only allow 'P' and 'Escape' to close it
+    const priorityPanelOpen = isWorkPriorityPanelOpen();
+    if (priorityPanelOpen) {
+      if (!consoleOpen && this.keyPressed('p')) { 
+        toggleWorkPriorityPanel(); 
+        this.toast('Work Priorities Panel closed'); 
+      }
+      if (!consoleOpen && this.keyPressed('escape')) { 
+        toggleWorkPriorityPanel(); 
+        this.toast('Work Priorities Panel closed'); 
+      }
+      // Block ALL other inputs when panel is open
+      return;
+    }
+    
     // Handle toggles even when paused
     if (!consoleOpen && this.keyPressed(' ')) { this.paused = !this.paused; const btn = document.getElementById('btnPause'); if (btn) btn.textContent = this.paused ? 'Resume' : 'Pause'; }
     if (!consoleOpen && this.keyPressed('h')) { const help = document.getElementById('help'); if (help) help.hidden = !help.hidden; }
   if (!consoleOpen && this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
+  if (!consoleOpen && this.keyPressed('p')) { toggleWorkPriorityPanel(); this.toast(isWorkPriorityPanelOpen() ? 'Work Priorities Panel opened' : 'Work Priorities Panel closed'); }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
     if (!consoleOpen && this.keyPressed('r')) { this.debug.regions = !this.debug.regions; this.toast(this.debug.regions ? 'Debug: regions ON' : 'Debug: regions OFF'); }
@@ -2231,6 +2365,9 @@ export class Game {
   if (this.showBuildMenu) drawBuildMenuUI(this);
   if (this.pendingPlacement) drawPlacementUIUI(this);
   if (this.contextMenu) drawContextMenuUI(this);
+  
+  // Draw work priority panel
+  drawWorkPriorityPanel(this.ctx, this.colonists, this.canvas.width, this.canvas.height);
   }
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }

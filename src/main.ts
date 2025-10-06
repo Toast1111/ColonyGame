@@ -98,7 +98,7 @@ if (helpEl) {
   helpEl.innerHTML = `
     <h2>How to play</h2>
     <div><b>Goal:</b> Gather wood & stone, build farms for food, add houses for pop cap; survive nightly raids with turrets/walls.</div>
-  <div><b>Controls:</b> 1..9 quick-build, <b>B</b> build menu, LMB place, RMB cancel/erase; WASD pan; Space pause; H toggle help; +/- zoom; F fast-forward.</div>
+  <div><b>Controls:</b> 1..9 quick-build, <b>B</b> build menu, <b>P</b> work priorities, LMB place, RMB cancel/erase; WASD pan; Space pause; H toggle help; +/- zoom; F fast-forward.</div>
   <div><b>UI Modes:</b> 📱 Mobile UI shows touch controls for tap/touch gameplay. 🖥️ Desktop UI is clean with keyboard shortcuts only.</div>
   `;
 }

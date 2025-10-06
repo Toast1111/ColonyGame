@@ -197,6 +197,9 @@ export type Colonist = {
   waitingForDoor?: Building | null;  // Door the colonist is waiting to open
   doorWaitStart?: number;            // Game time when started waiting for door
   id?: string;                       // Unique identifier for door queue management
+  
+  // Work priority system (RimWorld-style job assignments)
+  workPriorities?: Record<string, number>; // WorkType -> WorkPriority (1-4, or 0 for disabled)
 };
 
 export type Enemy = { 
