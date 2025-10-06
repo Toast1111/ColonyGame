@@ -178,6 +178,7 @@ export function makeBuilding(kind: keyof typeof BUILD_TYPES, wx: number, wy: num
     growth: 0,
     ready: false,
     cooldown: 0,
+    ...(kind === 'bed' ? { isMedicalBed: false } : {}),
   } as Building;
 }
 

@@ -47,9 +47,11 @@ export type Building = BuildingDef & {
   doorOpenTime?: number; // Game time when door started opening
   doorCloseDelay?: number; // Time to wait before closing
   doorQueue?: Array<{ id: string; type: 'colonist' | 'enemy' }>; // Entities waiting to pass
+  // Furniture designations
+  isMedicalBed?: boolean;
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'medical' | 'seekMedical' | 'medicalMultiple' | 'downed' | 'waitingAtDoor';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor';
 
 // Inventory and equipment types
 export interface InventoryItem {

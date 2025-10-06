@@ -4,6 +4,7 @@ import { rebuildNavGrid as rebuildNavGridNav, computePath as computePathNav, com
 import { RegionManager } from "./navigation/regionManager";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
+import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { drawRegionDebug } from "./navigation/regionDebugRender";
@@ -11,12 +12,15 @@ import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
 import { drawColonistProfile as drawColonistProfileUI } from "./ui/colonistProfile";
-import { drawContextMenu as drawContextMenuUI, showContextMenu as showContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
+import { drawContextMenu as drawContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
+import { showColonistContextMenu } from "./ui/contextMenus/colonistMenu";
+import { showBuildingContextMenu } from "./ui/contextMenus/buildings";
 import { drawPlacementUI as drawPlacementUIUI } from "./ui/placement";
 import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { initializeColonistHealth } from "./health/healthSystem";
 import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
+import { medicalWorkGiver } from "./health/medicalWorkGiver";
 import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth } from './health/healthSystem';
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
@@ -123,27 +127,15 @@ export class Game {
   colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
   
   // Context menu system
-  contextMenu: {
-    visible: boolean;
-    x: number;
-    y: number;
-    target: Colonist | null;
-    items: Array<{
-      id: string;
-      label: string;
-      icon: string;
-      enabled: boolean;
-      submenu?: Array<{ id: string; label: string; icon: string; enabled: boolean }>;
-    }>;
-    openSubmenu?: string; // Track which submenu is currently open
-  } | null = null;
-  contextMenuRects: Array<{ id: string; x: number; y: number; w: number; h: number; isSubmenu?: boolean; parentId?: string }> = [];
+  contextMenu: (ContextMenuDescriptor<any> & { visible: boolean; x: number; y: number; openSubmenu?: string }) | null = null;
+  contextMenuRects: Array<{ item: ContextMenuItem<any>; x: number; y: number; w: number; h: number; isSubmenu?: boolean; parentId?: string }> = [];
   
   // Long press support for mobile context menus
   longPressTimer: number | null = null;
   longPressStartPos: { x: number; y: number } | null = null;
   longPressStartTime: number | null = null;
-  longPressTarget: Colonist | null = null;
+  longPressTarget: Colonist | Building | null = null;
+  longPressTargetType: 'colonist' | 'building' | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -618,38 +610,38 @@ export class Game {
         if (this.contextMenu) {
           const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
           let clickedOnMenu = false;
-          
-          // Check if clicking on any context menu item
+          const menu = this.contextMenu;
+
           for (const rect of this.contextMenuRects) {
             if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
-              if (this.contextMenu.target) {
-                // Check if this is a parent item with submenu
-                const parentItem = this.contextMenu.items.find(item => item.id === rect.id);
-                if (parentItem && parentItem.submenu) {
-                  // Toggle submenu visibility
-                  if (this.contextMenu.openSubmenu === rect.id) {
-                    this.contextMenu.openSubmenu = undefined; // Close submenu
-                  } else {
-                    this.contextMenu.openSubmenu = rect.id; // Open submenu
-                  }
-                  clickedOnMenu = true;
-                  return;
-                } else {
-                  // Execute action for regular items or submenu items
-                  this.handleContextMenuAction(rect.id, this.contextMenu.target);
-                  this.contextMenu = null;
-                  this.contextMenuRects = [];
-                  clickedOnMenu = true;
-                  return;
+              const item = rect.item;
+              if (!item) continue;
+              const enabled = item.enabled !== false;
+
+              if (!rect.isSubmenu && item.submenu && item.submenu.length) {
+                if (enabled) {
+                  menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
+                }
+                clickedOnMenu = true;
+                return;
+              }
+
+              if (enabled) {
+                if (item.action) {
+                  item.action({ game: this, target: menu.target, item });
+                } else if (menu.onSelect) {
+                  menu.onSelect({ game: this, target: menu.target, item });
                 }
               }
+
+              hideContextMenuUI(this);
+              clickedOnMenu = true;
+              return;
             }
           }
-          
+
           if (!clickedOnMenu) {
-            // Click outside context menu - close it
-            this.contextMenu = null;
-            this.contextMenuRects = [];
+            hideContextMenuUI(this);
           }
         }
         
@@ -678,10 +670,15 @@ export class Game {
         // Check for colonist context menu
         const clickedColonist = this.findColonistAt(this.mouse.wx, this.mouse.wy);
         if (clickedColonist) {
-          showContextMenuUI(this, clickedColonist, this.mouse.x, this.mouse.y);
+          showColonistContextMenu(this, clickedColonist, this.mouse.x, this.mouse.y);
           return;
         }
-        
+
+        const clickedBuilding = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
+        if (clickedBuilding && showBuildingContextMenu(this, clickedBuilding, this.mouse.x, this.mouse.y)) {
+          return;
+        }
+
         this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
       }
     });
@@ -763,17 +760,35 @@ export class Game {
           this.longPressStartPos = { x: sx, y: sy };
           this.longPressStartTime = performance.now();
           this.longPressTarget = clickedColonist;
+          this.longPressTargetType = 'colonist';
           
           this.longPressTimer = window.setTimeout(() => {
-            showContextMenuUI(this, clickedColonist, sx, sy);
-            // Provide haptic feedback if available
+            showColonistContextMenu(this, clickedColonist, sx, sy);
             if (navigator.vibrate) {
               navigator.vibrate(50);
             }
-            // Clear long press state
             this.longPressStartTime = null;
             this.longPressTarget = null;
+            this.longPressTargetType = null;
           }, 500); // 500ms long press
+        } else {
+          const clickedBuilding = this.findBuildingAt(wpt.x, wpt.y);
+          if (clickedBuilding) {
+            this.longPressStartPos = { x: sx, y: sy };
+            this.longPressStartTime = performance.now();
+            this.longPressTarget = clickedBuilding;
+            this.longPressTargetType = 'building';
+
+            this.longPressTimer = window.setTimeout(() => {
+              showBuildingContextMenu(this, clickedBuilding, sx, sy);
+              if (navigator.vibrate) {
+                navigator.vibrate(50);
+              }
+              this.longPressStartTime = null;
+              this.longPressTarget = null;
+              this.longPressTargetType = null;
+            }, 500);
+          }
         }
         
       } else if (e.touches.length === 2) {
@@ -782,6 +797,9 @@ export class Game {
           clearTimeout(this.longPressTimer);
           this.longPressTimer = null;
         }
+        this.longPressStartTime = null;
+        this.longPressTarget = null;
+        this.longPressTargetType = null;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         this.touchLastDist = Math.hypot(dx, dy);
@@ -803,6 +821,7 @@ export class Game {
           this.longPressTimer = null;
           this.longPressStartTime = null;
           this.longPressTarget = null;
+          this.longPressTargetType = null;
         }
       }
       
@@ -863,6 +882,7 @@ export class Game {
       this.longPressStartPos = null;
       this.longPressStartTime = null;
       this.longPressTarget = null;
+  this.longPressTargetType = null;
       
       // Treat single-finger touchend as a tap/click if not panning
       if (e.changedTouches.length === 1 && e.touches.length === 0) {
@@ -955,40 +975,40 @@ export class Game {
     
     // Check for context menu click
     if (this.contextMenu) {
-      const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+      const mxMenu = this.mouse.x * this.DPR; const myMenu = this.mouse.y * this.DPR;
       let clickedOnMenu = false;
-      
-      // Check if clicking on any context menu item
+      const menu = this.contextMenu;
+
       for (const rect of this.contextMenuRects) {
-        if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
-          if (this.contextMenu.target) {
-            // Check if this is a parent item with submenu
-            const parentItem = this.contextMenu.items.find(item => item.id === rect.id);
-            if (parentItem && parentItem.submenu) {
-              // Toggle submenu visibility
-              if (this.contextMenu.openSubmenu === rect.id) {
-                this.contextMenu.openSubmenu = undefined; // Close submenu
-              } else {
-                this.contextMenu.openSubmenu = rect.id; // Open submenu
-              }
-              clickedOnMenu = true;
-              return;
-            } else {
-              // Execute action for regular items or submenu items
-              this.handleContextMenuAction(rect.id, this.contextMenu.target);
-              this.contextMenu = null;
-              this.contextMenuRects = [];
-              clickedOnMenu = true;
-              return;
+        if (mxMenu >= rect.x && mxMenu <= rect.x + rect.w && myMenu >= rect.y && myMenu <= rect.y + rect.h) {
+          const item = rect.item;
+          if (!item) continue;
+          const enabled = item.enabled !== false;
+
+          if (!rect.isSubmenu && item.submenu && item.submenu.length) {
+            if (enabled) {
+              menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
+            }
+            clickedOnMenu = true;
+            return;
+          }
+
+          if (enabled) {
+            if (item.action) {
+              item.action({ game: this, target: menu.target, item });
+            } else if (menu.onSelect) {
+              menu.onSelect({ game: this, target: menu.target, item });
             }
           }
+
+          hideContextMenuUI(this);
+          clickedOnMenu = true;
+          return;
         }
       }
-      
+
       if (!clickedOnMenu) {
-        // Click outside context menu - close it
-        this.contextMenu = null;
-        this.contextMenuRects = [];
+        hideContextMenuUI(this);
       }
     }
 
@@ -1011,6 +1031,12 @@ export class Game {
 
     const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
     if (col) { this.selColonist = col; this.follow = true; return; }
+
+    const building = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
+    if (building && showBuildingContextMenu(this, building, this.mouse.x, this.mouse.y)) {
+      return;
+    }
+
     this.placeAtMouse();
   }
 
@@ -1021,6 +1047,18 @@ export class Game {
       if (!c.alive || hiddenInside) continue;
       const d2 = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
       if (d2 <= (c.r + 2) * (c.r + 2)) return c;
+    }
+    return null;
+  }
+
+  findBuildingAt(x: number, y: number, opts?: { includeUnderConstruction?: boolean }): Building | null {
+    const includeUnderConstruction = opts?.includeUnderConstruction ?? false;
+    for (let i = this.buildings.length - 1; i >= 0; i--) {
+      const b = this.buildings[i];
+      if (!includeUnderConstruction && !b.done) continue;
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+        return b;
+      }
     }
     return null;
   }
@@ -1268,7 +1306,6 @@ export class Game {
     // During night time, don't assign new tasks - colonists should be sleeping
     if (this.isNight()) {
       this.setTask(c, 'idle', { x: c.x, y: c.y }); // Stay in place, FSM will handle sleep transition
-      return;
     }
     
     // Prefer an unfinished building with available crew slots
@@ -2449,11 +2486,12 @@ export class Game {
         const rescuer = this.findBestDoctor(colonist) || this.colonists.find(c=>c!==colonist && c.alive && c.state!=='downed');
         if (rescuer) {
           // Placeholder: just move colonist to nearest bed instantly for now
-          const bed = this.buildings.find(b => b.kind === 'bed' && b.done) || this.buildings.find(b=>b.kind==='house' || b.kind==='tent');
+          const bed = this.findBestRestBuilding(colonist, { preferMedical: true, allowShelterFallback: true });
           if (bed) {
             colonist.x = bed.x + bed.w/2;
             colonist.y = bed.y + bed.h/2;
-            this.msg(`${colonist.profile?.name || 'Colonist'} rescued to bed`, 'good');
+            const bedLabel = bed.kind === 'bed' ? (bed.isMedicalBed ? 'medical bed' : 'bed') : bed.name || 'shelter';
+            this.msg(`${colonist.profile?.name || 'Colonist'} rescued to ${bedLabel}`, bed.isMedicalBed ? 'good' : 'info');
           } else {
             this.msg('No bed available for rescue', 'warn');
           }
@@ -2506,19 +2544,64 @@ export class Game {
     return this.findNearestWorkTarget(colonist);
   }
 
-  forceColonistToRest(colonist: Colonist) {
-    // Prefer dedicated beds, then fallback to other sleeping options
-    const restBuilding = this.buildings.find(b => 
-      b.kind === 'bed' && b.done && this.buildingHasSpace(b)
-    ) || this.buildings.find(b => 
-      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq') && 
-      b.done && 
-      this.buildingHasSpace(b)
+  colonistNeedsMedicalBed(colonist: Colonist): boolean {
+    if (colonist.state === 'downed') return true;
+    if (colonist.hp < 60) return true;
+    const injuries = colonist.health?.injuries ?? [];
+    return injuries.some((inj) => inj.bleeding > 0 || inj.severity > 0.25 || inj.infected);
+  }
+
+  findBestRestBuilding(colonist: Colonist, opts?: { requireMedical?: boolean; preferMedical?: boolean; allowShelterFallback?: boolean }): Building | null {
+    const { requireMedical = false, preferMedical = false, allowShelterFallback = true } = opts || {};
+    const beds = this.buildings.filter((b) => b.kind === 'bed' && b.done && this.buildingHasSpace(b, colonist));
+    const medicalBeds = beds.filter((b) => b.isMedicalBed);
+    const standardBeds = beds.filter((b) => !b.isMedicalBed);
+
+    const orderedBeds: Building[] = [];
+    if (requireMedical) {
+      orderedBeds.push(...medicalBeds);
+    } else if (preferMedical && medicalBeds.length > 0) {
+      orderedBeds.push(...medicalBeds, ...standardBeds);
+    } else {
+      orderedBeds.push(...standardBeds, ...medicalBeds);
+    }
+
+    const nearestFrom = (list: Building[]): Building | null => {
+      let best: Building | null = null;
+      let bestDist = Infinity;
+      for (const b of list) {
+        const c = this.centerOf(b);
+        const d = Math.hypot(c.x - colonist.x, c.y - colonist.y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = b;
+        }
+      }
+      return best;
+    };
+
+    const bed = nearestFrom(orderedBeds);
+    if (bed) return bed;
+
+    if (!allowShelterFallback) return null;
+
+    const shelters = this.buildings.filter((b) =>
+      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq' || b.kind === 'infirmary') &&
+      b.done &&
+      this.buildingHasSpace(b, colonist)
     );
+
+    return nearestFrom(shelters);
+  }
+
+  forceColonistToRest(colonist: Colonist) {
+    const needsMedical = this.colonistNeedsMedicalBed(colonist);
+    const restBuilding = this.findBestRestBuilding(colonist, { preferMedical: needsMedical, allowShelterFallback: true });
     
     if (restBuilding) {
       this.setTask(colonist, 'rest', restBuilding);
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to rest`, 'info');
+      const targetLabel = restBuilding.kind === 'bed' ? (restBuilding.isMedicalBed ? 'medical bed' : 'bed') : restBuilding.name || restBuilding.kind;
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to ${targetLabel}`, needsMedical ? 'info' : 'info');
     } else {
       this.msg('No available sleeping quarters', 'warn');
     }
@@ -2557,17 +2640,13 @@ export class Game {
   }
 
   sendColonistToBed(colonist: Colonist) {
-    const bed = this.buildings.find(b => 
-      b.kind === 'bed' && b.done && this.buildingHasSpace(b)
-    ) || this.buildings.find(b => 
-      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq') && 
-      b.done && 
-      this.buildingHasSpace(b)
-    );
+    const preferMedical = this.colonistNeedsMedicalBed(colonist);
+    const bed = this.findBestRestBuilding(colonist, { preferMedical, allowShelterFallback: true });
 
     if (bed) {
       this.setTask(colonist, 'rest', bed);
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to ${bed.kind === 'bed' ? 'bed' : 'shelter'}`, 'info');
+      const label = bed.kind === 'bed' ? (bed.isMedicalBed ? 'medical bed' : 'bed') : 'shelter';
+      this.msg(`${colonist.profile?.name || 'Colonist'} going to ${label}`, 'info');
     } else {
       this.msg('No available beds', 'warn');
     }
@@ -2616,16 +2695,27 @@ export class Game {
 
   // Assign specific medical treatment
   assignMedicalTreatment(patient: Colonist, treatmentId: string) {
-    const job = medicalSystem.forceAssignTreatment(patient, treatmentId);
+    // Find a suitable doctor
+    const doctor = this.findBestDoctor(patient);
+    if (!doctor) {
+      this.msg(`No available doctor for treatment`, 'warn');
+      return;
+    }
+    
+    const job = medicalWorkGiver.createForcedJob(doctor, patient, treatmentId);
     if (job) {
-      // Find a suitable doctor
-      const doctor = this.findBestDoctor(patient);
-      if (doctor) {
-        this.setTask(doctor, 'medical', { patient, treatment: job.treatment });
-        this.msg(`${doctor.profile?.name || 'Doctor'} treating ${patient.profile?.name || 'patient'} with ${job.treatment.name}`, 'info');
-      } else {
-        this.msg(`No available doctor for ${job.treatment.name}`, 'warn');
-      }
+      // Reserve the job and assign it to the doctor
+      medicalWorkGiver.reserveJob(job, doctor);
+      (doctor as any).medicalJob = job;
+      
+      // Force the doctor into doctoring state immediately
+      // Clear their current task and path
+      doctor.task = null;
+      doctor.target = null;
+      this.clearPath(doctor);
+      
+      // The FSM will pick up the medicalJob on next update and enter doctoring state
+      this.msg(`${doctor.profile?.name || 'Doctor'} treating ${patient.profile?.name || 'patient'} with ${job.treatment?.name || 'treatment'}`, 'info');
     } else {
       this.msg(`Cannot apply ${treatmentId} treatment`, 'warn');
     }
@@ -2638,13 +2728,49 @@ export class Game {
       return;
     }
 
+    // Find most urgent injury and create a forced job for it
     const doctor = this.findBestDoctor(patient);
-    if (doctor) {
-      (patient as any).needsComprehensiveCare = true;
-      this.setTask(doctor, 'medicalMultiple', { patient });
+    if (!doctor) {
+      this.msg('No available doctor for comprehensive care', 'warn');
+      return;
+    }
+
+    // Prioritize most severe/urgent injury first
+    const sortedInjuries = [...patient.health.injuries].sort((a, b) => {
+      // Bleeding + severity combo
+      const urgencyA = (a.bleeding || 0) * 2 + (a.severity || 0);
+      const urgencyB = (b.bleeding || 0) * 2 + (b.severity || 0);
+      return urgencyB - urgencyA;
+    });
+
+    const mostUrgentInjury = sortedInjuries[0];
+    
+    // Determine best treatment for this injury
+    let treatmentId = 'bandage_wound';
+    if (mostUrgentInjury.infected) {
+      treatmentId = 'treat_infection';
+    } else if (mostUrgentInjury.type === 'gunshot') {
+      treatmentId = 'surgical_repair';
+    } else if (mostUrgentInjury.bleeding > 0) {
+      treatmentId = 'bandage_wound';
+    } else if (mostUrgentInjury.severity > 0.6) {
+      treatmentId = 'advanced_treatment';
+    }
+
+    // Create forced job for the most urgent injury
+    const job = medicalWorkGiver.createForcedJob(doctor, patient, treatmentId);
+    if (job) {
+      medicalWorkGiver.reserveJob(job, doctor);
+      (doctor as any).medicalJob = job;
+      
+      // Clear doctor's current task
+      doctor.task = null;
+      doctor.target = null;
+      this.clearPath(doctor);
+      
       this.msg(`${doctor.profile?.name || 'Doctor'} providing comprehensive care to ${patient.profile?.name || 'patient'}`, 'info');
     } else {
-      this.msg('No available doctor for comprehensive care', 'warn');
+      this.msg('Failed to create medical job', 'warn');
     }
   }
 
@@ -2694,8 +2820,14 @@ export class Game {
     if (progress >= 1) return; // Don't draw when complete
     
     // Convert world position to screen position
-    const screenX = (this.longPressTarget.x - this.camera.x) * this.camera.zoom;
-    const screenY = (this.longPressTarget.y - this.camera.y) * this.camera.zoom;
+    const target = this.longPressTarget;
+    const isBuildingTarget = this.longPressTargetType === 'building';
+    const worldPos = isBuildingTarget && target
+      ? this.centerOf(target as Building)
+      : { x: (target as Colonist).x, y: (target as Colonist).y };
+
+    const screenX = (worldPos.x - this.camera.x) * this.camera.zoom;
+    const screenY = (worldPos.y - this.camera.y) * this.camera.zoom;
     
     ctx.save();
     
