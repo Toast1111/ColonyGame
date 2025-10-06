@@ -1,4 +1,6 @@
 import { T } from "../game/constants";
+import type { TerrainGrid } from "../game/terrain";
+import { calculateMovementCost, isTerrainPassable } from "../game/terrain";
 
 export interface Grid {
   cols: number;
@@ -11,6 +13,8 @@ export interface Grid {
   sectionCols: number;
   sectionRows: number;
   dirtyFlags: Uint8Array; // Track which sections need rebuilding
+  // NEW: Optional terrain grid for biome-based movement costs
+  terrainGrid?: TerrainGrid;
 }
 
 function h(ax: number, ay: number, bx: number, by: number) {
@@ -47,6 +51,40 @@ export function clearGrid(grid: Grid): void {
   grid.cost.fill(1.0);
   grid.minCost = 1.0;
   grid.dirtyFlags.fill(1); // Mark all sections as dirty after clear
+}
+
+/**
+ * Sync terrain grid costs to pathfinding grid
+ * Call this after modifying terrain or floors to update pathfinding
+ */
+export function syncTerrainToGrid(grid: Grid): void {
+  if (!grid.terrainGrid) return;
+  
+  const { cols, rows, terrainGrid } = grid;
+  let minCost = Infinity;
+  
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+      
+      // Calculate cost from terrain + floor layers
+      const cost = calculateMovementCost(terrainGrid, x, y);
+      grid.cost[idx] = cost;
+      
+      // Track minimum cost for A* heuristic admissibility
+      if (cost < minCost && cost > 0) {
+        minCost = cost;
+      }
+      
+      // Mark impassable terrain as solid
+      if (!isTerrainPassable(terrainGrid, x, y)) {
+        grid.solid[idx] = 1;
+      }
+    }
+  }
+  
+  grid.minCost = minCost;
+  grid.dirtyFlags.fill(1); // Mark all sections dirty
 }
 
 // Helper function to mark sections as dirty based on world coordinates
@@ -526,5 +564,189 @@ export function aStar(
       }
     }
   }
+  return null;
+}
+
+/**
+ * Grid-based pathfinding specifically for enemies.
+ * Returns a path of tile centers that forces grid-aligned movement (zigzag pattern).
+ * This prevents the "snap-back" issue when paths are recalculated during target movement.
+ * 
+ * Key differences from regular pathfinding:
+ * - Always returns exact tile centers
+ * - No smoothing or interpolation
+ * - 8-directional movement for more natural diagonal paths
+ * - No road optimization (enemies don't prefer roads)
+ * - REGION-AWARE: Checks reachability before running A* (major optimization!)
+ * 
+ * @param g - Pathfinding grid
+ * @param fx - Start X (world coordinates)
+ * @param fy - Start Y (world coordinates)
+ * @param tx - Target X (world coordinates)
+ * @param ty - Target Y (world coordinates)
+ * @param regionManager - Optional region manager for reachability check (highly recommended!)
+ */
+export function computeEnemyPath(
+  g: Grid,
+  fx: number,
+  fy: number,
+  tx: number,
+  ty: number,
+  regionManager?: any  // RegionManager type (avoiding circular dependency)
+): { x: number; y: number }[] | null {
+  const { cols, rows } = g;
+
+  // Convert to grid coordinates
+  const start = { x: Math.floor(fx / T), y: Math.floor(fy / T) };
+  const goal = { x: Math.floor(tx / T), y: Math.floor(ty / T) };
+
+  // Validate coordinates
+  if (start.x < 0 || start.y < 0 || start.x >= cols || start.y >= rows) return null;
+  if (goal.x < 0 || goal.y < 0 || goal.x >= cols || goal.y >= rows) return null;
+
+  const sId = start.y * cols + start.x;
+  const gId = goal.y * cols + goal.x;
+
+  // If already at goal
+  if (sId === gId) return null;
+
+  // Check if start or goal is blocked
+  if (g.solid[sId] || g.solid[gId]) return null;
+
+  // OPTIMIZATION: Check region reachability BEFORE running expensive A*
+  // This prevents wasting CPU on impossible paths (e.g., enemy in different region)
+  if (regionManager && regionManager.isEnabled && regionManager.isEnabled()) {
+    const reachable = regionManager.isReachable(fx, fy, tx, ty);
+    if (!reachable) {
+      // Target is in a different, unreachable region - no path exists
+      return null;
+    }
+  }
+
+  // A* data structures
+  const gScore = new Float32Array(cols * rows).fill(Infinity);
+  const fScore = new Float32Array(cols * rows).fill(Infinity);
+  const came = new Int32Array(cols * rows).fill(-1);
+  const closed = new Uint8Array(cols * rows);
+  const open: number[] = [];
+
+  gScore[sId] = 0;
+  fScore[sId] = h(start.x, start.y, goal.x, goal.y);
+  open.push(sId);
+
+  // Binary heap helpers
+  const push = (id: number) => {
+    open.push(id);
+    let i = open.length - 1;
+    while (i > 0) {
+      const p = ((i - 1) >> 1);
+      if (fScore[open[p]] <= fScore[open[i]]) break;
+      const tmp = open[p]; open[p] = open[i]; open[i] = tmp;
+      i = p;
+    }
+  };
+
+  const popBest = (): number => {
+    if (!open.length) return -1;
+    const best = open[0];
+    const last = open.pop()!;
+    if (open.length > 0) {
+      open[0] = last;
+      let i = 0;
+      while (true) {
+        const l = (i << 1) + 1;
+        const r = (i << 1) + 2;
+        let smallest = i;
+        if (l < open.length && fScore[open[l]] < fScore[open[smallest]]) smallest = l;
+        if (r < open.length && fScore[open[r]] < fScore[open[smallest]]) smallest = r;
+        if (smallest === i) break;
+        const tmp = open[i]; open[i] = open[smallest]; open[smallest] = tmp;
+        i = smallest;
+      }
+    }
+    return best;
+  };
+
+  const passable = (gx: number, gy: number): boolean => {
+    if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) return false;
+    return !g.solid[gy * cols + gx];
+  };
+
+  // 8-directional movement for more natural diagonal movement
+  const neighbors = [
+    [1, 0],   // East
+    [-1, 0],  // West
+    [0, 1],   // South
+    [0, -1],  // North
+    [1, 1],   // Southeast
+    [1, -1],  // Northeast
+    [-1, 1],  // Southwest
+    [-1, -1]  // Northwest
+  ] as const;
+
+  while (open.length) {
+    const cur = popBest();
+    if (cur === -1) break;
+    if (closed[cur]) continue;
+    closed[cur] = 1;
+
+    const cx = cur % cols;
+    const cy = (cur / cols) | 0;
+
+    if (cur === gId) {
+      // Reconstruct path - return ONLY tile centers, no interpolation
+      const path: { x: number; y: number }[] = [];
+      let id = cur;
+      while (id !== -1) {
+        const gx = id % cols;
+        const gy = (id / cols) | 0;
+        path.push({ x: gx * T + T / 2, y: gy * T + T / 2 });
+        id = came[id];
+      }
+      path.reverse();
+
+      // Remove start point if enemy is already very close to it
+      if (path.length > 1) {
+        const firstDist = Math.hypot(path[0].x - fx, path[0].y - fy);
+        if (firstDist < T * 0.3) {
+          path.shift();
+        }
+      }
+
+      return path.length > 0 ? path : null;
+    }
+
+    for (const [dx, dy] of neighbors) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (!passable(nx, ny)) continue;
+
+      // For diagonal movement, check if path is blocked by corners
+      if (dx !== 0 && dy !== 0) {
+        // Prevent cutting through diagonal walls
+        if (!passable(cx + dx, cy) && !passable(cx, cy + dy)) continue;
+      }
+
+      const ni = ny * cols + nx;
+
+      // Diagonal moves cost more (sqrt(2) ≈ 1.414)
+      const isDiagonal = dx !== 0 && dy !== 0;
+      const moveCost = isDiagonal ? 1.414 : 1.0;
+      const stepCost = moveCost * (g.cost[ni] || 1.0);
+      const tentative = gScore[cur] + stepCost;
+
+      if (tentative < gScore[ni]) {
+        came[ni] = cur;
+        gScore[ni] = tentative;
+        
+        // Use octile distance for 8-directional heuristic
+        const heuristic = h(nx, ny, goal.x, goal.y) * Math.max(0.0001, g.minCost) * 0.9999;
+        fScore[ni] = tentative + heuristic;
+
+        push(ni);
+      }
+    }
+  }
+
   return null;
 }

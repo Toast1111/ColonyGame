@@ -2080,6 +2080,67 @@ export class Game {
     }
 
     for (const e of this.enemies) drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
+    
+    // Debug: Enemy paths and info
+    if (this.debug.colonists) { // Reuse colonists debug flag for enemies too
+      ctx.save();
+      ctx.font = '9px monospace';
+      
+      for (const e of this.enemies) {
+        const enemyAny = e as any;
+        const path = enemyAny.path;
+        
+        // Draw enemy path
+        if (path && path.length > 0) {
+          ctx.strokeStyle = '#ff4444';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(e.x, e.y);
+          for (const node of path) {
+            ctx.lineTo(node.x, node.y);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+          
+          // Draw path nodes
+          for (let i = 0; i < path.length; i++) {
+            const node = path[i];
+            ctx.fillStyle = i === enemyAny.pathIndex ? '#ff0000' : '#ff8888';
+            ctx.fillRect(node.x - 2, node.y - 2, 4, 4);
+          }
+        }
+        
+        // Draw enemy info
+        const x = e.x - 40;
+        let y = e.y - e.r - 35;
+        const lineHeight = 11;
+        
+        const textLines = [
+          `HP: ${Math.floor(e.hp)}`,
+          `Pos: ${Math.floor(e.x)},${Math.floor(e.y)}`,
+          `Target: ${e.target ? (e.target as any).kind || 'colonist' : 'none'}`,
+          `PathIdx: ${enemyAny.pathIndex ?? 'none'}/${path?.length ?? 0}`,
+          `Repath: ${enemyAny.repath ? enemyAny.repath.toFixed(1) + 's' : 'none'}`,
+          `Stuck: ${enemyAny.stuckTimer ? enemyAny.stuckTimer.toFixed(1) + 's' : 'no'}`
+        ];
+        
+        // Background
+        const bgWidth = 120;
+        const bgHeight = textLines.length * lineHeight + 4;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
+        ctx.fillRect(x - 2, y - 2, bgWidth, bgHeight);
+        
+        // Text
+        ctx.fillStyle = '#ff4444';
+        for (let i = 0; i < textLines.length; i++) {
+          ctx.fillText(textLines[i], x, y + i * lineHeight + 10);
+        }
+      }
+      
+      ctx.restore();
+    }
+    
     drawBullets(ctx, this.bullets);
     
     // Draw global particles (muzzle flash, impact effects)

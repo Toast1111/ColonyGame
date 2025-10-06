@@ -2,6 +2,7 @@ import { dist2 } from "../core/utils";
 import { T } from "../game/constants";
 import type { Building, Enemy, Colonist } from "../game/types";
 import { isDoorBlocking, isNearDoor, attackDoor } from "../game/systems/doorSystem";
+import { computeEnemyPath } from "../core/pathfinding";
 
 // Helper function to check if a position would collide with buildings (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -24,8 +25,8 @@ function wouldCollideWithBuildings(game: any, x: number, y: number, radius: numb
   return false;
 }
 
-const GOAL_REPATH_EPS = 24;
-const PATH_NODE_EPS = 0.75;
+const GOAL_REPATH_EPS = 48; // Increased threshold - only repath if target moves significantly
+const PATH_NODE_EPS = 4;    // Smaller tolerance for reaching nodes (grid-aligned)
 const PATH_SPEED_BONUS = 25;
 const STUCK_RESET_TIME = 0.75;
 
@@ -44,10 +45,20 @@ function ensureEnemyPath(game: any, e: Enemy, target: { x: number; y: number }, 
   const pathInvalid = !enemyAny.path || enemyAny.pathIndex == null || enemyAny.pathIndex >= enemyAny.path.length;
 
   if (goalChanged || pathInvalid || (enemyAny.repath ?? 0) <= 0) {
-    if (typeof game.computePath !== "function") return false;
-    const newPath = game.computePath(e.x, e.y, target.x, target.y);
+    // Use the new grid-based pathfinding with region manager optimization
+    if (!game.grid) return false;
+    const newPath = computeEnemyPath(
+      game.grid, 
+      e.x, 
+      e.y, 
+      target.x, 
+      target.y,
+      game.regionManager  // Pass region manager for reachability optimization
+    );
+    
     if (newPath && newPath.length) {
-      while (newPath.length && Math.hypot(newPath[0].x - e.x, newPath[0].y - e.y) < 8) {
+      // Remove nodes we're already past
+      while (newPath.length && Math.hypot(newPath[0].x - e.x, newPath[0].y - e.y) < T * 0.25) {
         newPath.shift();
       }
       if (!newPath.length) {
@@ -58,12 +69,12 @@ function ensureEnemyPath(game: any, e: Enemy, target: { x: number; y: number }, 
       enemyAny.path = newPath;
       enemyAny.pathIndex = 0;
       enemyAny.pathGoal = { x: target.x, y: target.y };
-      enemyAny.repath = 0.9 + Math.random() * 0.6;
+      enemyAny.repath = 1.5 + Math.random() * 1.0; // Longer repath interval
       return true;
     }
     enemyAny.path = undefined;
     enemyAny.pathIndex = undefined;
-    enemyAny.repath = 0.3 + Math.random() * 0.3;
+    enemyAny.repath = 0.5 + Math.random() * 0.5;
     return false;
   }
 
@@ -108,8 +119,10 @@ function moveEnemyAlongPath(game: any, e: Enemy, dt: number): number {
 
   const step = speed * dt;
 
-  const tolerance = Math.max(step + 0.1, PATH_NODE_EPS);
+  // Grid-aligned movement: smaller tolerance to ensure we hit node centers
+  const tolerance = PATH_NODE_EPS;
   if (dist <= tolerance) {
+    // Snap exactly to the node center for grid-aligned movement
     e.x = node.x;
     e.y = node.y;
     enemyAny.pathIndex = pathIndex + 1;
@@ -118,9 +131,24 @@ function moveEnemyAlongPath(game: any, e: Enemy, dt: number): number {
       enemyAny.pathIndex = undefined;
     }
   } else if (dist > 0) {
+    // Move directly toward node center
     const inv = 1 / dist;
-    e.x += dx * inv * step;
-    e.y += dy * inv * step;
+    const moveX = dx * inv * step;
+    const moveY = dy * inv * step;
+    
+    // Check if we would overshoot - if so, snap to the node
+    if (Math.hypot(moveX, moveY) >= dist) {
+      e.x = node.x;
+      e.y = node.y;
+      enemyAny.pathIndex = pathIndex + 1;
+      if (enemyAny.pathIndex >= path.length) {
+        enemyAny.path = undefined;
+        enemyAny.pathIndex = undefined;
+      }
+    } else {
+      e.x += moveX;
+      e.y += moveY;
+    }
   }
 
   return Math.hypot(e.x - prevX, e.y - prevY);
