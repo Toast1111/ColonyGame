@@ -1,5 +1,7 @@
 import { COLORS, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Message, Particle } from "./types";
+import type { TerrainGrid } from "./terrain";
+import { getFloorTypeFromId, FloorType, FLOOR_VISUALS } from "./terrain";
 import { ImageAssets } from "../assets/images";
 import { getColonistMood } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
@@ -40,6 +42,60 @@ export function drawGround(ctx: CanvasRenderingContext2D) {
   }
   ctx.stroke();
   ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+// Render floors (paths, roads, wooden floors, etc.)
+export function drawFloors(ctx: CanvasRenderingContext2D, terrainGrid: TerrainGrid, camera: Camera) {
+  if (!terrainGrid) return;
+  
+  ctx.save();
+  
+  // Calculate visible bounds for performance
+  const startX = Math.max(0, Math.floor(camera.x / T));
+  const startY = Math.max(0, Math.floor(camera.y / T));
+  const endX = Math.min(terrainGrid.cols, Math.ceil((camera.x + ctx.canvas.width / camera.zoom) / T) + 1);
+  const endY = Math.min(terrainGrid.rows, Math.ceil((camera.y + ctx.canvas.height / camera.zoom) / T) + 1);
+  
+  // Draw each floor tile
+  for (let gy = startY; gy < endY; gy++) {
+    for (let gx = startX; gx < endX; gx++) {
+      const idx = gy * terrainGrid.cols + gx;
+      const floorType = getFloorTypeFromId(terrainGrid.floors[idx]);
+      
+      // Skip empty floor tiles
+      if (floorType === FloorType.NONE) continue;
+      
+      const visual = FLOOR_VISUALS[floorType];
+      if (!visual) continue;
+      
+      const wx = gx * T;
+      const wy = gy * T;
+      
+      // Draw floor tile
+      ctx.fillStyle = visual.color;
+      ctx.fillRect(wx, wy, T, T);
+      
+      // Add pattern/texture based on floor type
+      if (visual.pattern === 'stripes' && visual.secondaryColor) {
+        ctx.fillStyle = visual.secondaryColor;
+        ctx.fillRect(wx, wy, T, T / 4);
+        ctx.fillRect(wx, wy + T / 2, T, T / 4);
+      } else if (visual.pattern === 'noise' && visual.secondaryColor) {
+        // Simple noise pattern
+        ctx.fillStyle = visual.secondaryColor;
+        if ((gx + gy) % 2 === 0) {
+          ctx.fillRect(wx + T / 4, wy + T / 4, T / 2, T / 2);
+        }
+      }
+      
+      // Subtle border to distinguish tiles
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(wx, wy, T, T);
+    }
+  }
+  
   ctx.restore();
 }
 

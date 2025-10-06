@@ -1243,6 +1243,42 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
           if (b.kind === 'door') { initializeDoor(b); }
           
+          // Handle floor construction completion - convert to terrain floor
+          if ((b as any).isFloorConstruction && (b as any).floorType) {
+            const floorTypeStr = (b as any).floorType as string;
+            const floorTypeMap: Record<string, number> = {
+              'BASIC_PATH': 1,
+              'STONE_ROAD': 2,
+              'WOODEN_FLOOR': 3,
+              'CONCRETE': 4,
+              'METAL_FLOOR': 5,
+              'CARPET': 6
+            };
+            const floorTypeId = floorTypeMap[floorTypeStr] || 1;
+            
+            // Get tile position
+            const tx = Math.floor(b.x / 32);
+            const ty = Math.floor(b.y / 32);
+            
+            // Set floor in terrain grid
+            if (game.terrainGrid && tx >= 0 && ty >= 0 && tx < game.grid.cols && ty < game.grid.rows) {
+              const idx = ty * game.grid.cols + tx;
+              game.terrainGrid.floors[idx] = floorTypeId;
+              
+              // Sync terrain to pathfinding grid
+              (game as any).syncTerrainToGrid?.();
+              
+              // Remove the construction marker building
+              const buildingIdx = game.buildings.indexOf(b);
+              if (buildingIdx !== -1) {
+                game.buildings.splice(buildingIdx, 1);
+              }
+              
+              // Show completion message
+              game.msg(`Floor construction complete`, 'good');
+            }
+          }
+          
           // Check if colonist is stuck inside the building and move them to safety
           if (wouldCollideWithBuildings(game, c.x, c.y, c.r)) {
             // Find a safe position around the building

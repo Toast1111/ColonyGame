@@ -111,17 +111,46 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
   healRange: 140,
   popCap: 2 // allow up to 2 patients inside for direct healing
   },
-  path: { 
-    category:'Utility', 
-    name: 'Path', 
-    description: 'Improves colonist movement speed by 50%. Cheap way to optimize traffic flow.',
-    key:'0', 
-    cost: { wood: 0}, 
-    hp: 1, 
-    size: { w: 1, h: 1 }, 
-    build: 5, 
-    color: '#475569',
-    speedBonus: 1.5
+  // ===== FLOORS (Terrain System) =====
+  // These are built using the terrain system, not as buildings
+  floor_path: {
+    category: 'Flooring',
+    name: 'Dirt Path',
+    description: 'Basic path that speeds up movement. Costs nothing but provides modest speed boost.',
+    key: '0',
+    cost: { wood: 0 },
+    hp: 1,
+    size: { w: 1, h: 1 },
+    build: 3,
+    color: '#9ca3af',
+    isFloor: true,
+    floorType: 'BASIC_PATH' as const
+  },
+  floor_stone_road: {
+    category: 'Flooring',
+    name: 'Stone Road',
+    description: 'Premium paved road. Fast movement speed, very durable. Great for high-traffic areas.',
+    key: '9',
+    cost: { stone: 2 },
+    hp: 1,
+    size: { w: 1, h: 1 },
+    build: 8,
+    color: '#6b7280',
+    isFloor: true,
+    floorType: 'STONE_ROAD' as const
+  },
+  floor_wooden: {
+    category: 'Flooring',
+    name: 'Wooden Floor',
+    description: 'Interior flooring. Comfortable and attractive, provides minor speed bonus.',
+    key: '8',
+    cost: { wood: 3 },
+    hp: 1,
+    size: { w: 1, h: 1 },
+    build: 5,
+    color: '#92400e',
+    isFloor: true,
+    floorType: 'WOODEN_FLOOR' as const
   },
   bed: {
     category: 'Furniture',

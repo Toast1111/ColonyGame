@@ -1,4 +1,4 @@
-import { aStar, clearGrid, markRectSolid, markCircleSolid, markRoadPath } from "../../core/pathfinding";
+import { aStar, clearGrid, markRectSolid, markCircleSolid, markRoadPath, syncTerrainToGrid } from "../../core/pathfinding";
 import { T } from "../constants";
 import type { Colonist } from "../types";
 import type { Game } from "../Game";
@@ -6,6 +6,12 @@ import { isDoorBlocking } from "../systems/doorSystem";
 
 export function rebuildNavGrid(game: Game) {
   clearGrid(game.grid);
+  
+  // Restore terrain/floor costs from terrain grid after clearing
+  if (game.grid.terrainGrid) {
+    syncTerrainToGrid(game.grid);
+  }
+  
   // Buildings
   for (const b of game.buildings) {
     // Doors are treated as passable by pathfinding (colonists will open them)

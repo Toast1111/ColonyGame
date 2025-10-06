@@ -242,7 +242,13 @@ function clearSection(grid: Grid, sectionX: number, sectionY: number): void {
     for (let gx = startX; gx < endX; gx++) {
       const idx = gy * grid.cols + gx;
       grid.solid[idx] = 0;
-      grid.cost[idx] = 1.0; // Reset to grass cost
+      
+      // Restore terrain/floor costs from terrain grid, or default to 1.0
+      if (grid.terrainGrid) {
+        grid.cost[idx] = calculateMovementCost(grid.terrainGrid, gx, gy);
+      } else {
+        grid.cost[idx] = 1.0; // Fallback to grass cost
+      }
     }
   }
 }

@@ -1,6 +1,8 @@
 import { BUILD_TYPES, hasCost, makeBuilding, payCost } from "../buildings";
 import { T, WORLD } from "../constants";
 import { clamp } from "../../core/utils";
+import { setFloorRect, FloorType, getFloorTypeId, getFloorTypeFromId } from "../terrain";
+import { syncTerrainToGrid } from "../../core/pathfinding";
 import type { Building } from "../types";
 import type { Game } from "../Game";
 
@@ -26,6 +28,61 @@ export function canPlace(game: Game, def: Building, x: number, y: number) {
 // Immediate placement (desktop or confirmed touch)
 export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number, wy: number, rot?: 0|90|180|270) {
   const def = BUILD_TYPES[t]; if (!def) return;
+  
+  // Check if this is a floor type (terrain system)
+  if (def.isFloor && def.floorType) {
+    const gx = Math.floor(wx / T);
+    const gy = Math.floor(wy / T);
+    
+    // Check bounds
+    if (gx < 0 || gy < 0 || gx >= game.grid.cols || gy >= game.grid.rows) {
+      game.toast("Can't place here");
+      return;
+    }
+    
+    // Check if floor already exists
+    const idx = gy * game.grid.cols + gx;
+    const currentFloor = getFloorTypeFromId(game.terrainGrid.floors[idx]);
+    if (currentFloor !== FloorType.NONE) {
+      game.toast("Floor already exists here");
+      return;
+    }
+    
+    // Check if overlaps non-floor building
+    const wx_tile = gx * T;
+    const wy_tile = gy * T;
+    const overlapsBuilding = game.buildings.some(b => {
+      const overlap = !(wx_tile + T <= b.x || wx_tile >= b.x + b.w || wy_tile + T <= b.y || wy_tile >= b.y + b.h);
+      return overlap;
+    });
+    
+    if (overlapsBuilding) {
+      game.toast("Can't place floor under building");
+      return;
+    }
+    
+    // Check cost (don't pay yet - pay when colonist starts building)
+    if (!hasCost(game.RES, def.cost)) { 
+      game.toast('Not enough resources'); 
+      return; 
+    }
+    
+    // Pay cost immediately (resources are reserved for construction)
+    payCost(game.RES, def.cost);
+    
+    // Create a construction marker building
+    // This will be built by colonists, then converted to a floor
+    const floorBuilding = makeBuilding(t, wx_tile + 1, wy_tile + 1);
+    (floorBuilding as any).isFloorConstruction = true; // Flag to identify floor constructions
+    (floorBuilding as any).floorType = def.floorType;
+    
+    game.buildings.push(floorBuilding);
+    game.rebuildNavGrid();
+    game.toast(`Placed ${def.name} blueprint`);
+    return;
+  }
+  
+  // Regular building placement
   const b = makeBuilding(t, wx, wy);
   if (rot) { (b as any).rot = rot; if (rot === 90 || rot === 270) { const tmp = b.w; b.w = b.h; b.h = tmp; } }
   if (!canPlace(game, b as any, b.x, b.y)) { game.toast("Can't place here"); return; }
@@ -92,39 +149,84 @@ export function confirmPending(game: Game) {
 export function cancelPending(game: Game) { game.pendingPlacement = null; }
 
 export function paintPathAtMouse(game: Game, force = false) {
-  const gx = Math.floor(game.mouse.wx / T); const gy = Math.floor(game.mouse.wy / T);
+  const gx = Math.floor(game.mouse.wx / T); 
+  const gy = Math.floor(game.mouse.wy / T);
+  
   if (!force && game.lastPaintCell && game.lastPaintCell.gx === gx && game.lastPaintCell.gy === gy) return;
+  
+  // Determine floor type from selected build
+  const selectedDef = game.selectedBuild ? BUILD_TYPES[game.selectedBuild] : null;
+  let floorType = FloorType.BASIC_PATH; // Default
+  let buildType = game.selectedBuild || 'floor_path';
+  
+  if (selectedDef?.isFloor && selectedDef.floorType) {
+    const floorTypeMap: Record<string, FloorType> = {
+      'BASIC_PATH': FloorType.BASIC_PATH,
+      'STONE_ROAD': FloorType.STONE_ROAD,
+      'WOODEN_FLOOR': FloorType.WOODEN_FLOOR,
+      'CONCRETE': FloorType.CONCRETE,
+      'METAL_FLOOR': FloorType.METAL_FLOOR,
+      'CARPET': FloorType.CARPET
+    };
+    floorType = floorTypeMap[selectedDef.floorType] || FloorType.BASIC_PATH;
+  }
+  
   const tryPlace = (x: number, y: number) => {
-    const wx = x * T + 1, wy = y * T + 1; // slight offset to choose the cell
-    const b = makeBuilding('path' as any, wx, wy);
-    const exists = game.buildings.some(pb => pb.kind === 'path' && pb.x === b.x && pb.y === b.y);
-    if (exists) return;
-    const overlapsBuilding = game.buildings.some(pb => {
-      if (pb.kind === 'path') return false; // Paths can overlap other paths
-      const overlap = !(b.x + b.w <= pb.x || b.x >= pb.x + pb.w || b.y + b.h <= pb.y || b.y >= pb.y + pb.h);
+    // Check if within world bounds
+    if (x < 0 || y < 0 || x >= game.grid.cols || y >= game.grid.rows) return;
+    
+    // Check if there's already a floor here
+    const idx = y * game.grid.cols + x;
+    const existingFloor = getFloorTypeFromId(game.terrainGrid.floors[idx]);
+    if (existingFloor !== FloorType.NONE) return; // Already has a floor
+    
+    // Check if overlaps a building or floor construction
+    const wx = x * T;
+    const wy = y * T;
+    const overlapsBuilding = game.buildings.some(b => {
+      const overlap = !(wx + T <= b.x || wx >= b.x + b.w || wy + T <= b.y || wy >= b.y + b.h);
       return overlap;
     });
-    if (!overlapsBuilding && hasCost(game.RES, BUILD_TYPES['path'].cost)) { 
-      payCost(game.RES, BUILD_TYPES['path'].cost); 
-      game.buildings.push(b); 
-    }
+    
+    if (overlapsBuilding) return;
+    
+    // Check cost (use selected building's cost or default)
+    const cost = selectedDef?.cost || { wood: 0 };
+    if (!hasCost(game.RES, cost)) return;
+    
+    // Pay cost immediately (resources are reserved for construction)
+    payCost(game.RES, cost);
+    
+    // Create construction marker
+    const floorBuilding = makeBuilding(buildType as any, wx + 1, wy + 1);
+    (floorBuilding as any).isFloorConstruction = true;
+    (floorBuilding as any).floorType = selectedDef?.floorType || 'BASIC_PATH';
+    
+    game.buildings.push(floorBuilding);
   };
+  
   if (game.lastPaintCell == null) {
     tryPlace(gx, gy);
     game.lastPaintCell = { gx, gy };
     game.rebuildNavGrid();
     return;
   }
+  
   // Bresenham between last cell and current
   let x0 = game.lastPaintCell.gx, y0 = game.lastPaintCell.gy, x1 = gx, y1 = gy;
   const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
-  const sx = x0 < x1 ? 1 : -1; const sy = y0 < y1 ? 1 : -1;
+  const sx = x0 < x1 ? 1 : -1; 
+  const sy = y0 < y1 ? 1 : -1;
   let err = dx - dy;
+  
   while (true) {
     tryPlace(x0, y0);
     if (x0 === x1 && y0 === y1) break;
-    const e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; }
+    const e2 = 2 * err; 
+    if (e2 > -dy) { err -= dy; x0 += sx; } 
+    if (e2 < dx) { err += dx; y0 += sy; }
   }
+  
   game.lastPaintCell = { gx, gy };
   game.rebuildNavGrid();
 }

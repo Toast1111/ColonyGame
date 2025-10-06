@@ -1,13 +1,15 @@
 import { clamp, dist2, rand, randi } from "../core/utils";
-import { makeGrid } from "../core/pathfinding";
+import { makeGrid, syncTerrainToGrid } from "../core/pathfinding";
+import { makeTerrainGrid, type TerrainGrid } from "./terrain";
 import { rebuildNavGrid as rebuildNavGridNav, computePath as computePathNav, computePathWithDangerAvoidance as computePathWithDangerAvoidanceNav, cellIndexAt as cellIndexAtNav, isBlocked as isBlockedNav } from "./navigation/navGrid";
 import { RegionManager } from "./navigation/regionManager";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
-import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
+import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { drawRegionDebug } from "./navigation/regionDebugRender";
+import { drawTerrainDebug } from "./terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
@@ -100,7 +102,7 @@ export class Game {
   selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
   hotbar: Array<keyof typeof BUILD_TYPES> = ['house', 'farm', 'turret', 'wall', 'stock', 'tent', 'warehouse', 'well', 'infirmary'];
   showBuildMenu = false;
-  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false };
+  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false, terrain: false };
   // selection & camera follow
   selColonist: Colonist | null = null;
   follow = false;
@@ -145,6 +147,13 @@ export class Game {
     window.addEventListener('resize', () => this.handleResize());
     this.bindInput();
     this.newGame();
+    
+    // Link terrain grid to pathfinding grid
+    this.grid.terrainGrid = this.terrainGrid;
+    
+    // Sync terrain costs to pathfinding grid (all grass initially)
+    syncTerrainToGrid(this.grid);
+    
     this.rebuildNavGrid(); 
     
     // Initialize region system after nav grid is built
@@ -525,9 +534,10 @@ export class Game {
         this.pendingPlacement.y = clamp(gy, 0, WORLD.h - h);
         return;
       }
-      // Drag-to-paint paths
+      // Drag-to-paint paths/floors
       if (this.mouse.down) {
-        if (this.selectedBuild === 'path') this.paintPathAtMouse();
+        const def = this.selectedBuild ? BUILD_TYPES[this.selectedBuild] : null;
+        if (def?.isFloor) this.paintPathAtMouse(); // Use paint mode for all floor types
         else if (this.selectedBuild === 'wall') this.paintWallAtMouse();
       }
     });
@@ -654,7 +664,8 @@ export class Game {
           return;
         }
         
-        if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); }
+        const def = this.selectedBuild ? BUILD_TYPES[this.selectedBuild] : null;
+        if (def?.isFloor) { this.paintPathAtMouse(true); } // Floor types use paint mode
         else if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); }
         else {
           // Try to select a colonist; if none under cursor, place building
@@ -1023,8 +1034,9 @@ export class Game {
     }
 
     // Building/selection logic
-  if (this.selectedBuild === 'path') { this.paintPathAtMouse(true); return; }
-  if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); return; }
+    const def = this.selectedBuild ? BUILD_TYPES[this.selectedBuild] : null;
+    if (def?.isFloor) { this.paintPathAtMouse(true); return; } // Floor types use paint mode
+    if (this.selectedBuild === 'wall') { this.paintWallAtMouse(true); return; }
 
   // Start precise placement on touch if nothing active (unless forced desktop mode)
   if (!this.debug.forceDesktopMode && this.isActuallyTouchDevice && this.lastInputWasTouch && this.selectedBuild) { this.placeAtMouse(); return; }
@@ -1448,21 +1460,36 @@ export class Game {
     // Hysteresis to avoid oscillation around a node
     const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
     const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
-    // Movement speed; boost if standing on a path tile
-  let speed = c.speed * ((c as any).fatigueSlow || 1) * this.getMoveSpeedMultiplier(c);
+    
+    // Movement speed with terrain/floor modifiers
+    let baseSpeed = c.speed * ((c as any).fatigueSlow || 1) * this.getMoveSpeedMultiplier(c);
+    let speed = baseSpeed;
     let onPath = false;
+    
+    // Apply floor speed bonus based on terrain cost
     {
       const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);
       const inBounds = gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows;
       if (inBounds) {
         const idx = gy * this.grid.cols + gx;
-        // If cost lowered significantly (<=0.7), treat as path tile and add +25 speed bonus
-        if (this.grid.cost[idx] <= 0.7) {
-          speed += 25;
+        const tileCost = this.grid.cost[idx];
+        
+        // Speed is inversely proportional to cost
+        // Cost of 1.0 (grass) = base speed
+        // Cost of 0.5 (stone road) = 2x speed
+        // Cost of 0.6 (dirt path) = 1.67x speed
+        // Cost of 2.5 (mud) = 0.4x speed
+        if (tileCost > 0 && tileCost < 1.0) {
+          // On a fast surface (floor) - speed boost!
+          speed = baseSpeed / tileCost;
           onPath = true;
-          if (Math.random() < 0.01) { // 1% chance to log
-            console.log(`Colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) on path tile - cost: ${this.grid.cost[idx]}, speed: ${speed}`);
-          }
+        } else if (tileCost > 1.0) {
+          // On slow terrain (mud, etc.) - speed penalty
+          speed = baseSpeed / tileCost;
+        }
+        
+        if (onPath && Math.random() < 0.01) { // 1% chance to log
+          console.log(`Colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) on floor - cost: ${tileCost.toFixed(2)}, speed: ${speed.toFixed(1)} (base: ${baseSpeed.toFixed(1)})`);
         }
       }
     }
@@ -1623,6 +1650,7 @@ export class Game {
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
     if (!consoleOpen && this.keyPressed('r')) { this.debug.regions = !this.debug.regions; this.toast(this.debug.regions ? 'Debug: regions ON' : 'Debug: regions OFF'); }
+    if (!consoleOpen && this.keyPressed('t')) { this.debug.terrain = !this.debug.terrain; this.toast(this.debug.terrain ? 'Debug: terrain ON' : 'Debug: terrain OFF'); }
     if (!consoleOpen && this.keyPressed('k')) { 
       this.debug.forceDesktopMode = !this.debug.forceDesktopMode; 
       this.toast(this.debug.forceDesktopMode ? 'Debug: Force Desktop Mode ON' : 'Debug: Force Desktop Mode OFF'); 
@@ -1721,7 +1749,12 @@ export class Game {
   const { ctx } = this; clear(ctx, this.canvas);
   // Clamp camera each frame (covers zoom changes and touch panning)
   this.clampCameraToWorld();
-    ctx.save(); applyWorldTransform(ctx, this.camera); drawGround(ctx);
+    ctx.save(); applyWorldTransform(ctx, this.camera); 
+    drawGround(ctx);
+    
+    // Draw floors (paths, roads, wooden floors)
+    drawFloors(ctx, this.terrainGrid, this.camera);
+    
     for (const t of this.trees) drawCircle(ctx, t.x, t.y, t.r, COLORS.tree);
     for (const r of this.rocks) drawCircle(ctx, r.x, r.y, r.r, COLORS.rock);
     for (const b of this.buildings) {
@@ -1793,6 +1826,13 @@ export class Game {
     if (this.debug.regions) {
       ctx.save();
       drawRegionDebug(this);
+      ctx.restore();
+    }
+    
+    // Terrain debug visualization
+    if (this.debug.terrain) {
+      ctx.save();
+      drawTerrainDebug(this);
       ctx.restore();
     }
   
@@ -1997,15 +2037,22 @@ export class Game {
           `HP: ${Math.floor(c.hp || 0)}`,
           `Pos: ${Math.floor(c.x)},${Math.floor(c.y)}`,
           `Speed: ${(() => {
-            let speed = c.speed || 0;
+            let baseSpeed = c.speed || 0;
             // Apply fatigue multiplier
-            if (c.fatigueSlow) speed *= c.fatigueSlow;
-            // Apply path speed bonus
+            if (c.fatigueSlow) baseSpeed *= c.fatigueSlow;
+            // Apply equipment speed multiplier
+            baseSpeed *= this.getMoveSpeedMultiplier(c);
+            
+            let speed = baseSpeed;
+            // Apply terrain/floor speed modifier
             const gx = Math.floor(c.x / T);
             const gy = Math.floor(c.y / T);
             if (gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows) {
               const idx = gy * this.grid.cols + gx;
-              if (this.grid.cost[idx] <= 0.7) speed += 25;
+              const tileCost = this.grid.cost[idx];
+              if (tileCost > 0) {
+                speed = baseSpeed / tileCost;
+              }
             }
             return speed.toFixed(1);
           })()}`,
@@ -2200,8 +2247,11 @@ export class Game {
 
   // Pathfinding grid and helpers
   grid = makeGrid();
+  terrainGrid: TerrainGrid = makeTerrainGrid(this.grid.cols, this.grid.rows);
   regionManager = new RegionManager(this.grid);
+  
   rebuildNavGrid() { rebuildNavGridNav(this); }
+  syncTerrainToGrid() { syncTerrainToGrid(this.grid); }
   computePath(sx: number, sy: number, tx: number, ty: number) { return computePathNav(this, sx, sy, tx, ty); }
   
   // Colonist-aware pathfinding that avoids dangerous areas from memory

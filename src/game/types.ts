@@ -17,7 +17,11 @@ export type BuildingDef = {
   size: { w: number; h: number };
   build: number;
   color: string;
-  category?: 'Housing' | 'Production' | 'Defense' | 'Utility' | 'Furniture';
+  category?: 'Housing' | 'Production' | 'Defense' | 'Utility' | 'Furniture' | 'Flooring';
+  deprecated?: boolean; // Flag for deprecated buildings (kept for backward compatibility)
+  // Floor system (terrain-based, not building-based)
+  isFloor?: boolean; // If true, this is a floor type (terrain system)
+  floorType?: 'BASIC_PATH' | 'STONE_ROAD' | 'WOODEN_FLOOR' | 'CONCRETE' | 'METAL_FLOOR' | 'CARPET';
   // optional mechanics
   popCap?: number;
   growTime?: number;
