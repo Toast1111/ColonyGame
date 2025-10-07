@@ -32,11 +32,29 @@ import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/wor
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor } from './systems/doorSystem';
+import { GameState } from './core/GameState';
+import { TimeSystem } from './systems/TimeSystem';
+import { CameraSystem } from './systems/CameraSystem';
+import { ResourceSystem } from './systems/ResourceSystem';
+import { InputManager } from './managers/InputManager';
+import { UIManager } from './managers/UIManager';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
   DPR = 1;
-  camera: Camera = { x: 0, y: 0, zoom: 1 };
+  
+  // Core systems
+  state = new GameState();
+  timeSystem = new TimeSystem();
+  cameraSystem = new CameraSystem();
+  resourceSystem = new ResourceSystem();
+  
+  // Managers
+  inputManager = new InputManager();
+  uiManager = new UIManager();
+  
+  // Camera reference - now returns cameraSystem's camera for backward compatibility
+  get camera(): Camera { return this.cameraSystem.getCameraRef(); }
   
   // UI Scaling system
   uiScale = 1;
@@ -45,20 +63,12 @@ export class Game {
   isTouch = false;
   // Actual touch usage detection (vs just capability)
   isActuallyTouchDevice = false;
-  lastInputWasTouch = false;
-  
-  RES = { wood: 0, stone: 0, food: 0, medicine: 5, herbal: 3 };
-  BASE_STORAGE = 200; // Base storage capacity
-  storageFullWarned = false; // Prevent spam warnings
+  // lastInputWasTouch moved to inputManager (see getter/setter below)
 
   getStorageCapacity(): number {
-    let total = this.BASE_STORAGE;
-    for (const b of this.buildings) {
-      if (b.done && (b as any).storageBonus) {
-        total += (b as any).storageBonus;
-      }
-    }
-    return total;
+    const warehouses = this.state.buildings.filter(b => b.done && b.kind === 'warehouse').length;
+    const tents = this.state.buildings.filter(b => b.done && b.kind === 'tent').length;
+    return this.resourceSystem.getStorageCapacity(warehouses, tents);
   }
 
   getPopulationCap(): number {
@@ -70,76 +80,153 @@ export class Game {
   }
 
   addResource(type: keyof Resources, amount: number): number {
-    const currentTotal = this.RES.wood + this.RES.stone + this.RES.food;
-    const storageLimit = this.getStorageCapacity();
-    const availableSpace = Math.max(0, storageLimit - currentTotal);
-    const actualAmount = Math.min(Math.floor(amount), availableSpace); // Floor to avoid decimals
+    const capacity = this.getStorageCapacity();
+    const actualAmount = this.resourceSystem.addResource(type, amount, capacity);
     
-    if (actualAmount > 0) {
-      (this.RES as any)[type] += actualAmount;
-    }
-    
-    // Only warn once when storage is completely full and we're trying to add more
-    if (actualAmount === 0 && amount > 0 && !this.storageFullWarned) {
+    // Warn if storage full
+    if (actualAmount === 0 && amount > 0) {
       this.msg(`Storage full! Cannot store more ${String(type)}`, 'warn');
-      this.storageFullWarned = true;
-    } else if (actualAmount > 0) {
-      this.storageFullWarned = false; // Reset warning when we can store again
     }
     
     return actualAmount;
   }
-  day = 1; tDay = 0; dayLength = 180; fastForward = 1; paused = false;
-  prevIsNight = false;
 
-  colonists: Colonist[] = [];
-  enemies: Enemy[] = [];
-  trees: Array<{ x: number; y: number; r: number; hp: number; type: 'tree' }> = [];
-  rocks: Array<{ x: number; y: number; r: number; hp: number; type: 'rock' }> = [];
-  buildings: Building[] = [];
-  bullets: Bullet[] = [];
-  particles: Particle[] = [];
-  messages: Message[] = [];
+  // Removed old properties - now using systems via getters
+  // Access state via this.state, time via this.timeSystem, camera via this.cameraSystem, resources via this.resourceSystem
+  
+  // Getter properties for backward compatibility during refactor
+  get colonists(): Colonist[] { return this.state.colonists; }
+  set colonists(value: Colonist[]) { this.state.colonists = value; }
+  
+  get enemies(): Enemy[] { return this.state.enemies; }
+  set enemies(value: Enemy[]) { this.state.enemies = value; }
+  
+  get buildings(): Building[] { return this.state.buildings; }
+  set buildings(value: Building[]) { this.state.buildings = value; }
+  
+  get trees() { return this.state.trees; }
+  set trees(value) { this.state.trees = value; }
+  
+  get rocks() { return this.state.rocks; }
+  set rocks(value) { this.state.rocks = value; }
+  
+  get bullets(): Bullet[] { return this.state.bullets; }
+  set bullets(value: Bullet[]) { this.state.bullets = value; }
+  
+  get particles(): Particle[] { return this.state.particles; }
+  set particles(value: Particle[]) { this.state.particles = value; }
+  
+  get messages(): Message[] { return this.state.messages; }
+  set messages(value: Message[]) { this.state.messages = value; }
+  
+  get RES(): Resources { return this.resourceSystem.getResourcesRef(); }
+  
+  get day(): number { return this.timeSystem.getDay(); }
+  set day(value: number) { this.timeSystem.setDay(value); }
+  
+  get tDay(): number { return this.timeSystem.getTimeOfDay(); }
+  set tDay(value: number) { this.timeSystem.setTimeOfDay(value); }
+  
+  get dayLength(): number { return this.timeSystem.getDayLength(); }
+  
+  get fastForward(): number { return this.timeSystem.getFastForward(); }
+  set fastForward(value: number) { this.timeSystem.setFastForward(value); }
+  
+  get paused(): boolean { return this.timeSystem.isPaused(); }
+  set paused(value: boolean) { this.timeSystem.setPaused(value); }
 
-  selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
-  hotbar: Array<keyof typeof BUILD_TYPES> = ['house', 'farm', 'turret', 'wall', 'stock', 'tent', 'warehouse', 'well', 'infirmary'];
-  showBuildMenu = false;
+  // === UI Manager Property Redirects ===
+  get selectedBuild() { return this.uiManager.selectedBuild; }
+  set selectedBuild(value) { this.uiManager.selectedBuild = value; }
+  
+  get hotbar() { return this.uiManager.hotbar; }
+  set hotbar(value) { this.uiManager.hotbar = value; }
+  
+  get showBuildMenu() { return this.uiManager.showBuildMenu; }
+  set showBuildMenu(value) { this.uiManager.showBuildMenu = value; }
+  
+  get selColonist() { return this.uiManager.selColonist; }
+  set selColonist(value) { this.uiManager.selColonist = value; }
+  
+  get follow() { return this.uiManager.follow; }
+  set follow(value) { this.uiManager.follow = value; }
+  
+  get pendingPlacement() { return this.uiManager.pendingPlacement; }
+  set pendingPlacement(value) { this.uiManager.pendingPlacement = value; }
+  
+  get menuRects() { return this.uiManager.menuRects; }
+  set menuRects(value) { this.uiManager.menuRects = value; }
+  
+  get hotbarRects() { return this.uiManager.hotbarRects; }
+  set hotbarRects(value) { this.uiManager.hotbarRects = value; }
+  
+  get placeUIRects() { return this.uiManager.placeUIRects; }
+  set placeUIRects(value) { this.uiManager.placeUIRects = value; }
+  
+  get colonistPanelRect() { return this.uiManager.colonistPanelRect; }
+  set colonistPanelRect(value) { this.uiManager.colonistPanelRect = value; }
+  
+  get colonistPanelCloseRect() { return this.uiManager.colonistPanelCloseRect; }
+  set colonistPanelCloseRect(value) { this.uiManager.colonistPanelCloseRect = value; }
+  
+  get colonistProfileTab() { return this.uiManager.colonistProfileTab; }
+  set colonistProfileTab(value) { this.uiManager.colonistProfileTab = value; }
+  
+  get colonistTabRects() { return this.uiManager.colonistTabRects; }
+  set colonistTabRects(value) { this.uiManager.colonistTabRects = value; }
+  
+  get contextMenu() { return this.uiManager.contextMenu; }
+  set contextMenu(value) { this.uiManager.contextMenu = value; }
+  
+  get contextMenuRects() { return this.uiManager.contextMenuRects; }
+  set contextMenuRects(value) { this.uiManager.contextMenuRects = value; }
+  
+  get longPressTimer() { return this.uiManager.longPressTimer; }
+  set longPressTimer(value) { this.uiManager.longPressTimer = value; }
+  
+  get longPressStartPos() { return this.uiManager.longPressStartPos; }
+  set longPressStartPos(value) { this.uiManager.longPressStartPos = value; }
+  
+  get longPressStartTime() { return this.uiManager.longPressStartTime; }
+  set longPressStartTime(value) { this.uiManager.longPressStartTime = value; }
+  
+  get longPressTarget() { return this.uiManager.longPressTarget; }
+  set longPressTarget(value) { this.uiManager.longPressTarget = value; }
+  
+  get longPressTargetType() { return this.uiManager.longPressTargetType; }
+  set longPressTargetType(value) { this.uiManager.longPressTargetType = value; }
+  
+  get lastPaintCell() { return this.uiManager.lastPaintCell; }
+  set lastPaintCell(value) { this.uiManager.lastPaintCell = value; }
+  
+  get eraseDragStart() { return this.uiManager.eraseDragStart; }
+  set eraseDragStart(value) { this.uiManager.eraseDragStart = value; }
+  
+  private get pendingDragging() { return this.uiManager.pendingDragging; }
+  private set pendingDragging(value) { this.uiManager.pendingDragging = value; }
+  
+  // === Input Manager Property Redirects ===
+  get mouse() { return this.inputManager.getMouseRef(); }
+  
+  get keyState() { return this.inputManager.getKeyStateRef(); }
+  
+  get once() { 
+    // once is a Set used internally by inputManager, expose for backward compat
+    // but ideally code should use inputManager.keyPressed() instead
+    return new Set<string>(); // Return empty set, actual logic in inputManager
+  }
+  
+  private get touchLastPan() { return this.inputManager.getTouchPan(); }
+  private set touchLastPan(value) { this.inputManager.setTouchPan(value); }
+  
+  private get touchLastDist() { return this.inputManager.getTouchDist(); }
+  private set touchLastDist(value) { this.inputManager.setTouchDist(value); }
+  
+  get lastInputWasTouch(): boolean { return this.inputManager.wasLastInputTouch(); }
+  set lastInputWasTouch(value: boolean) { this.inputManager.setLastInputWasTouch(value); }
+  
+  // Debug flags (keep as is - not part of managers)
   debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false, terrain: false };
-  // selection & camera follow
-  selColonist: Colonist | null = null;
-  follow = false;
-  // Touch gesture state
-  private touchLastPan: { x: number; y: number } | null = null;
-  private touchLastDist: number | null = null;
-
-  keyState: Record<string, boolean> = {};
-  once = new Set<string>();
-  mouse = { x: 0, y: 0, wx: 0, wy: 0, down: false, rdown: false };
-  lastPaintCell: { gx: number; gy: number } | null = null;
-  eraseDragStart: { x: number; y: number } | null = null;
-  menuRects: Array<{ key: keyof typeof BUILD_TYPES; x: number; y: number; w: number; h: number }> = [];
-  hotbarRects: Array<{ index: number; x: number; y: number; w: number; h: number }> = [];
-  // Precise placement (touch): pending building location to adjust before confirm
-  pendingPlacement: { key: keyof typeof BUILD_TYPES; x: number; y: number; rot?: 0|90|180|270 } | null = null;
-  placeUIRects: Array<{ id: 'up'|'down'|'left'|'right'|'ok'|'cancel'|'rotL'|'rotR'; x: number; y: number; w: number; h: number }> = [];
-  // Dragging support for precise placement
-  private pendingDragging = false;
-  // UI hit regions for colonist panel
-  colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
-  colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
-  colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'skills' | 'log' = 'bio';
-  colonistTabRects: Array<{ tab: string; x: number; y: number; w: number; h: number }> = [];
-  
-  // Context menu system
-  contextMenu: (ContextMenuDescriptor<any> & { visible: boolean; x: number; y: number; openSubmenu?: string }) | null = null;
-  contextMenuRects: Array<{ item: ContextMenuItem<any>; x: number; y: number; w: number; h: number; isSubmenu?: boolean; parentId?: string }> = [];
-  
-  // Long press support for mobile context menus
-  longPressTimer: number | null = null;
-  longPressStartPos: { x: number; y: number } | null = null;
-  longPressStartTime: number | null = null;
-  longPressTarget: Colonist | Building | null = null;
-  longPressTargetType: 'colonist' | 'building' | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -162,11 +249,15 @@ export class Game {
     this.regionManager.initialize(this.buildings);
     this.regionManager.updateObjectCaches(this.buildings, this.trees, this.rocks);
     
-    this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; 
-    const viewW = this.canvas.width / this.DPR / this.camera.zoom; 
-    const viewH = this.canvas.height / this.DPR / this.camera.zoom; 
-    this.camera.x = HQ_POS.x - viewW / 2; 
-    this.camera.y = HQ_POS.y - viewH / 2; 
+    // Initialize systems with starting resources and time
+    this.resourceSystem.reset(); // Sets starting resources
+    this.timeSystem.reset(); // Sets day 1, tDay 0
+    
+    // Initialize camera system
+    this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
+    this.cameraSystem.setZoom(1);
+    this.cameraSystem.centerOn(HQ_POS.x, HQ_POS.y);
+    
     this.clampCameraToWorld();
     
     // Initialize item database
@@ -455,6 +546,9 @@ export class Game {
     this.canvas.style.width = w + 'px'; this.canvas.style.height = h + 'px';
     this.canvas.width = Math.floor(w * this.DPR); this.canvas.height = Math.floor(h * this.DPR);
     
+    // Update camera system with new canvas dimensions
+    this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
+    
     // Calculate UI scale based on screen size and DPR
     this.calculateUIScale();
   // Keep camera in bounds after resize
@@ -516,7 +610,7 @@ export class Game {
     return Math.round(value * this.uiScale);
   }
 
-  screenToWorld = (sx: number, sy: number) => ({ x: (sx * this.DPR) / this.camera.zoom + this.camera.x, y: (sy * this.DPR) / this.camera.zoom + this.camera.y });
+  screenToWorld = (sx: number, sy: number) => this.cameraSystem.screenToWorld(sx, sy);
 
   bindInput() {
     const c = this.canvas;
@@ -1699,10 +1793,11 @@ export class Game {
   updateTurret(b: Building, dt: number) { updateTurretCombat(this, b, dt); }
 
   // Day/Night & waves
-  isNight() { return (this.tDay >= NIGHT_SPAN.start || this.tDay <= NIGHT_SPAN.end); }
+  isNight() { return this.timeSystem.isNight(); }
   spawnWave() { const n = 4 + Math.floor(this.day * 1.3); for (let i = 0; i < n; i++) this.spawnEnemy(); this.msg(`Night ${this.day}: Enemies incoming!`, 'warn'); }
   nextDay() {
-    this.day++; (this as any).waveSpawnedForDay = false;
+    // Day already incremented by TimeSystem
+    (this as any).waveSpawnedForDay = false;
     let dead = 0; for (let i = 0; i < this.colonists.length; i++) { if (this.RES.food > 0) { this.RES.food -= 1; } else { dead++; if (this.colonists[i]) { (this.colonists[i] as any).alive = false; } } }
     if (dead > 0) { this.colonists = this.colonists.filter(c => c.alive); this.msg(`${dead} colonist(s) starved`, 'bad'); }
     // Farm growth (once per day)
@@ -1722,12 +1817,19 @@ export class Game {
 
   // Update loop
   dayTick(dt: number) {
-    const wasNight = this.isNight();
-    this.tDay += (dt * this.fastForward) / this.dayLength;
-    if (this.tDay >= 1) { this.tDay -= 1; this.nextDay(); }
-    const nowNight = this.isNight();
-    if (!wasNight && nowNight) { this.spawnWave(); }
-    this.prevIsNight = nowNight;
+    const prevDay = this.timeSystem.getDay();
+    this.timeSystem.update(dt);
+    const newDay = this.timeSystem.getDay();
+    
+    // Day changed - handle day transition logic
+    if (newDay > prevDay) {
+      this.nextDay();
+    }
+    
+    // Night started - spawn wave
+    if (this.timeSystem.didNightJustStart()) { 
+      this.spawnWave(); 
+    }
 
     // Daily-time continuous effects for colonists
     for (let i = this.colonists.length - 1; i >= 0; i--) {
@@ -1756,7 +1858,9 @@ export class Game {
       }
     }
   }
-  keyPressed(k: string) { if (this.once.has(k)) { this.once.delete(k); return true; } return false; }
+  keyPressed(k: string): boolean { 
+    return this.inputManager.keyPressed(k);
+  }
   update(dt: number) {
     // If debug console is open, ignore gameplay hotkeys (space, etc.)
     const dc = (this as any).debugConsole;
