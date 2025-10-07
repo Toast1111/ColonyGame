@@ -11,11 +11,11 @@ npm run dev
 ### ✅ Input System (InputManager)
 
 #### Mouse Controls
-- [ ] Move mouse - cursor position updates correctly
-- [ ] Left click - buildings placed, colonists selected
+- [x] Move mouse - cursor position updates correctly
+- [x] Left click - buildings placed, colonists selected
 - [ ] Right click - context menus appear
-- [ ] Mouse drag - camera pans when dragging empty space
-- [ ] World coordinates - `this.mouse.wx/wy` updates with camera movement
+- [x] Mouse drag - camera pans when dragging empty space
+- [x] World coordinates - `this.mouse.wx/wy` updates with camera movement
 
 #### Keyboard Controls
 - [ ] **W/A/S/D** - Camera pans in all directions

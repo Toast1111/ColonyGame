@@ -5,63 +5,77 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 ## 📁 Documentation Structure
 
 ### 🔧 [Refactoring](./refactoring/)
-Architecture improvements and code organization:
-- Game.ts refactoring phases (systems extraction)
-- UI/Input manager creation
-- Testing guides
+**Architecture improvements and code organization**
+- [Refactoring Plan](./refactoring/REFACTORING_PLAN.md) - Original extraction plan
+- [Phase 1 Summary](./refactoring/REFACTORING_SUMMARY.md) - Systems creation (GameState, TimeSystem, etc.)
+- [Phase 2 Success](./refactoring/REFACTORING_SUCCESS.md) - Systems integration
+- [UI Refactoring](./refactoring/UI_REFACTORING_SUMMARY.md) - InputManager & UIManager extraction
+- [UI Testing Guide](./refactoring/UI_REFACTORING_TEST_GUIDE.md) - Comprehensive test checklist
+
+### � [Work Priority System](./work-priority/)
+**RimWorld-style work assignment system**
+- [System Overview](./work-priority/WORK_PRIORITY_SYSTEM.md) - Core architecture
+- [Implementation](./work-priority/WORK_PRIORITY_IMPLEMENTATION.md) - Full implementation guide
+- [Z-Index Fix](./work-priority/WORK_PRIORITY_ZINDEX_FIX.md) - Mobile controls overlay fix
+- [DPR Fix](./work-priority/WORK_PRIORITY_DPR_FIX.md) - High-resolution display support
+- [Modal Fix](./work-priority/WORK_PRIORITY_MODAL_FIX.md) - Full-screen modal behavior
+- [Final Summary](./work-priority/WORK_PRIORITY_FINAL_SUMMARY.md) - Complete feature summary
 
 ### 🏥 [Medical System](./medical/)
-Health, injury, and treatment systems:
-- Medical AI implementation
-- Treatment types and workflows
-- Integration guides and fixes
-
-### 🎯 [Work Priority](./work-priority/)
-RimWorld-style work assignment system:
-- Priority matrix implementation
-- UI fixes (z-index, DPR, responsiveness)
-- Modal panel system
+**Health, injury, and treatment systems**
+- [System Overview](./medical/MEDICAL_README.md) - Medical system architecture
+- [Complete Guide](./medical/MEDICAL_SYSTEM_COMPLETE.md) - Full implementation
+- [AI Refactor](./medical/MEDICAL_AI_REFACTOR_SUMMARY.md) - FSM integration
+- [Visual Guide](./medical/MEDICAL_VISUAL_GUIDE.md) - UI and workflows
+- [Test Guide](./medical/MEDICAL_TEST_GUIDE.md) - Testing procedures
 
 ### 🗺️ [Navigation](./navigation/)
-Enemy AI and pathfinding for non-colonist entities:
-- Enemy navigation system
-- Complete navigation overhaul
-- Testing and quickref guides
+**Enemy AI and pathfinding for non-colonist entities**
+- [Complete System](./navigation/COMPLETE_NAVIGATION_SYSTEM.md) - Full navigation overhaul
+- [Enemy Nav Upgrade](./navigation/ENEMY_NAVIGATION_UPGRADE.md) - Enemy pathfinding
+- [Implementation](./navigation/ENEMY_NAV_IMPLEMENTATION.md) - Technical details
+- [Quick Reference](./navigation/ENEMY_NAV_QUICKREF.md) - Quick lookup
+- [Testing](./navigation/ENEMY_NAV_TESTING.md) - Test procedures
 
 ### 🌍 [Regions](./regions/)
-Region-based pathfinding and door systems:
-- Region implementation
-- Door integration
-- Visual debugging guides
+**Region-based pathfinding and door systems**
+- [System Overview](./regions/REGION_SYSTEM.md) - Region architecture
+- [Implementation](./regions/REGION_IMPLEMENTATION_SUMMARY.md) - Core implementation
+- [Integration](./regions/REGION_INTEGRATION_SUMMARY.md) - System integration
+- [Door System](./regions/REGION_DOOR_UPDATE.md) - Door integration
+- [Visual Guide](./regions/REGION_VISUAL_GUIDE.md) - Debugging and visualization
+- [Quick Start](./regions/REGION_QUICK_START.md) - Getting started
 
 ### 🧭 [Pathfinding](./pathfinding/)
-A* pathfinding and grid optimization:
-- Floor speed integration
-- Bug fixes
-- Visual debugging
+**A* pathfinding and grid optimization**
+- [Bug Fixes](./pathfinding/PATHFINDING_BUG_FIX.md) - Critical pathfinding fixes
+- [Floor Integration](./pathfinding/PATHFINDING_FLOOR_FIX.md) - Floor speed modifiers
+- [Floor Testing](./pathfinding/PATHFINDING_FLOOR_TEST.md) - Floor system tests
+- [Visual Guide](./pathfinding/PATHFINDING_VISUAL_GUIDE.md) - Debug visualization
 
 ### 🏔️ [Terrain](./terrain/)
-Terrain generation and management:
-- Terrain system architecture
-- Migration guides
-- Navigation integration
+**Terrain generation and management**
+- [System Overview](./terrain/TERRAIN_SYSTEM.md) - Terrain architecture
+- [Migration Guide](./terrain/TERRAIN_MIGRATION_GUIDE.md) - Upgrading to new system
+- [Nav Integration](./terrain/TERRAIN_AND_NAV_SUMMARY.md) - Navigation integration
+- [Q&A](./terrain/TERRAIN_ANSWER.md) - Common questions
 
 ### 🟦 [Floor System](./floor-system/)
-Floor tiles and speed modifiers:
-- Floor implementation
-- Speed calculation
-- System completion guide
+**Floor tiles and speed modifiers**
+- [System Overview](./floor-system/FLOOR_SYSTEM.md) - Floor architecture
+- [Complete Guide](./floor-system/FLOOR_SYSTEM_COMPLETE.md) - Full implementation
+- [Speed Fix](./floor-system/FLOOR_SPEED_FIX.md) - Speed calculation fixes
+- [Quick Reference](./floor-system/FLOOR_QUICKREF.md) - Quick lookup
 
 ### 🚪 [Door System](./door-system/)
-Animated doors and building interactions:
-- Door animation system
-- Region integration
-- Implementation guide
+**Animated doors and building interactions**
+- [Door System](./door-system/DOOR_SYSTEM.md) - Core door mechanics
+- [Animation Update](./door-system/DOOR_ANIMATION_UPDATE.md) - Animation improvements
 
 ### ⚔️ [Combat](./combat/)
-Combat mechanics and damage systems:
-- Combat manager implementation
-- Complete combat guide
+**Combat mechanics and damage systems**
+- [Combat Manager Complete](./combat/COMBAT_MANAGER_COMPLETE.md) - Full implementation
+- [Combat Guide](./combat/COMBAT_MANAGER_GUIDE.md) - Usage guide
 
 ### 🐛 [Bug Fixes](./STATE_FLIPPING_BUG_FIX.md)
 General bug fixes and patches
@@ -85,18 +99,18 @@ General bug fixes and patches
 ## 📊 Documentation Count
 
 ```
-Total Documents: 57
+Total Documents: 60+
 ├── Refactoring:    6 docs
-├── Medical:       11 docs  
 ├── Work Priority:  8 docs
-├── Navigation:     4 docs
-├── Regions:        7 docs
+├── Medical:       14 docs  
+├── Regions:        9 docs
+├── Navigation:     5 docs
 ├── Pathfinding:    4 docs
-├── Terrain:        3 docs
-├── Floor System:   3 docs
+├── Terrain:        4 docs
+├── Floor System:   4 docs
 ├── Door System:    2 docs
 ├── Combat:         2 docs
-└── Bug Fixes:      1 doc
+└── General:        2 docs
 ```
 
 ## 🔍 Finding Documentation
