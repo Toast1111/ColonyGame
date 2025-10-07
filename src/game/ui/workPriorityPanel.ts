@@ -12,6 +12,11 @@ import { WORK_TYPE_ORDER, WORK_TYPE_INFO, cycleWorkPriority, type WorkType, type
 let isPanelOpen = false;
 let panelScrollY = 0;
 
+// Tooltip state
+let tooltipWorkType: string | null = null;
+let tooltipX = 0;
+let tooltipY = 0;
+
 // Dynamic layout calculated from canvas dimensions (NO hardcoded pixel values!)
 interface PanelLayout {
   panelX: number;
@@ -210,16 +215,8 @@ export function drawWorkPriorityPanel(
   const tableWidth = panelWidth - padding * 2;
   const tableHeight = panelHeight - headerHeight - padding * 2 - footerHeight;
   
-  // Save context for clipping
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(tableX, tableY, tableWidth, tableHeight);
-  ctx.clip();
-  
-  // Column headers (work types)
+  // Draw column headers BEFORE clipping (so rotated text isn't cut off)
   let headerX = tableX + nameColumnWidth;
-  ctx.font = `${Math.round(fontSize * 0.9)}px Arial, sans-serif`;
-  ctx.textAlign = 'center';
   
   // Header row background
   ctx.fillStyle = '#2a4a6a';
@@ -231,7 +228,8 @@ export function drawWorkPriorityPanel(
   ctx.textAlign = 'left';
   ctx.fillText('Colonist', tableX + padding * 0.5, tableY - panelScrollY + cellHeight * 0.65);
   
-  ctx.font = `${Math.round(fontSize * 0.85)}px Arial, sans-serif`;
+  // Work type column headers - use simple abbreviations with tooltips
+  ctx.font = `bold ${Math.round(fontSize)}px Arial, sans-serif`;
   ctx.textAlign = 'center';
   
   for (const workType of WORK_TYPE_ORDER) {
@@ -246,28 +244,23 @@ export function drawWorkPriorityPanel(
     ctx.lineWidth = 1;
     ctx.strokeRect(headerX, tableY - panelScrollY, cellWidth, cellHeight);
     
-    // Header text (adapt rotation based on cell width)
-    ctx.save();
+    // Simple abbreviated text (no rotation needed!)
     ctx.fillStyle = '#e0e0e0';
+    ctx.font = `bold ${Math.round(fontSize * 0.95)}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
     
-    if (cellWidth >= panelWidth * 0.04) {
-      // Angled text for wider cells
-      ctx.translate(headerX + cellWidth / 2, tableY - panelScrollY + cellHeight - cellHeight * 0.1);
-      ctx.rotate(-Math.PI / 4);
-      ctx.textAlign = 'right';
-      ctx.fillText(info.label, 0, 0);
-    } else {
-      // Vertical text for narrower cells
-      ctx.translate(headerX + cellWidth / 2, tableY - panelScrollY + cellHeight - cellHeight * 0.1);
-      ctx.rotate(-Math.PI / 2);
-      ctx.textAlign = 'left';
-      const shortLabel = info.label.length > 8 ? info.label.substring(0, 8) : info.label;
-      ctx.fillText(shortLabel, 0, 0);
-    }
-    ctx.restore();
+    // Use first 3-4 letters as abbreviation
+    const abbrev = info.label.substring(0, Math.min(4, Math.max(3, Math.floor(cellWidth / (fontSize * 0.6)))));
+    ctx.fillText(abbrev, headerX + cellWidth / 2, tableY - panelScrollY + cellHeight * 0.65);
     
     headerX += cellWidth;
   }
+  
+  // NOW apply clipping for the data rows only (excludes headers)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(tableX, tableY + cellHeight - panelScrollY, tableWidth, tableHeight - cellHeight);
+  ctx.clip();
   
   // Draw colonists and their priorities
   let rowY = tableY + cellHeight - panelScrollY;
@@ -366,8 +359,50 @@ export function drawWorkPriorityPanel(
   ctx.textAlign = 'center';
   ctx.fillText('Click a cell to cycle priority: 1 (highest) → 2 → 3 → 4 (lowest) → disabled → 1', 
                panelX + panelWidth / 2, footerY + footerHeight * 0.35);
-  ctx.fillText('Press P to close • Scroll with mouse wheel', 
+  ctx.fillText('Press P to close • Scroll with mouse wheel • Hover over column headers for full names', 
                panelX + panelWidth / 2, footerY + footerHeight * 0.75);
+  
+  // Draw tooltip if hovering over a column header
+  if (tooltipWorkType) {
+    const info = WORK_TYPE_INFO[tooltipWorkType as WorkType];
+    if (info) {
+    
+    // Measure tooltip text
+    ctx.font = `${Math.round(fontSize * 1.1)}px Arial, sans-serif`;
+    const tooltipText = info.label;
+    const textWidth = ctx.measureText(tooltipText).width;
+    const tooltipPadding = padding * 1.5;
+    const tooltipWidth = textWidth + tooltipPadding * 2;
+    const tooltipHeight = cellHeight * 1.2;
+    
+    // Position tooltip near cursor, but keep it on screen
+    let ttX = tooltipX + 10;
+    let ttY = tooltipY - tooltipHeight - 5;
+    
+    // Keep tooltip within panel bounds
+    if (ttX + tooltipWidth > panelX + panelWidth) {
+      ttX = tooltipX - tooltipWidth - 10;
+    }
+    if (ttY < panelY) {
+      ttY = tooltipY + 20;
+    }
+    
+    // Tooltip background
+    ctx.fillStyle = 'rgba(40, 40, 40, 0.95)';
+    ctx.strokeStyle = '#4a6fa5';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(ttX, ttY, tooltipWidth, tooltipHeight, 5);
+    ctx.fill();
+    ctx.stroke();
+    
+    // Tooltip text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${Math.round(fontSize * 1.1)}px Arial, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText(tooltipText, ttX + tooltipPadding, ttY + tooltipHeight * 0.65);
+    }
+  }
 }
 
 /**
@@ -441,11 +476,54 @@ export function handleWorkPriorityPanelClick(
 }
 
 /**
- * Handle mouse wheel for scrolling (future enhancement)
+ * Handle mouse wheel for scrolling
  */
 export function handleWorkPriorityPanelScroll(deltaY: number): void {
   if (!isPanelOpen) return;
   
   panelScrollY += deltaY * 0.5;
   panelScrollY = Math.max(0, panelScrollY);
+}
+
+/**
+ * Handle mouse hover for tooltips
+ * Call this from mousemove to update tooltip state
+ */
+export function handleWorkPriorityPanelHover(
+  mouseX: number, 
+  mouseY: number,
+  colonists: Colonist[],
+  canvasWidth: number,
+  canvasHeight: number
+): void {
+  if (!isPanelOpen) {
+    tooltipWorkType = null;
+    return;
+  }
+  
+  const aliveColonists = colonists.filter(c => c.alive);
+  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const { panelX, panelY, cellWidth, headerHeight, nameColumnWidth, padding } = layout;
+  
+  const tableX = panelX + padding;
+  const tableY = panelY + headerHeight + padding;
+  
+  // Check if hovering over header row (work type columns only, not name column)
+  if (mouseY >= tableY - panelScrollY && mouseY <= tableY - panelScrollY + layout.cellHeight) {
+    const relativeX = mouseX - tableX - nameColumnWidth;
+    
+    if (relativeX >= 0) {
+      const colIndex = Math.floor(relativeX / cellWidth);
+      
+      if (colIndex >= 0 && colIndex < WORK_TYPE_ORDER.length) {
+        tooltipWorkType = WORK_TYPE_ORDER[colIndex];
+        tooltipX = mouseX;
+        tooltipY = mouseY;
+        return;
+      }
+    }
+  }
+  
+  // Not hovering over a header
+  tooltipWorkType = null;
 }

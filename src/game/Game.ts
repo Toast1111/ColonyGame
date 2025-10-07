@@ -29,7 +29,7 @@ import { updateTurret as updateTurretCombat, updateProjectiles as updateProjecti
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
-import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
+import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor } from './systems/doorSystem';
 
@@ -527,8 +527,9 @@ export class Game {
       const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
       this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
       
-      // PRIORITY PANEL IS MODAL - Block world interactions when open
+      // PRIORITY PANEL IS MODAL - Block world interactions when open, but allow hover for tooltips
       if (isWorkPriorityPanelOpen()) {
+        handleWorkPriorityPanelHover(this.mouse.x * this.DPR, this.mouse.y * this.DPR, this.colonists, this.canvas.width, this.canvas.height);
         return;
       }
       
