@@ -2367,7 +2367,7 @@ export class Game {
   if (this.pendingPlacement) drawPlacementUIUI(this);
   if (this.contextMenu) drawContextMenuUI(this);
   
-  // Draw work priority panel
+  // Draw work priority panel LAST (modal overlay - renders on top of everything)
   drawWorkPriorityPanel(this.ctx, this.colonists, this.canvas.width, this.canvas.height);
   }
 

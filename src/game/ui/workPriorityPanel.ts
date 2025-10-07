@@ -98,6 +98,12 @@ function calculatePanelLayout(canvasWidth: number, canvasHeight: number, colonis
 export function toggleWorkPriorityPanel(): void {
   isPanelOpen = !isPanelOpen;
   panelScrollY = 0; // Reset scroll when opening
+  
+  // Hide/show mobile controls (HTML buttons) to prevent z-index overlay
+  const mobileControls = document.getElementById('mobileControls');
+  if (mobileControls) {
+    mobileControls.style.display = isPanelOpen ? 'none' : '';
+  }
 }
 
 /**
@@ -112,6 +118,12 @@ export function isWorkPriorityPanelOpen(): boolean {
  */
 export function closeWorkPriorityPanel(): void {
   isPanelOpen = false;
+  
+  // Restore mobile controls visibility
+  const mobileControls = document.getElementById('mobileControls');
+  if (mobileControls) {
+    mobileControls.style.display = '';
+  }
 }
 
 /**
@@ -146,6 +158,12 @@ export function drawWorkPriorityPanel(
   canvasHeight: number
 ): void {
   if (!isPanelOpen) return;
+  
+  // Save canvas state to ensure clean rendering on top of everything
+  ctx.save();
+  
+  // Reset any transforms or clipping regions from previous draws
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   
   const aliveColonists = colonists.filter(c => c.alive);
   
@@ -403,6 +421,9 @@ export function drawWorkPriorityPanel(
     ctx.fillText(tooltipText, ttX + tooltipPadding, ttY + tooltipHeight * 0.65);
     }
   }
+  
+  // Restore canvas state
+  ctx.restore();
 }
 
 /**
