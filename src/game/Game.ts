@@ -330,7 +330,8 @@ export class Game {
     return Math.min(0.8, Math.max(0, armor));
   }
 
-  // Enhanced combat damage system with localized injuries
+  // Enhanced combat damage system with armor reduction wrapper
+  // This is a convenience method that applies armor before delegating to the health system
   applyDamageToColonist(colonist: Colonist, damage: number, damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise'): void {
     // Initialize health system if not present
     if (!colonist.health) {
@@ -341,58 +342,20 @@ export class Game {
     const armorReduction = this.getArmorReduction(colonist);
     const effectiveDamage = damage * (1 - armorReduction);
 
-    // Determine which body part is hit based on coverage
-    const bodyParts = colonist.health!.bodyParts;
-    const rand = Math.random();
-    let cumulativeCoverage = 0;
-    let hitBodyPart = bodyParts[0]; // Default to first body part
+    // Delegate to the health system's damage function (imported from healthSystem.ts)
+    // This handles body part selection, injury creation, and all health system logic
+    const result = applyDamageToColonist(this, colonist, effectiveDamage, damageType, {
+      source: 'combat',
+      damageMultiplier: 1.0 // Armor already applied above
+    });
 
-    for (const part of bodyParts) {
-      cumulativeCoverage += part.coverage;
-      if (rand <= cumulativeCoverage) {
-        hitBodyPart = part;
-        break;
-      }
+    // Show appropriate damage message based on result
+    if (result.died) {
+      this.msg(`${colonist.profile?.name || 'Colonist'} died from ${result.cause || 'injuries'}!`, 'bad');
+    } else if (result.bodyPart) {
+      const severityText = result.fatal ? 'critically' : 'severely';
+      this.msg(`${colonist.profile?.name || 'Colonist'} ${severityText} injured in ${result.bodyPart} (${damageType})`, 'warn');
     }
-
-    // Create injury based on damage type and amount
-    const injuryId = `${damageType}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-    const severity = Math.min(0.95, effectiveDamage / 30); // Normalize damage to 0-1 scale
-    
-    const injury = {
-      id: injuryId,
-      type: damageType,
-      bodyPart: hitBodyPart.type,
-      severity: severity,
-      pain: this.calculatePainFromDamage(damageType, severity),
-      bleeding: this.calculateBleedingFromDamage(damageType, severity),
-      healRate: this.calculateHealRate(damageType, severity),
-      permanent: severity > 0.7 && damageType !== 'bruise',
-      timeCreated: Date.now(), // Use timestamp for injury tracking
-      description: this.generateInjuryDescription(damageType, hitBodyPart.label, severity),
-      infected: false,
-      infectionChance: this.calculateInfectionChance(damageType, severity),
-      treatedBy: undefined
-    };
-
-    // Add injury to colonist
-    colonist.health!.injuries.push(injury);
-
-    // Apply immediate HP damage (reduced since we now have injury system)
-    const actualHpDamage = Math.min(effectiveDamage * 0.6, colonist.hp - 1); // Never kill directly, leave at 1 HP
-    // Route generic environmental damage through health system for consistency
-    if (colonist.health) {
-      applyDamageToColonist(this, colonist, actualHpDamage, 'bruise', { source: 'environment', damageMultiplier: 1 });
-    } else {
-      colonist.hp = Math.max(1, colonist.hp - actualHpDamage);
-    }
-
-    // Recalculate health stats
-    this.recalculateColonistHealth(colonist);
-
-    // Show damage message
-    const partName = hitBodyPart.label.toLowerCase();
-    this.msg(`${colonist.profile?.name || 'Colonist'} injured in ${partName} (${damageType})`, 'warn');
   }
 
   // Helper methods for injury calculation
@@ -1230,6 +1193,8 @@ export class Game {
           if (kind==='tree') this.trees.push({ x:p.x, y:p.y, r:12, hp:40, type:'tree' }); else this.rocks.push({ x:p.x, y:p.y, r:12, hp:50, type:'rock' });
           // Rebuild navigation grid when new resource is added
           this.rebuildNavGrid();
+          // Update region manager cache to include the new resource
+          this.regionManager.updateObjectCaches(this.buildings, this.trees, this.rocks);
           break;
         }
       };

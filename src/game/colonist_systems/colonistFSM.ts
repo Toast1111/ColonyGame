@@ -696,30 +696,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       break;
     }
-    
-    case 'heal': {
-      // Find nearest infirmary
-      const infirmaries = (game.buildings as Building[]).filter(b => b.kind === 'infirmary' && b.done);
-  if (!infirmaries.length) { changeState('seekTask', 'no infirmary'); break; }
-      let best = infirmaries[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
-      for (let i = 1; i < infirmaries.length; i++) { const d = dist2(c as any, game.centerOf(infirmaries[i]) as any); if (d < bestD) { bestD = d; best = infirmaries[i]; } }
-      const ic = game.centerOf(best);
-      const range = (best as any).healRange || 140;
-      const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
-      const dist = Math.hypot(c.x - ic.x, c.y - ic.y);
-      // If close enough, try to enter (uses building capacity via popCap); else stand in heal radius
-      if (nearRect && game.tryEnterBuilding(c as any, best as any)) {
-        changeState('resting', 'entered infirmary'); break;
-      }
-      if (dist <= range * 0.9) {
-        // Wait and heal in aura; leave when healthy enough
-        if (c.hp >= 80) { changeState('seekTask', 'healed enough'); }
-      } else {
-        // Move toward infirmary center using pathfinding
-        game.moveAlongPath(c, dt, ic, range * 0.9);
-      }
-      break;
-    }
   case 'eat': {
       // Prioritize eating bread from pantry first, then fall back to regular food
       const hasBread = (game.RES.bread || 0) > 0;
