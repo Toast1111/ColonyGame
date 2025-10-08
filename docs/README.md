@@ -7,6 +7,7 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 ### 🔧 [Refactoring](./refactoring/)
 **Architecture improvements and code organization**
 - [Refactoring Plan](./refactoring/REFACTORING_PLAN.md) - Original extraction plan
+- [Refactoring Roadmap](./refactoring/GAME_TS_REFACTORING_ROADMAP.md) - Complete strategy ✨ NEW
 - [Phase 1 Summary](./refactoring/REFACTORING_SUMMARY.md) - Systems creation (GameState, TimeSystem, etc.)
 - [Phase 2 Success](./refactoring/REFACTORING_SUCCESS.md) - Systems integration
 - [UI Refactoring](./refactoring/UI_REFACTORING_SUMMARY.md) - InputManager & UIManager extraction

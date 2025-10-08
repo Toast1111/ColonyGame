@@ -40,6 +40,42 @@ export class InputManager {
   // Input type detection
   private lastInputWasTouch = false;
   
+  // Callback for filtering input (e.g., when debug console is open)
+  private inputFilter?: () => boolean;
+  
+  /**
+   * Set up keyboard event listeners
+   * @param inputFilter Optional function that returns true if input should be blocked
+   */
+  bindKeyboardEvents(inputFilter?: () => boolean): void {
+    this.inputFilter = inputFilter;
+    
+    window.addEventListener('keydown', (e) => {
+      // Check if input should be blocked
+      if (this.inputFilter && this.inputFilter()) return;
+      
+      const k = (e as KeyboardEvent).key.toLowerCase();
+      this.setKeyState(k, true);
+      
+      // Prevent default for game shortcuts
+      if (k === ' ' || k === 'h' || k === 'b' || k === 'f' || k === 'g' || 
+          k === 'j' || k === 'k' || k === 'p' || k === 'r' || k === 't' ||
+          k === 'escape' || /^[1-9]$/.test(k) || 
+          k === 'w' || k === 'a' || k === 's' || k === 'd' || 
+          k === '+' || k === '=' || k === '-' || k === '_') {
+        e.preventDefault();
+      }
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      // Check if input should be blocked
+      if (this.inputFilter && this.inputFilter()) return;
+      
+      const k = (e as KeyboardEvent).key.toLowerCase();
+      this.setKeyState(k, false);
+    });
+  }
+  
   /**
    * Update mouse world coordinates
    * Call this when camera moves or mouse moves
