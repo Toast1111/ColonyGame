@@ -72,6 +72,21 @@ export class RegionManager {
   }
 
   /**
+   * Rebuild regions in a specific grid area (for partial nav grid rebuilds)
+   * @param minGx - Minimum grid X coordinate
+   * @param minGy - Minimum grid Y coordinate
+   * @param maxGx - Maximum grid X coordinate
+   * @param maxGy - Maximum grid Y coordinate
+   * @param buildings - Optional list of buildings to check for doors
+   */
+  rebuildArea(minGx: number, minGy: number, maxGx: number, maxGy: number, buildings?: Building[]): void {
+    if (!this.enabled) return;
+
+    const doors = buildings ? buildings.filter(b => b.kind === 'door' && b.done) : [];
+    this.builder.rebuildArea(minGx, minGy, maxGx, maxGy, doors);
+  }
+
+  /**
    * Update object caches (call this periodically or when objects change)
    */
   updateObjectCaches(buildings: Building[], trees: Circle[], rocks: Circle[]): void {

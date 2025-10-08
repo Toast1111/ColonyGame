@@ -54,6 +54,36 @@ export function clearGrid(grid: Grid): void {
 }
 
 /**
+ * Clear only a specific area of the grid (for partial rebuilds)
+ * Much faster than clearing the entire grid
+ */
+export function clearGridArea(grid: Grid, startX: number, startY: number, width: number, height: number): void {
+  const endX = Math.min(grid.cols, startX + width);
+  const endY = Math.min(grid.rows, startY + height);
+  
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
+      const idx = y * grid.cols + x;
+      grid.solid[idx] = 0;
+      grid.cost[idx] = 1.0;
+    }
+  }
+  
+  // Mark affected sections as dirty
+  const startSectionX = Math.floor(startX / grid.sectionSize);
+  const startSectionY = Math.floor(startY / grid.sectionSize);
+  const endSectionX = Math.min(grid.sectionCols - 1, Math.floor((endX - 1) / grid.sectionSize));
+  const endSectionY = Math.min(grid.sectionRows - 1, Math.floor((endY - 1) / grid.sectionSize));
+  
+  for (let sy = startSectionY; sy <= endSectionY; sy++) {
+    for (let sx = startSectionX; sx <= endSectionX; sx++) {
+      const sectionIdx = sy * grid.sectionCols + sx;
+      grid.dirtyFlags[sectionIdx] = 1;
+    }
+  }
+}
+
+/**
  * Sync terrain grid costs to pathfinding grid
  * Call this after modifying terrain or floors to update pathfinding
  */

@@ -1425,8 +1425,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (collected > 0) {
             game.msg(`+${collected} wood`, 'good');
           }
-          // Rebuild navigation grid since tree was removed
-          game.rebuildNavGrid();
+          // Rebuild only the area around the tree (much faster than full rebuild!)
+          game.navigationManager.rebuildNavGridPartial(t.x, t.y, t.r + 32);
           
           // Only switch to seekTask if we've been in this state for at least a short duration
           if (c.stateSince >= 0.5) {
@@ -1504,8 +1504,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (collected > 0) {
             game.msg(`+${collected} stone`, 'good');
           }
-          // Rebuild navigation grid since rock was removed
-          game.rebuildNavGrid();
+          // Rebuild only the area around the rock (much faster than full rebuild!)
+          game.navigationManager.rebuildNavGridPartial(r.x, r.y, r.r + 32);
           
           // Only switch to seekTask if we've been in this state for at least a short duration
           if (c.stateSince >= 0.5) {

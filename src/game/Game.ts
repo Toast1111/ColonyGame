@@ -1211,10 +1211,8 @@ export class Game {
           for (const b of this.buildings) { if (p.x > b.x-24 && p.x < b.x+b.w+24 && p.y > b.y-24 && p.y < b.y+b.h+24) { ok=false; break; } }
           if (!ok) continue;
           if (kind==='tree') this.trees.push({ x:p.x, y:p.y, r:12, hp:40, type:'tree' }); else this.rocks.push({ x:p.x, y:p.y, r:12, hp:50, type:'rock' });
-          // Rebuild navigation grid when new resource is added
-          this.rebuildNavGrid();
-          // Update region manager cache to include the new resource
-          this.regionManager.updateObjectCaches(this.buildings, this.trees, this.rocks);
+          // Use partial rebuild for new resource (only affects small area around spawn point)
+          this.navigationManager.rebuildNavGridPartial(p.x, p.y, 12 + 32);
           break;
         }
       };

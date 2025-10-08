@@ -8,6 +8,7 @@ import type { Colonist, Building } from '../types';
 import { T } from '../constants';
 import { 
   rebuildNavGrid as rebuildNavGridNav, 
+  rebuildNavGridPartial as rebuildNavGridPartialNav,
   computePath as computePathNav, 
   computePathWithDangerAvoidance as computePathWithDangerAvoidanceNav, 
   cellIndexAt as cellIndexAtNav, 
@@ -23,6 +24,17 @@ export class NavigationManager {
    */
   rebuildNavGrid(): void {
     rebuildNavGridNav(this.game);
+  }
+
+  /**
+   * Rebuild only a small area of the navigation grid (for tree/rock removal)
+   * This is much faster than rebuilding the entire grid
+   * @param worldX - World X coordinate of the center
+   * @param worldY - World Y coordinate of the center
+   * @param radius - Radius around the point to rebuild (in world units)
+   */
+  rebuildNavGridPartial(worldX: number, worldY: number, radius: number): void {
+    rebuildNavGridPartialNav(this.game, worldX, worldY, radius);
   }
 
   /**
