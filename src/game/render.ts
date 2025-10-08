@@ -313,6 +313,15 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.lineWidth = 0.5;
   ctx.stroke();
   
+  // Carrying indicator - show icon if colonist is carrying wheat or bread
+  if (colonist.carryingWheat && colonist.carryingWheat > 0) {
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillText('🌾', 0, -offsetY - 5);
+  } else if (colonist.carryingBread && colonist.carryingBread > 0) {
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillText('🍞', 0, -offsetY - 5);
+  }
+  
   ctx.restore(); // Restore mood indicator transform
   ctx.restore(); // Restore main transform
 }
@@ -509,7 +518,17 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
   else if ((b as any).kind === 'well') letter = 'WL';
   else if ((b as any).kind === 'infirmary') letter = 'I';
   else if ((b as any).kind === 'bed') letter = (b as any).isMedicalBed ? '⚕️' : '🛏';
+  else if ((b as any).kind === 'stove') letter = '🔥';
+  else if ((b as any).kind === 'pantry') letter = '🍞';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(letter, cx, cy);
+  }
+  
+  // Cooking progress bar for stove
+  if (b.kind === 'stove' && b.done && b.cookingProgress !== undefined && b.cookingProgress > 0) {
+    ctx.fillStyle = '#0b1220'; 
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w, 4);
+    ctx.fillStyle = '#ff6347'; // Tomato red for cooking progress
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w * b.cookingProgress, 4);
   }
 
   // Turret range visualization
@@ -540,7 +559,7 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
   }
 }
 
-export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, parts: { res: { wood: number; stone: number; food: number }, colonists: number, cap: number, hiding: number, day: number, tDay: number, isNight: boolean, hotbar: Array<{ key: string; name: string; cost: string; selected: boolean }>, messages: Message[], storage?: { used: number; max: number } }, game: any) {
+export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, parts: { res: { wood: number; stone: number; food: number; wheat?: number; bread?: number }, colonists: number, cap: number, hiding: number, day: number, tDay: number, isNight: boolean, hotbar: Array<{ key: string; name: string; cost: string; selected: boolean }>, messages: Message[], storage?: { used: number; max: number } }, game: any) {
   const scale = game.uiScale;
   const PAD = game.scale(game.isTouch ? 14 : 10);
   const BARH = game.scale(game.isTouch ? 56 : 44);
@@ -560,8 +579,16 @@ export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement
   
   const dynamicSpace = Math.max(game.scale(game.isTouch ? 170 : 130), Math.min(game.scale(game.isTouch ? 260 : 220), Math.round(canvas.width * 0.14)));
   pill(ctx, x, game.scale(12), `Wood: ${Math.floor(parts.res.wood)}`, '#b08968', game); x += dynamicSpace;
-  pill(ctx, x, game.scale(12), `Stone: ${Math.floor(parts.res.stone)}`, '#9aa5b1', game); x += Math.max(dynamicSpace, game.scale(game.isTouch ? 220 : 180));
+  pill(ctx, x, game.scale(12), `Stone: ${Math.floor(parts.res.stone)}`, '#9aa5b1', game); x += dynamicSpace;
   pill(ctx, x, game.scale(12), `Food: ${Math.floor(parts.res.food)}`, '#9ae6b4', game); x += dynamicSpace;
+  
+  // New resources: wheat and bread
+  if ((parts.res.wheat || 0) > 0) {
+    pill(ctx, x, game.scale(12), `Wheat: ${Math.floor(parts.res.wheat || 0)}`, '#f4d03f', game); x += dynamicSpace;
+  }
+  if ((parts.res.bread || 0) > 0) {
+    pill(ctx, x, game.scale(12), `Bread: ${Math.floor(parts.res.bread || 0)}`, '#d2691e', game); x += dynamicSpace;
+  }
   
   // Storage capacity display
   if (parts.storage) {

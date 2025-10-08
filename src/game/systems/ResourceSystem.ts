@@ -14,6 +14,8 @@ export interface Resources {
   food: number;
   medicine: number;
   herbal: number;
+  wheat: number;
+  bread: number;
 }
 
 export type ResourceType = keyof Resources;
@@ -24,7 +26,9 @@ export class ResourceSystem {
     stone: 0,
     food: 0,
     medicine: 5,
-    herbal: 3
+    herbal: 3,
+    wheat: 0,
+    bread: 0
   };
   
   private baseStorage = 200;
@@ -57,8 +61,8 @@ export class ResourceSystem {
    * Returns amount actually added (may be less than requested if storage full)
    */
   addResource(type: ResourceType, amount: number, capacity: number): number {
-    // Medicine and herbal have no storage limit
-    if (type === 'medicine' || type === 'herbal') {
+    // Medicine, herbal, wheat, and bread have no storage limit
+    if (type === 'medicine' || type === 'herbal' || type === 'wheat' || type === 'bread') {
       this.resources[type] += amount;
       return amount;
     }
@@ -103,6 +107,8 @@ export class ResourceSystem {
     if (cost.food && this.resources.food < cost.food) return false;
     if (cost.medicine && this.resources.medicine < cost.medicine) return false;
     if (cost.herbal && this.resources.herbal < cost.herbal) return false;
+    if (cost.wheat && this.resources.wheat < cost.wheat) return false;
+    if (cost.bread && this.resources.bread < cost.bread) return false;
     return true;
   }
   
@@ -118,6 +124,8 @@ export class ResourceSystem {
     if (cost.food) this.resources.food -= cost.food;
     if (cost.medicine) this.resources.medicine -= cost.medicine;
     if (cost.herbal) this.resources.herbal -= cost.herbal;
+    if (cost.wheat) this.resources.wheat -= cost.wheat;
+    if (cost.bread) this.resources.bread -= cost.bread;
     
     return true;
   }
@@ -160,7 +168,9 @@ export class ResourceSystem {
       stone: 30,
       food: 20,
       medicine: 5,
-      herbal: 3
+      herbal: 3,
+      wheat: 0,
+      bread: 0
     };
     this.storageFullWarned = false;
   }
@@ -175,6 +185,8 @@ export class ResourceSystem {
     if (cost.food) parts.push(`${cost.food}f`);
     if (cost.medicine) parts.push(`${cost.medicine}m`);
     if (cost.herbal) parts.push(`${cost.herbal}h`);
+    if (cost.wheat) parts.push(`${cost.wheat}wh`);
+    if (cost.bread) parts.push(`${cost.bread}br`);
     return parts.join(' ');
   }
 }

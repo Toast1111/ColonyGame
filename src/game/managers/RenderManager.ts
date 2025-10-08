@@ -5,7 +5,7 @@
 
 import type { Game } from '../Game';
 import { COLORS, T, WORLD } from '../constants';
-import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar } from '../render';
+import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render';
 import { drawRegionDebug } from '../navigation/regionDebugRender';
 import { drawTerrainDebug } from '../terrainDebugRender';
 import { drawParticles } from '../../core/particles/particleRender';
@@ -85,14 +85,59 @@ export class RenderManager {
       drawBuilding(ctx, b);
     }
 
+    // Colonist hiding indicators - show person icons on buildings with colonists inside
+    for (const b of game.buildings) {
+      if (!b.done) continue;
+      const numInside = game.insideCounts.get(b) || 0;
+      if (numInside > 0 && (b.kind === 'hq' || b.kind === 'house')) {
+        // Draw person icon(s) in top-right corner of building
+        const iconSize = 10;
+        const iconSpacing = iconSize + 2;
+        const startX = b.x + b.w - 6;
+        const startY = b.y + 6;
+        
+        // Draw up to 4 person icons (if more, show number instead)
+        if (numInside <= 4) {
+          for (let i = 0; i < numInside; i++) {
+            const iconX = startX - (i % 2) * iconSpacing;
+            const iconY = startY + Math.floor(i / 2) * iconSpacing;
+            drawPersonIcon(ctx, iconX, iconY, iconSize, '#93c5fd');
+          }
+        } else {
+          // Show count badge instead if more than 4
+          drawPersonIcon(ctx, startX, startY, iconSize, '#93c5fd');
+          ctx.save();
+          ctx.fillStyle = '#1e293b';
+          ctx.strokeStyle = '#93c5fd';
+          ctx.lineWidth = 1.5;
+          const badgeX = startX - iconSpacing;
+          const badgeY = startY;
+          const badgeRadius = 8;
+          ctx.beginPath();
+          ctx.arc(badgeX, badgeY, badgeRadius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 10px system-ui';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(numInside), badgeX, badgeY);
+          ctx.restore();
+        }
+      }
+    }
+
     // Colonists - use drawColonistAvatar helper which handles sprites, fallbacks, and mood indicators
     for (const c of game.colonists) {
       if (!c.alive) continue;
       const hiddenInside = c.inside && (c.inside as any).kind !== 'bed';
       if (hiddenInside) continue;
       
+      // Check if this colonist is selected
+      const isSelected = game.selColonist === c;
+      
       // Use the helper function which handles all the sprite rendering logic
-      drawColonistAvatar(ctx, c.x, c.y, c, c.r, false);
+      drawColonistAvatar(ctx, c.x, c.y, c, c.r, isSelected);
     }
 
     // Combat debug: turret ranges
@@ -191,11 +236,6 @@ export class RenderManager {
     if (game.debug.colonists) {
       this.renderColonistDebug();
       this.renderEnemyDebug();
-    }
-
-    // Danger memory visualization
-    if (game.debug.colonists) {
-      this.renderDangerMemory();
     }
 
     // Debug console (rendered last in world space)
@@ -458,65 +498,6 @@ export class RenderManager {
   /**
    * Render danger memory visualization
    */
-  private renderDangerMemory(): void {
-    const { game } = this;
-    const { ctx } = game;
-
-    ctx.save();
-
-    for (const c of game.colonists) {
-      const col = c as any; // Colonist type needs dangerMemory
-      if (!c.alive || !col.dangerMemory) continue;
-
-      for (const mem of col.dangerMemory) {
-        const timeSinceDanger = game.tDay - mem.time;
-
-        // Skip very old memories that have faded completely
-        if (timeSinceDanger >= 20) continue;
-
-        // Calculate current danger radius
-        const currentRadius = timeSinceDanger < 5 ? mem.radius :
-          timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
-
-        if (currentRadius <= 0) continue;
-
-        // Color and opacity based on how recent/strong the memory is
-        const alpha = timeSinceDanger < 5 ? 0.3 : 0.15 * (1 - (timeSinceDanger - 5) / 15);
-        const hue = timeSinceDanger < 5 ? 0 : 30; // Red to orange as it fades
-
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
-        ctx.strokeStyle = `hsl(${hue}, 100%, 30%)`;
-        ctx.lineWidth = 2;
-
-        // Draw danger zone circle
-        ctx.beginPath();
-        ctx.arc(mem.x, mem.y, currentRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        // Draw small dot at danger center
-        ctx.globalAlpha = alpha * 2;
-        ctx.fillStyle = `hsl(${hue}, 100%, 20%)`;
-        ctx.beginPath();
-        ctx.arc(mem.x, mem.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Draw timer text
-        ctx.globalAlpha = 0.8;
-        ctx.fillStyle = '#ffffff';
-        ctx.strokeStyle = '#000000';
-        ctx.lineWidth = 2;
-        ctx.font = '10px monospace';
-        const timeText = `${(20 - timeSinceDanger).toFixed(1)}s`;
-        ctx.strokeText(timeText, mem.x - 10, mem.y - currentRadius - 5);
-        ctx.fillText(timeText, mem.x - 10, mem.y - currentRadius - 5);
-      }
-    }
-
-    ctx.restore();
-  }
-
   /**
    * Render UI elements in screen space
    */

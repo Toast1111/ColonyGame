@@ -2,11 +2,11 @@ import type { Vec2 } from "../core/utils";
 
 export type Camera = { x: number; y: number; zoom: number };
 
-export type Resources = { wood: number; stone: number; food: number; medicine?: number; herbal?: number };
+export type Resources = { wood: number; stone: number; food: number; medicine?: number; herbal?: number; wheat?: number; bread?: number };
 
 export type Circle = { x: number; y: number; r: number; hp: number; type: "tree" | "rock" };
 
-export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door";
+export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door" | "stove" | "pantry";
 
 export type BuildingDef = {
   name: string;
@@ -53,9 +53,15 @@ export type Building = BuildingDef & {
   doorQueue?: Array<{ id: string; type: 'colonist' | 'enemy' }>; // Entities waiting to pass
   // Furniture designations
   isMedicalBed?: boolean;
+  // Cooking-specific properties (for stove)
+  cookingProgress?: number; // 0-1, how far through cooking
+  wheatStored?: number; // Amount of wheat in the stove
+  cookingColonist?: string; // ID of colonist currently cooking
+  // Pantry-specific properties
+  breadStored?: number; // Amount of bread in pantry
 };
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -200,6 +206,10 @@ export type Colonist = {
   
   // Work priority system (RimWorld-style job assignments)
   workPriorities?: Record<string, number>; // WorkType -> WorkPriority (1-4, or 0 for disabled)
+  
+  // Cooking system
+  carryingWheat?: number;  // Amount of wheat being carried
+  carryingBread?: number;  // Amount of bread being carried
 };
 
 export type Enemy = { 

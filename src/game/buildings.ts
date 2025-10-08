@@ -175,6 +175,28 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     build: 30,
     color: '#8b4513'
   },
+  stove: {
+    category: 'Furniture',
+    name: 'Stove',
+    description: 'Used for cooking wheat into bread. Colonists bring wheat here and cook it over time.',
+    key: 'S',
+    cost: { wood: 20, stone: 10 },
+    hp: 150,
+    size: { w: 2, h: 1 },
+    build: 60,
+    color: '#cd5c5c'
+  },
+  pantry: {
+    category: 'Furniture',
+    name: 'Pantry',
+    description: 'Stores prepared food (bread). Colonists can retrieve meals when hungry.',
+    key: 'P',
+    cost: { wood: 25, stone: 5 },
+    hp: 120,
+    size: { w: 2, h: 2 },
+    build: 50,
+    color: '#daa520'
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {

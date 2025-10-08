@@ -1556,6 +1556,49 @@ export class Game {
       }
     }
     
+    // 5. Cooking - haul wheat to stove and cook bread
+    if (canDoWork('Cooking')) {
+      const stoves = this.buildings.filter(b => b.kind === 'stove' && b.done);
+      
+      // Check if there's wheat to cook and available stoves
+      if (stoves.length > 0 && (this.RES.wheat || 0) >= 5) {
+        // Find stove that isn't currently being used for cooking
+        const availableStove = stoves.find(s => !s.cookingColonist || s.cookingColonist === c.id);
+        
+        if (availableStove) {
+          const distance = Math.hypot(c.x - (availableStove.x + availableStove.w/2), c.y - (availableStove.y + availableStove.h/2));
+          candidates.push({
+            workType: 'Cooking',
+            task: 'cookWheat',
+            target: availableStove,
+            distance,
+            priority: getWorkPriority('Cooking')
+          });
+        }
+      }
+      
+      // Also add task to store bread in pantry if colonist has bread
+      if (c.carryingBread && c.carryingBread > 0) {
+        const pantries = this.buildings.filter(b => b.kind === 'pantry' && b.done);
+        if (pantries.length > 0) {
+          const nearestPantry = pantries.reduce((closest, p) => {
+            const dist = Math.hypot(c.x - (p.x + p.w/2), c.y - (p.y + p.h/2));
+            const closestDist = Math.hypot(c.x - (closest.x + closest.w/2), c.y - (closest.y + closest.h/2));
+            return dist < closestDist ? p : closest;
+          });
+          
+          const distance = Math.hypot(c.x - (nearestPantry.x + nearestPantry.w/2), c.y - (nearestPantry.y + nearestPantry.h/2));
+          candidates.push({
+            workType: 'Cooking',
+            task: 'storeBread',
+            target: nearestPantry,
+            distance,
+            priority: getWorkPriority('Cooking') - 1 // Slightly higher priority to finish the job
+          });
+        }
+      }
+    }
+    
     // Sort candidates by priority (lower = better), then distance
     candidates.sort((a, b) => {
       if (a.priority !== b.priority) return a.priority - b.priority;
@@ -1583,37 +1626,8 @@ export class Game {
   }
   
   nearestSafeCircle<T extends { x: number; y: number }>(c: Colonist, p: { x: number; y: number }, arr: T[]): T | null {
-    // Filter out targets that are in dangerous areas based on colonist's danger memory
-    const safeTargets = arr.filter(target => {
-      const dangerMemory = (c as any).dangerMemory;
-      if (!dangerMemory || !Array.isArray(dangerMemory)) return true;
-      
-      // Check if target is in any remembered dangerous area
-      for (const mem of dangerMemory) {
-        const distanceToTarget = Math.hypot(target.x - mem.x, target.y - mem.y);
-        const timeSinceDanger = c.t - mem.time;
-        
-        // Gradually reduce danger radius over time (full avoidance for 5 seconds, then fade out over 15 more seconds)
-        const currentRadius = timeSinceDanger < 5 ? mem.radius : 
-                             timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
-        
-        if (distanceToTarget < currentRadius) {
-          if (Math.random() < 0.1) { // Log occasionally to avoid spam
-            console.log(`Danger memory: Avoiding target at (${target.x.toFixed(0)}, ${target.y.toFixed(0)}) due to danger memory at (${mem.x.toFixed(0)}, ${mem.y.toFixed(0)}), distance=${distanceToTarget.toFixed(0)}, radius=${currentRadius.toFixed(0)}`);
-          }
-          return false; // Target is in dangerous area
-        }
-      }
-      return true; // Target is safe
-    });
-    
-    // Log when danger memory filters out targets
-    if (safeTargets.length < arr.length && Math.random() < 0.2) {
-      console.log(`Danger memory: Filtered ${arr.length - safeTargets.length} dangerous targets out of ${arr.length} total`);
-    }
-    
-    // Use regular nearest selection on safe targets
-    return this.nearestCircle(p, safeTargets);
+    // Danger memory system removed - just use nearest circle
+    return this.nearestCircle(p, arr);
   }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
     // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
@@ -2010,8 +2024,7 @@ export class Game {
   isBlocked(x: number, y: number) { return this.navigationManager.isBlocked(x, y); }
   findNearestBuildingByRegion(x: number, y: number, filter: (b: Building) => boolean) { return this.navigationManager.findNearestBuildingByRegion(x, y, filter); }
   findNearestTreeByRegion(x: number, y: number) { return this.navigationManager.findNearestTreeByRegion(x, y); }
-  findNearestRockByRegion(x: number, y: number) { return this.navigationManager.findNearestRockByRegion(x, y); }
-  isReachable(startX: number, startY: number, endX: number, endY: number) { return this.navigationManager.isReachable(startX, startY, endX, endY); }
+                                                                 isReachable(startX: number, startY: number, endX: number, endY: number) { return this.navigationManager.isReachable(startX, startY, endX, endY); }
   isWithinInteractionRange(x: number, y: number, circle: { x: number; y: number; r: number }, interactDistance: number) { return this.navigationManager.isWithinInteractionRange(x, y, circle, interactDistance); }
   bestApproachToCircle(c: Colonist, circle: { x: number; y: number; r: number }, interact: number) { return this.navigationManager.bestApproachToCircle(c, circle, interact); }
 

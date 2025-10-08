@@ -48,36 +48,8 @@ export function computePath(game: Game, sx: number, sy: number, tx: number, ty: 
 }
 
 export function computePathWithDangerAvoidance(game: Game, c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-  const dangerMemory = (c as any).dangerMemory;
-  if (!dangerMemory || !Array.isArray(dangerMemory) || dangerMemory.length === 0) {
-    return aStar(game.grid, sx, sy, tx, ty);
-  }
-  const modifiedCosts: Array<{ idx: number; originalCost: number }> = [];
-  for (const mem of dangerMemory) {
-    const timeSinceDanger = c.t - mem.time;
-    if (timeSinceDanger >= 20) continue;
-    const currentRadius = timeSinceDanger < 5 ? mem.radius : timeSinceDanger < 20 ? mem.radius * (1 - (timeSinceDanger - 5) / 15) : 0;
-    if (currentRadius <= 0) continue;
-    const dangCost = 10.0;
-    const radiusInTiles = Math.ceil(currentRadius / T);
-    const centerGx = Math.floor(mem.x / T);
-    const centerGy = Math.floor(mem.y / T);
-    for (let dy = -radiusInTiles; dy <= radiusInTiles; dy++) {
-      for (let dx = -radiusInTiles; dx <= radiusInTiles; dx++) {
-        const gx = centerGx + dx, gy = centerGy + dy;
-        if (gx < 0 || gy < 0 || gx >= game.grid.cols || gy >= game.grid.rows) continue;
-        const tileWorldX = gx * T + T / 2, tileWorldY = gy * T + T / 2;
-        const distanceToTarget = Math.hypot(tileWorldX - mem.x, tileWorldY - mem.y);
-        if (distanceToTarget <= currentRadius) {
-          const idx = gy * game.grid.cols + gx;
-          if (!game.grid.solid[idx]) { modifiedCosts.push({ idx, originalCost: game.grid.cost[idx] }); game.grid.cost[idx] = dangCost; }
-        }
-      }
-    }
-  }
-  const path = aStar(game.grid, sx, sy, tx, ty);
-  for (const mod of modifiedCosts) game.grid.cost[mod.idx] = mod.originalCost;
-  return path;
+  // Danger memory system removed - just use regular pathfinding
+  return aStar(game.grid, sx, sy, tx, ty);
 }
 
 export function cellIndexAt(game: Game, x: number, y: number) {
