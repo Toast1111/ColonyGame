@@ -288,6 +288,12 @@ export function applyDamageToColonist(
   options: DamageOptions = {}
 ): { died: boolean; bodyPart: BodyPartType; fatal: boolean; cause?: string } {
   if (!colonist.alive) return { died: false, bodyPart: 'torso', fatal: false } as any;
+  
+  // Check for godmode - no damage if enabled
+  if ((colonist as any).godmode) {
+    return { died: false, bodyPart: 'torso', fatal: false };
+  }
+  
   initializeColonistHealth(colonist);
   const health = colonist.health!;
 

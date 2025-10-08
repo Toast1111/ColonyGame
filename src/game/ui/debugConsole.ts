@@ -26,18 +26,22 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, kill, heal, godmode";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
     const flag = (args[0] || "").toLowerCase();
-    if (!flag) return "usage: toggle <nav|colonists|combat>";
+    if (!flag) return "usage: toggle <nav|colonists|combat|enemies>";
     if (flag === "nav") g.debug.nav = !g.debug.nav;
     else if (flag === "colonists") g.debug.colonists = !g.debug.colonists;
     else if (flag === "combat") (g.debug as any).combat = !(g.debug as any).combat;
+    else if (flag === "enemies") {
+      (g as any).disableEnemySpawns = !(g as any).disableEnemySpawns;
+      return `enemy spawns ${(g as any).disableEnemySpawns ? 'disabled' : 'enabled'}`;
+    }
     else return `unknown toggle '${flag}'`;
     return `${flag} = ${flag === 'combat' ? (g.debug as any).combat : (g.debug as any)[flag]}`;
-  }, "toggle nav|colonists|combat — flip debug flags");
+  }, "toggle nav|colonists|combat|enemies — flip debug flags or disable enemy spawning");
 
   reg("spawn", (g, args) => {
     const what = (args[0] || "enemy").toLowerCase();
@@ -58,19 +62,76 @@ export function initDebugConsole(game: Game) {
 
   reg("give", (g, args) => {
     const what = (args[0] || "").toLowerCase();
-    if (what !== "pistol") return "usage: give pistol [all]";
-    const all = (args[1] || "").toLowerCase() === "all";
-    const targets = all ? g.colonists : (g.selColonist ? [g.selColonist] : []);
-    if (!targets.length) return "no colonist selected (use 'select next') or add 'all'";
-    for (const c of targets) {
-      if (!c.inventory) (c as any).inventory = { items: [], equipment: {}, carryCapacity: 50, currentWeight: 0 } as any;
-      const pistol = (g as any).itemDatabase?.createItem ? (g as any).itemDatabase.createItem('Pistol', 1, 'normal') : null;
-      if (!(c as any).inventory.equipment) (c as any).inventory.equipment = {} as any;
-      (c as any).inventory.equipment.weapon = pistol || null;
-      g.recalcInventoryWeight(c);
+    const target = (args[1] || "selected").toLowerCase();
+    
+    // Get target colonist(s)
+    let targets: any[] = [];
+    if (target === "all") {
+      targets = g.colonists.filter(c => c.alive);
+    } else if (target === "selected") {
+      targets = g.selColonist ? [g.selColonist] : [];
+    } else {
+      // Try to find colonist by name
+      const found = g.colonists.find(c => c.alive && c.profile?.name?.toLowerCase().includes(target));
+      if (found) targets = [found];
     }
-    return `gave pistol to ${targets.length} colonist(s)`;
-  }, "give pistol [all] — equip a pistol to selected or all");
+    
+    if (!targets.length) {
+      return target === "selected" ? "no colonist selected (use 'select next')" : `no colonist found matching '${target}'`;
+    }
+
+    // Initialize inventory if needed
+    for (const c of targets) {
+      if (!c.inventory) {
+        (c as any).inventory = { 
+          items: [], 
+          equipment: {}, 
+          carryCapacity: 50, 
+          currentWeight: 0 
+        };
+      }
+      if (!(c as any).inventory.equipment) {
+        (c as any).inventory.equipment = {};
+      }
+    }
+    
+    // Handle different item types
+    if (what === "pistol" || what === "weapon") {
+      for (const c of targets) {
+        const pistol = itemDatabase.createItem('Pistol', 1, 'normal');
+        (c as any).inventory.equipment.weapon = pistol;
+        g.recalcInventoryWeight(c);
+      }
+      return `gave pistol to ${targets.length} colonist(s)`;
+    } 
+    else if (what === "medicine" || what === "medicinekit") {
+      for (const c of targets) {
+        const medicine = itemDatabase.createItem('MedicineKit', 5, 'normal');
+        (c as any).inventory.items.push(medicine);
+        g.recalcInventoryWeight(c);
+      }
+      return `gave 5 medicine kits to ${targets.length} colonist(s)`;
+    }
+    else if (what === "bandage" || what === "bandages") {
+      for (const c of targets) {
+        const bandage = itemDatabase.createItem('Bandage', 10, 'normal');
+        (c as any).inventory.items.push(bandage);
+        g.recalcInventoryWeight(c);
+      }
+      return `gave 10 bandages to ${targets.length} colonist(s)`;
+    }
+    else if (what === "food" || what === "bread") {
+      for (const c of targets) {
+        const bread = itemDatabase.createItem('Bread', 10, 'normal');
+        (c as any).inventory.items.push(bread);
+        g.recalcInventoryWeight(c);
+      }
+      return `gave 10 bread to ${targets.length} colonist(s)`;
+    }
+    else {
+      return "usage: give <pistol|medicine|bandage|food> [selected|all|name]";
+    }
+  }, "give <item> [target] — give items to colonist(s). Items: pistol,medicine,bandage,food. Target: selected,all,name");
 
   reg("select", (g, args) => {
     const sub = (args[0] || "").toLowerCase();
@@ -196,6 +257,165 @@ export function initDebugConsole(game: Game) {
       return "usage: health check|init [target]. Target: selected,all,name";
     }
   }, "health check|init [target] — check health status or initialize health system");
+
+  // NEW COMMANDS
+
+  reg("resources", (g, args) => {
+    const action = (args[0] || "").toLowerCase();
+    
+    if (action === "unlimited" || action === "god" || action === "infinite") {
+      // Set to very high amounts
+      g.resourceSystem.setResource('wood', 999999);
+      g.resourceSystem.setResource('stone', 999999);
+      g.resourceSystem.setResource('food', 999999);
+      g.resourceSystem.setResource('medicine', 999999);
+      g.resourceSystem.setResource('herbal', 999999);
+      g.resourceSystem.setResource('wheat', 999999);
+      g.resourceSystem.setResource('bread', 999999);
+      return "resources set to unlimited (999999 each)";
+    } 
+    else if (action === "add") {
+      const resourceType = (args[1] || "").toLowerCase();
+      const amount = Math.max(1, parseInt(args[2] || "100", 10) || 100);
+      
+      const validTypes = ['wood', 'stone', 'food', 'medicine', 'herbal', 'wheat', 'bread'];
+      if (!validTypes.includes(resourceType)) {
+        return `invalid resource type '${resourceType}'. Use: ${validTypes.join(', ')}`;
+      }
+      
+      g.resourceSystem.setResource(resourceType as any, g.resourceSystem.getResource(resourceType as any) + amount);
+      return `added ${amount} ${resourceType}`;
+    }
+    else if (action === "set") {
+      const resourceType = (args[1] || "").toLowerCase();
+      const amount = Math.max(0, parseInt(args[2] || "0", 10) || 0);
+      
+      const validTypes = ['wood', 'stone', 'food', 'medicine', 'herbal', 'wheat', 'bread'];
+      if (!validTypes.includes(resourceType)) {
+        return `invalid resource type '${resourceType}'. Use: ${validTypes.join(', ')}`;
+      }
+      
+      g.resourceSystem.setResource(resourceType as any, amount);
+      return `set ${resourceType} to ${amount}`;
+    }
+    else if (action === "show" || action === "list" || action === "") {
+      const res = g.resourceSystem.getResourcesRef();
+      return `Wood:${res.wood} Stone:${res.stone} Food:${res.food} Medicine:${res.medicine} Herbal:${res.herbal} Wheat:${res.wheat} Bread:${res.bread}`;
+    }
+    else {
+      return "usage: resources [unlimited|add|set|show] [type] [amount]";
+    }
+  }, "resources [action] — manage resources. Actions: unlimited, add <type> <amt>, set <type> <amt>, show");
+
+  reg("kill", (g, args) => {
+    const target = (args[0] || "enemies").toLowerCase();
+    
+    if (target === "enemies" || target === "enemy") {
+      const count = g.enemies.length;
+      g.enemies.length = 0;
+      return `killed ${count} enemies`;
+    }
+    else if (target === "selected") {
+      if (!g.selColonist) return "no colonist selected";
+      g.selColonist.alive = false;
+      g.selColonist.hp = 0;
+      return `killed ${g.selColonist.profile?.name || 'selected colonist'}`;
+    }
+    else if (target === "all") {
+      const count = g.colonists.filter(c => c.alive).length;
+      for (const c of g.colonists) {
+        c.alive = false;
+        c.hp = 0;
+      }
+      return `killed ${count} colonists`;
+    }
+    else {
+      // Try to find colonist by name
+      const found = g.colonists.find(c => c.alive && c.profile?.name?.toLowerCase().includes(target));
+      if (found) {
+        found.alive = false;
+        found.hp = 0;
+        return `killed ${found.profile?.name || target}`;
+      }
+      return `no colonist found matching '${target}'`;
+    }
+  }, "kill [target] — kill entities. Target: enemies,selected,all,name");
+
+  reg("heal", (g, args) => {
+    const target = (args[0] || "selected").toLowerCase();
+    
+    // Get target colonist(s)
+    let targets: any[] = [];
+    if (target === "all") {
+      targets = g.colonists.filter(c => c.alive);
+    } else if (target === "selected") {
+      targets = g.selColonist ? [g.selColonist] : [];
+    } else {
+      // Try to find colonist by name
+      const found = g.colonists.find(c => c.alive && c.profile?.name?.toLowerCase().includes(target));
+      if (found) targets = [found];
+    }
+    
+    if (!targets.length) {
+      return target === "selected" ? "no colonist selected (use 'select next')" : `no colonist found matching '${target}'`;
+    }
+    
+    for (const colonist of targets) {
+      // Restore HP
+      colonist.hp = 100;
+      
+      // Clear all injuries
+      if (colonist.health && colonist.health.injuries) {
+        colonist.health.injuries = [];
+        colonist.health.totalPain = 0;
+        colonist.health.bleeding = 0;
+        colonist.health.consciousness = 1;
+        colonist.health.mobility = 1;
+        colonist.health.manipulation = 1;
+      }
+      
+      // Restore hunger and fatigue
+      colonist.hunger = 0;
+      colonist.fatigue = 0;
+    }
+    
+    return `fully healed ${targets.length} colonist(s)`;
+  }, "heal [target] — fully heal colonist(s). Target: selected,all,name");
+
+  reg("godmode", (g, args) => {
+    const target = (args[0] || "selected").toLowerCase();
+    
+    // Get target colonist(s)
+    let targets: any[] = [];
+    if (target === "all") {
+      targets = g.colonists.filter(c => c.alive);
+    } else if (target === "selected") {
+      targets = g.selColonist ? [g.selColonist] : [];
+    } else {
+      // Try to find colonist by name
+      const found = g.colonists.find(c => c.alive && c.profile?.name?.toLowerCase().includes(target));
+      if (found) targets = [found];
+    }
+    
+    if (!targets.length) {
+      return target === "selected" ? "no colonist selected (use 'select next')" : `no colonist found matching '${target}'`;
+    }
+    
+    for (const colonist of targets) {
+      // Toggle godmode flag
+      (colonist as any).godmode = !(colonist as any).godmode;
+      
+      if ((colonist as any).godmode) {
+        // Set to invincible
+        colonist.hp = 100;
+        colonist.hunger = 0;
+        colonist.fatigue = 0;
+      }
+    }
+    
+    const status = (targets[0] as any).godmode ? 'enabled' : 'disabled';
+    return `godmode ${status} for ${targets.length} colonist(s)`;
+  }, "godmode [target] — toggle godmode (no damage/hunger/fatigue). Target: selected,all,name");
 }
 
 export function toggleDebugConsole(game: Game) {

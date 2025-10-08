@@ -1,5 +1,6 @@
 import { T, COLORS } from "./constants";
 import type { Building, BuildingDef, Resources } from "./types";
+import { initializeBuildingInventory, shouldHaveInventory, getDefaultInventoryCapacity } from "./systems/buildingInventory";
 
 export const BUILD_TYPES: Record<string, BuildingDef> = {
   house: { 
@@ -217,7 +218,7 @@ export function makeBuilding(kind: keyof typeof BUILD_TYPES, wx: number, wy: num
   const def = BUILD_TYPES[kind];
   const gx = Math.floor(wx / T) * T;
   const gy = Math.floor(wy / T) * T;
-  return {
+  const building: Building = {
     kind,
     ...def,
     x: gx, y: gy,
@@ -231,6 +232,14 @@ export function makeBuilding(kind: keyof typeof BUILD_TYPES, wx: number, wy: num
     cooldown: 0,
     ...(kind === 'bed' ? { isMedicalBed: false } : {}),
   } as Building;
+  
+  // Initialize inventory for storage buildings
+  if (shouldHaveInventory(kind)) {
+    const capacity = getDefaultInventoryCapacity(kind);
+    initializeBuildingInventory(building, capacity);
+  }
+  
+  return building;
 }
 
 export function costText(cost: Partial<Resources>): string {

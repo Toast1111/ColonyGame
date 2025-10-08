@@ -59,7 +59,22 @@ export type Building = BuildingDef & {
   cookingColonist?: string; // ID of colonist currently cooking
   // Pantry-specific properties
   breadStored?: number; // Amount of bread in pantry
+  // Building inventory system (for storage buildings like pantry, farm, warehouses)
+  inventory?: BuildingInventory;
 };
+
+// Building inventory system
+export interface BuildingInventoryItem {
+  type: keyof Resources; // Resource type (wood, stone, food, wheat, bread, etc.)
+  quantity: number;
+  maxStack?: number; // Optional max stack size for this item type
+}
+
+export interface BuildingInventory {
+  items: BuildingInventoryItem[];
+  capacity: number; // Maximum number of different item slots
+  maxWeight?: number; // Optional weight limit (future feature)
+}
 
 export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread';
 

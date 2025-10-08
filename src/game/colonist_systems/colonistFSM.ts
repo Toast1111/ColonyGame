@@ -6,6 +6,7 @@ import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOve
 import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor } from "../systems/doorSystem";
+import { addItemToInventory, removeItemFromInventory, getInventoryItemCount } from "../systems/buildingInventory";
 
 // Helper to check if colonist should wait for a door
 function checkDoorInteraction(game: any, c: Colonist): Building | null {
@@ -303,14 +304,22 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   const hungerMultiplier = c.profile?.stats.hungerRate || 1.0;
   const fatigueMultiplier = c.profile?.stats.fatigueRate || 1.0;
   
-  const hungerRate = (working ? 0.25 : c.inside ? 0.1 : 0.15) * hungerMultiplier; // Apply personality modifier
-  c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
+  // Skip hunger/fatigue if godmode is enabled
+  if (!(c as any).godmode) {
+    const hungerRate = (working ? 0.25 : c.inside ? 0.1 : 0.15) * hungerMultiplier; // Apply personality modifier
+    c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
+    
+    // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
+    const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply personality modifier
+    // Only reduce fatigue when actually inside a building or in the resting state, NOT when just seeking sleep
+    if (c.inside || c.state === 'resting') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
+    else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
+  } else {
+    // Godmode: keep hunger and fatigue at 0
+    c.hunger = 0;
+    c.fatigue = 0;
+  }
   
-  // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
-  const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply personality modifier
-  // Only reduce fatigue when actually inside a building or in the resting state, NOT when just seeking sleep
-  if (c.inside || c.state === 'resting') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
-  else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
   // Starvation damage if very hungry (reduced from 4 to 2 damage per second)
   if ((c.hunger || 0) >= 95) { 
     const damage = 2 * dt;
@@ -1341,11 +1350,32 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (f.kind === 'farm') {
           f.ready = false; 
           f.growth = 0; 
-          // Farms now produce wheat instead of food
-          const harvested = game.addResource('wheat', Math.round(10 * yieldMult));
-          if (harvested > 0) {
-            game.msg(`Farm harvested (+${harvested} wheat)`, 'good');
+          // Farms now produce wheat - store it in the farm's inventory instead of global resources
+          const wheatAmount = Math.round(10 * yieldMult);
+          
+          // Try to add to farm inventory first
+          if (f.inventory) {
+            const added = addItemToInventory(f, 'wheat', wheatAmount);
+            if (added > 0) {
+              game.msg(`Farm harvested (+${added} wheat stored in farm)`, 'good');
+            }
+            
+            // If farm inventory is full, add remainder to global resources
+            if (added < wheatAmount) {
+              const remainder = wheatAmount - added;
+              const addedToGlobal = game.addResource('wheat', remainder);
+              if (addedToGlobal > 0) {
+                game.msg(`Farm full! +${addedToGlobal} wheat to storage`, 'info');
+              }
+            }
+          } else {
+            // Fallback: no inventory, add directly to global resources
+            const harvested = game.addResource('wheat', wheatAmount);
+            if (harvested > 0) {
+              game.msg(`Farm harvested (+${harvested} wheat)`, 'good');
+            }
           }
+          
           if (c.skills) grantSkillXP(c, 'Plants', 20, c.t || 0); // big tick on harvest
         } else if (f.kind === 'well') {
           const collected = game.addResource('food', Math.round(5 * yieldMult * 0.6));
@@ -1576,14 +1606,33 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // At the stove - cooking workflow
       // Step 1: Pick up wheat if not carrying any
       if (!c.carryingWheat || c.carryingWheat === 0) {
-        if ((game.RES.wheat || 0) >= 5) {
-          // Take wheat from global resources
+        let wheatAcquired = 0;
+        
+        // First, try to get wheat from farm inventories
+        const farms = game.buildings.filter((b: Building) => b.kind === 'farm' && b.done && b.inventory);
+        for (const farm of farms) {
+          const availableWheat = getInventoryItemCount(farm, 'wheat');
+          if (availableWheat >= 5) {
+            // Remove 5 wheat from farm inventory
+            const removed = removeItemFromInventory(farm, 'wheat', 5);
+            wheatAcquired = removed;
+            game.msg(`${c.profile?.name || 'Colonist'} took ${removed} wheat from farm`, 'info');
+            break;
+          }
+        }
+        
+        // If couldn't get enough from farms, try global resources
+        if (wheatAcquired === 0 && (game.RES.wheat || 0) >= 5) {
           game.RES.wheat = (game.RES.wheat || 0) - 5;
-          c.carryingWheat = 5;
-          stove.cookingColonist = c.id;
+          wheatAcquired = 5;
           game.msg(`${c.profile?.name || 'Colonist'} picked up 5 wheat`, 'info');
+        }
+        
+        if (wheatAcquired > 0) {
+          c.carryingWheat = wheatAcquired;
+          stove.cookingColonist = c.id;
         } else {
-          // No wheat available
+          // No wheat available anywhere
           c.task = null;
           c.target = null;
           changeState('seekTask', 'no wheat available');
@@ -1665,11 +1714,32 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       // At the pantry - store the bread
       if (c.carryingBread && c.carryingBread > 0) {
-        pantry.breadStored = (pantry.breadStored || 0) + c.carryingBread;
-        game.addResource('bread', c.carryingBread);
-        game.msg(`${c.profile?.name || 'Colonist'} stored ${c.carryingBread} bread`, 'good');
-        c.carryingBread = 0;
+        // Try to store in pantry inventory first
+        if (pantry.inventory) {
+          const added = addItemToInventory(pantry, 'bread', c.carryingBread);
+          if (added > 0) {
+            game.msg(`${c.profile?.name || 'Colonist'} stored ${added} bread in pantry`, 'good');
+            // Update legacy breadStored property for backwards compatibility
+            pantry.breadStored = (pantry.breadStored || 0) + added;
+          }
+          
+          // Add to global resources as well (for HUD display)
+          game.addResource('bread', added);
+          
+          // If pantry is full, add remainder to global resources
+          if (added < c.carryingBread) {
+            const remainder = c.carryingBread - added;
+            game.addResource('bread', remainder);
+            game.msg(`Pantry full! +${remainder} bread to general storage`, 'info');
+          }
+        } else {
+          // Fallback: no inventory, use legacy system
+          pantry.breadStored = (pantry.breadStored || 0) + c.carryingBread;
+          game.addResource('bread', c.carryingBread);
+          game.msg(`${c.profile?.name || 'Colonist'} stored ${c.carryingBread} bread`, 'good');
+        }
         
+        c.carryingBread = 0;
         c.task = null;
         c.target = null;
         changeState('seekTask', 'bread stored');

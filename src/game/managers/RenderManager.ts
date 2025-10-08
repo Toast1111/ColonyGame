@@ -14,6 +14,7 @@ import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
 import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
 import { drawWorkPriorityPanel } from '../ui/workPriorityPanel';
+import { drawBuildingInventoryPanel } from '../ui/buildingInventoryPanel';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
 import { drawDebugConsole } from '../ui/debugConsole';
@@ -555,6 +556,9 @@ export class RenderManager {
 
     // Work priority panel (modal overlay - renders on top of everything)
     drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
+    
+    // Building inventory panel (modal overlay - renders on top of everything except work priority)
+    drawBuildingInventoryPanel(ctx, canvas.width, canvas.height);
   }
 
   /**

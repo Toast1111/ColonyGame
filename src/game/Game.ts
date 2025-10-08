@@ -29,6 +29,8 @@ import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
+import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
+import { getInventoryItemCount } from './systems/buildingInventory';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor } from './systems/doorSystem';
 import { GameState } from './core/GameState';
@@ -623,6 +625,15 @@ export class Game {
         return;
       }
       
+      // BUILDING INVENTORY PANEL IS MODAL - Check second and block other interactions
+      if (isBuildingInventoryPanelOpen()) {
+        if (handleBuildingInventoryPanelClick(e.offsetX * this.DPR, e.offsetY * this.DPR, this.canvas.width, this.canvas.height)) {
+          return; // Panel handled the click
+        }
+        // If panel is open but click wasn't handled, still block everything else
+        return;
+      }
+      
       if ((e as MouseEvent).button === 0) {
         this.mouse.down = true;
         // Desktop: close colonist panel via X or clicking outside panel
@@ -997,6 +1008,15 @@ export class Game {
     if (isWorkPriorityPanelOpen()) {
       if (handleWorkPriorityPanelClick(sx * this.DPR, sy * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
         return; // Panel handled the click (including closing via X or outside click)
+      }
+      // If panel is open but click wasn't handled, still block everything else
+      return;
+    }
+
+    // BUILDING INVENTORY PANEL IS MODAL - Check second and block other interactions
+    if (isBuildingInventoryPanelOpen()) {
+      if (handleBuildingInventoryPanelClick(sx * this.DPR, sy * this.DPR, this.canvas.width, this.canvas.height)) {
+        return; // Panel handled the click
       }
       // If panel is open but click wasn't handled, still block everything else
       return;
@@ -1525,8 +1545,19 @@ export class Game {
     if (canDoWork('Cooking')) {
       const stoves = this.buildings.filter(b => b.kind === 'stove' && b.done);
       
+      // Check if there's wheat available in farm inventories OR global storage
+      const farms = this.buildings.filter(b => b.kind === 'farm' && b.done);
+      let totalWheatAvailable = this.RES.wheat || 0;
+      
+      // Count wheat in farm inventories
+      for (const farm of farms) {
+        if (farm.inventory) {
+          totalWheatAvailable += getInventoryItemCount(farm, 'wheat');
+        }
+      }
+      
       // Check if there's wheat to cook and available stoves
-      if (stoves.length > 0 && (this.RES.wheat || 0) >= 5) {
+      if (stoves.length > 0 && totalWheatAvailable >= 5) {
         // Find stove that isn't currently being used for cooking
         const availableStove = stoves.find(s => !s.cookingColonist || s.cookingColonist === c.id);
         
@@ -1801,7 +1832,10 @@ export class Game {
     
     // Night started - spawn wave
     if (this.timeSystem.didNightJustStart()) { 
-      this.spawnWave(); 
+      // Check if enemy spawning is disabled via console command
+      if (!(this as any).disableEnemySpawns) {
+        this.spawnWave(); 
+      }
     }
 
     // Daily-time continuous effects for colonists
