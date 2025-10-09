@@ -313,6 +313,19 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
   ctx.lineWidth = 0.5;
   ctx.stroke();
   
+  // Player command indicator - show exclamation mark for active player commands
+  const hasActivePlayerCommand = colonist.playerCommand?.issued && 
+                                   colonist.playerCommand.expires && 
+                                   (colonist.t || 0) < colonist.playerCommand.expires;
+  if (hasActivePlayerCommand) {
+    ctx.font = 'bold 14px system-ui';
+    ctx.fillStyle = '#fbbf24'; // Amber/yellow for command indicator
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeText('❗', 12, -offsetY + spriteHeight * 0.15);
+    ctx.fillText('❗', 12, -offsetY + spriteHeight * 0.15);
+  }
+  
   // Carrying indicator - show icon if colonist is carrying wheat or bread
   if (colonist.carryingWheat && colonist.carryingWheat > 0) {
     ctx.font = 'bold 12px system-ui';
@@ -602,7 +615,11 @@ export function drawHUD(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement
   pill(ctx, x, game.scale(12), popText, '#93c5fd', game); x += Math.max(dynamicSpace, game.scale(game.isTouch ? 260 : 210));
   const hidText = `Hiding: ${parts.hiding}`; 
   pill(ctx, x, game.scale(12), hidText, '#60a5fa', game); x += Math.max(game.scale(game.isTouch ? 180 : 140), dynamicSpace * 0.9 | 0);
-  const timeText = `Day ${parts.day} — ${(parts.tDay * 24) | 0}:00 ${parts.isNight ? '🌙' : '☀️'}`;
+  
+  // Format time as HH:MM
+  const hour = Math.floor(parts.tDay * 24);
+  const minute = Math.floor((parts.tDay * 24 - hour) * 60);
+  const timeText = `Day ${parts.day} — ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')} ${parts.isNight ? '🌙' : '☀️'}`;
   pill(ctx, x, game.scale(12), timeText, parts.isNight ? '#ffd166' : '#6ee7ff', game);
   
   // Hotbar

@@ -18,6 +18,7 @@ import { drawBuildingInventoryPanel } from '../ui/buildingInventoryPanel';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
 import { drawDebugConsole } from '../ui/debugConsole';
+import { drawPerformanceHUD } from '../ui/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
 
 export class RenderManager {
@@ -559,6 +560,9 @@ export class RenderManager {
     
     // Building inventory panel (modal overlay - renders on top of everything except work priority)
     drawBuildingInventoryPanel(ctx, canvas.width, canvas.height);
+    
+    // Performance HUD (top layer - always visible when enabled)
+    drawPerformanceHUD(game);
   }
 
   /**

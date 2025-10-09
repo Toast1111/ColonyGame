@@ -19,13 +19,10 @@ export function rebuildNavGridPartial(game: Game, worldX: number, worldY: number
   const minGy = Math.max(0, centerGy - gridRadius);
   const maxGy = Math.min(game.grid.rows - 1, centerGy + gridRadius);
   
-  // Clear only the affected area
+  // Clear only the affected area (this now uses partial terrain sync internally)
   clearGridArea(game.grid, minGx, minGy, maxGx - minGx + 1, maxGy - minGy + 1);
   
-  // Restore terrain/floor costs in the area
-  if (game.grid.terrainGrid) {
-    syncTerrainToGrid(game.grid);
-  }
+  // NOTE: clearGridArea now calls syncTerrainToGridPartial internally, so we don't need to call it here
   
   // Re-mark buildings that intersect with this area
   for (const b of game.buildings) {

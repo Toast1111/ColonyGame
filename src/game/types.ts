@@ -76,7 +76,7 @@ export interface BuildingInventory {
   maxWeight?: number; // Optional weight limit (future feature)
 }
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread' | 'haulBread';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -224,7 +224,17 @@ export type Colonist = {
   
   // Cooking system
   carryingWheat?: number;  // Amount of wheat being carried
-  carryingBread?: number;  // Amount of bread being carried
+  carryingBread?: number;  // Amount of bread being carrying
+  cookingSubState?: 'goingToFarm' | 'goingToStove' | 'cooking' | null; // Multi-step cooking workflow state
+  cookingSourceFarm?: Building | null; // The farm where wheat is being picked up from
+  
+  // Player command override system
+  playerCommand?: {
+    issued: boolean;           // True if player has issued a direct command
+    timestamp: number;         // Game time when command was issued
+    task: string;              // The task that was commanded
+    expires?: number;          // Optional expiration time (for temporary overrides)
+  };
 };
 
 export type Enemy = { 

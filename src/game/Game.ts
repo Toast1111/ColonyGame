@@ -41,6 +41,10 @@ import { InputManager } from './managers/InputManager';
 import { UIManager } from './managers/UIManager';
 import { RenderManager } from './managers/RenderManager';
 import { NavigationManager } from './managers/NavigationManager';
+import { PerformanceMetrics } from '../core/PerformanceMetrics';
+import { SimulationClock } from '../core/SimulationClock';
+import { BudgetedExecutionManager } from '../core/BudgetedExecution';
+import { initPerformanceHUD, drawPerformanceHUD, togglePerformanceHUD } from './ui/performanceHUD';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -57,6 +61,39 @@ export class Game {
   uiManager = new UIManager();
   renderManager = new RenderManager(this);
   navigationManager = new NavigationManager(this);
+  
+  // Performance systems
+  performanceMetrics = PerformanceMetrics.getInstance();
+  simulationClock = SimulationClock.getInstance({ simulationHz: 30 });
+  budgetManager = BudgetedExecutionManager.getInstance();
+  
+  deferredRebuildSystem = new (class DeferredRebuildSystem {
+    private game: Game;
+    private rebuildQueued: boolean = false;
+    private fullRebuildQueued: boolean = false;
+    
+    constructor(game: Game) {
+      this.game = game;
+    }
+    
+    requestFullRebuild(): void {
+      this.fullRebuildQueued = true;
+      this.rebuildQueued = true;
+    }
+    
+    processQueue(): void {
+      if (!this.rebuildQueued) return;
+      if (this.fullRebuildQueued) {
+        this.game.navigationManager.rebuildNavGrid();
+        this.fullRebuildQueued = false;
+      }
+      this.rebuildQueued = false;
+    }
+    
+    hasQueuedRebuilds(): boolean {
+      return this.rebuildQueued;
+    }
+  })(this);
   
   // Camera reference - now returns cameraSystem's camera for backward compatibility
   get camera(): Camera { return this.cameraSystem.getCameraRef(); }
@@ -231,7 +268,7 @@ export class Game {
   set lastInputWasTouch(value: boolean) { this.inputManager.setLastInputWasTouch(value); }
   
   // Debug flags (keep as is - not part of managers)
-  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false, terrain: false };
+  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false, terrain: false, performanceHUD: false };
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -248,7 +285,7 @@ export class Game {
     // Sync terrain costs to pathfinding grid (all grass initially)
     this.syncTerrainToGrid();
     
-    this.rebuildNavGrid(); 
+    this.rebuildNavGridImmediate(); // Use immediate rebuild during initialization
     
     // Initialize region system after nav grid is built
     this.regionManager.initialize(this.buildings);
@@ -269,6 +306,9 @@ export class Game {
     itemDatabase.loadItems();
   // Init debug console
   initDebugConsole(this);
+    // Init performance HUD
+    initPerformanceHUD({ visible: false, position: 'top-right' });
+    
     // Expose damage API for external modules (combat, scripts)
     (this as any).applyDamageToColonist = (colonist: any, dmg: number, type: any = 'cut') => {
       applyDamageToColonist(this, colonist, dmg, type);
@@ -1193,7 +1233,7 @@ export class Game {
     for (let i = 0; i < 220; i++) { const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 220) continue; this.trees.push({ x: p.x, y: p.y, r: 12, hp: 40, type: 'tree' }); }
     for (let i = 0; i < 140; i++) { const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 200) continue; this.rocks.push({ x: p.x, y: p.y, r: 12, hp: 50, type: 'rock' }); }
     // Rebuild navigation grid after scattering resources
-    this.rebuildNavGrid();
+    this.rebuildNavGridImmediate(); // Use immediate rebuild during game init
   }
   respawnTimer = 0; // seconds accumulator for resource respawn
   tryRespawn(dt: number) {
@@ -1224,7 +1264,7 @@ export class Game {
     const def = { w: 3 * T, h: 3 * T };
     const HQ: Building = { kind: 'hq', name: 'HQ', x: HQ_POS.x - def.w / 2, y: HQ_POS.y - def.h / 2, w: def.w, h: def.h, hp: 600, done: true, color: COLORS.bld, size: { w: 3, h: 3 }, build: 0, buildLeft: 0 } as any;
     this.buildings.push(HQ);
-  this.rebuildNavGrid();
+  this.rebuildNavGridImmediate(); // Use immediate rebuild during game init
   }
   newGame() {
   this.colonists.length = this.enemies.length = this.trees.length = this.rocks.length = this.buildings.length = this.bullets.length = this.messages.length = 0;
@@ -1409,12 +1449,23 @@ export class Game {
     c.pathIndex = undefined; // RE-ENABLED
     // c.repath = 0; // REPATH TIMER STILL DISABLED
   }
-  setTask(c: Colonist, task: string, target: any) {
+  setTask(c: Colonist, task: string, target: any, isPlayerCommand = false) {
     // release old reserved target
     if (c.target && (c.target as any).type && this.assignedTargets.has(c.target)) this.assignedTargets.delete(c.target);
     // release old build reservation if changing away from that building
     if (c.reservedBuildFor && c.reservedBuildFor !== target) this.releaseBuildReservation(c);
     c.task = task; c.target = target; this.clearPath(c);
+    
+    // Mark player-issued commands with a timestamp and expiration
+    if (isPlayerCommand) {
+      c.playerCommand = {
+        issued: true,
+        timestamp: c.t || 0,
+        task: task,
+        expires: (c.t || 0) + 300 // Commands expire after 5 minutes (300 seconds) of game time
+      };
+    }
+    
     // reserve resources so only one colonist picks the same tree/rock
     if (target && (target as any).type && ((target as any).type === 'tree' || (target as any).type === 'rock')) this.assignedTargets.add(target);
     // reserve a build slot
@@ -1589,6 +1640,37 @@ export class Game {
             distance,
             priority: getWorkPriority('Cooking') - 1 // Slightly higher priority to finish the job
           });
+        }
+      }
+    }
+    
+    // 6. Hauling - Move items between buildings (e.g., bread from stove to pantry)
+    if (canDoWork('Hauling')) {
+      // Check stoves for bread that needs to be hauled to pantry
+      const stoves = this.buildings.filter(b => b.kind === 'stove' && b.done && b.inventory);
+      const pantries = this.buildings.filter(b => b.kind === 'pantry' && b.done);
+      
+      if (pantries.length > 0) {
+        for (const stove of stoves) {
+          const breadInStove = getInventoryItemCount(stove, 'bread');
+          if (breadInStove > 0) {
+            // Find nearest pantry with space
+            const nearestPantry = pantries.reduce((closest, p) => {
+              const dist = Math.hypot(c.x - (p.x + p.w/2), c.y - (p.y + p.h/2));
+              const closestDist = Math.hypot(c.x - (closest.x + closest.w/2), c.y - (closest.y + closest.h/2));
+              return dist < closestDist ? p : closest;
+            });
+            
+            const distanceToStove = Math.hypot(c.x - (stove.x + stove.w/2), c.y - (stove.y + stove.h/2));
+            candidates.push({
+              workType: 'Hauling',
+              task: 'haulBread',
+              target: stove, // Will haul from stove to pantry
+              extraData: nearestPantry, // Store pantry reference
+              distance: distanceToStove,
+              priority: getWorkPriority('Hauling')
+            });
+          }
         }
       }
     }
@@ -1899,6 +1981,11 @@ export class Game {
       this.debug.forceDesktopMode = !this.debug.forceDesktopMode; 
       this.toast(this.debug.forceDesktopMode ? 'Debug: Force Desktop Mode ON' : 'Debug: Force Desktop Mode OFF'); 
     }
+    if (!consoleOpen && this.keyPressed('m')) {
+      this.debug.performanceHUD = !this.debug.performanceHUD;
+      togglePerformanceHUD();
+      this.toast(this.debug.performanceHUD ? 'Performance HUD ON' : 'Performance HUD OFF');
+    }
   if (!consoleOpen && this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
     if (!consoleOpen && this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
     
@@ -1920,6 +2007,9 @@ export class Game {
       this.camera.y = clamp(c.y - vh / 2, 0, Math.max(0, WORLD.h - vh));
     }
     this.dayTick(dt);
+    
+  // AI updates - track performance
+  this.performanceMetrics.startTiming('ai');
   for (const c of this.colonists) { if (c.alive) {
       // Initialize health system for existing colonists (backward compatibility)
       if (!c.health) {
@@ -1931,6 +2021,8 @@ export class Game {
       updateColonistFSM(this, c, dt * this.fastForward);
     } }
   for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; updateEnemyFSM(this, e, dt * this.fastForward); if (e.hp <= 0) { this.enemies.splice(i, 1); if (Math.random() < .5) this.RES.food += 1; } }
+  this.performanceMetrics.endTiming('colonist & enemy AI');
+  
     for (const b of this.buildings) {
       if (b.kind === 'turret' && b.done) this.updateTurret(b, dt * this.fastForward);
       
@@ -1986,6 +2078,9 @@ export class Game {
   updateProjectilesCombat(this, dt);
     
     for (let i = this.messages.length - 1; i >= 0; i--) { const m = this.messages[i]; m.t -= dt; if (m.t <= 0) this.messages.splice(i, 1); }
+    
+    // Process queued navmesh rebuilds at END of frame (deferred rebuild system)
+    this.deferredRebuildSystem.processQueue();
   }
 
   /**
@@ -1997,10 +2092,44 @@ export class Game {
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }
 
-  // Loop
+  // Performance logging interval
+  private lastPerfLog = 0;
+  private readonly PERF_LOG_INTERVAL = 5000; // 5 seconds
+
+  // Loop - Fixed timestep simulation with interpolated rendering
   last = performance.now();
   frame = (now: number) => {
-    const dt = Math.min(0.033, (now - this.last) / 1000); this.last = now; this.update(dt); this.draw(); requestAnimationFrame(this.frame);
+    const frameStart = performance.now();
+    
+    // Determine how many simulation steps to run
+    const steps = this.simulationClock.tick(now);
+    
+    // Run simulation steps (fixed timestep)
+    for (let i = 0; i < steps; i++) {
+      this.performanceMetrics.startTiming('other');
+      this.simulationClock.runSimulationStep((dt) => {
+        this.update(dt);
+      });
+      this.performanceMetrics.endTiming();
+    }
+    
+    // Always render (interpolated)
+    this.performanceMetrics.startTiming('render');
+    this.draw();
+    this.performanceMetrics.endTiming();
+    
+    // Track frame completion
+    const frameTime = performance.now() - frameStart;
+    this.performanceMetrics.endFrame(frameTime);
+    this.simulationClock.recordRenderFrame();
+    
+    // Periodic performance logging
+    if (now - this.lastPerfLog >= this.PERF_LOG_INTERVAL) {
+      console.log(this.performanceMetrics.getSummary());
+      this.lastPerfLog = now;
+    }
+    
+    requestAnimationFrame(this.frame);
   };
 
   // Win/Lose
@@ -2013,10 +2142,27 @@ export class Game {
   regionManager = new RegionManager(this.grid);
   
   // Navigation delegation to NavigationManager
-  rebuildNavGrid() { this.navigationManager.rebuildNavGrid(); }
+  rebuildNavGrid() { 
+    // Queue rebuild instead of doing it immediately
+    this.deferredRebuildSystem.requestFullRebuild();
+  }
+  rebuildNavGridImmediate() {
+    // For cases that need immediate rebuild (rare)
+    this.navigationManager.rebuildNavGrid();
+  }
   syncTerrainToGrid() { this.navigationManager.syncTerrainToGrid(); }
-  computePath(sx: number, sy: number, tx: number, ty: number) { return this.navigationManager.computePath(sx, sy, tx, ty); }
-  computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) { return this.navigationManager.computePathWithDangerAvoidance(c, sx, sy, tx, ty); }
+  computePath(sx: number, sy: number, tx: number, ty: number) { 
+    this.performanceMetrics.startTiming('pathfinding');
+    const result = this.navigationManager.computePath(sx, sy, tx, ty);
+    this.performanceMetrics.endTiming(`path (${sx},${sy})->(${tx},${ty})`);
+    return result;
+  }
+  computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) { 
+    this.performanceMetrics.startTiming('pathfinding');
+    const result = this.navigationManager.computePathWithDangerAvoidance(c, sx, sy, tx, ty);
+    this.performanceMetrics.endTiming('danger-avoid path');
+    return result;
+  }
   private cellIndexAt(x: number, y: number) { return this.navigationManager.cellIndexAt(x, y); }
   isBlocked(x: number, y: number) { return this.navigationManager.isBlocked(x, y); }
   findNearestBuildingByRegion(x: number, y: number, filter: (b: Building) => boolean) { return this.navigationManager.findNearestBuildingByRegion(x, y, filter); }
@@ -2041,11 +2187,11 @@ export class Game {
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing medical work`, 'info');
         break;
       case 'prioritize_work':
-        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), true);
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing work tasks`, 'info');
         break;
       case 'prioritize_build':
-        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist));
+        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist), true);
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing construction`, 'info');
         break;
       case 'prioritize_haul':
@@ -2059,17 +2205,17 @@ export class Game {
         
       // Force actions
       case 'force_rest':
-        this.forceColonistToRest(colonist);
+        this.forceColonistToRest(colonist, true);
         break;
       case 'force_eat':
-        this.forceColonistToEat(colonist);
+        this.forceColonistToEat(colonist, true);
         break;
       case 'force_work':
-        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist));
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), true);
         this.msg(`${colonist.profile?.name || 'Colonist'} forced to work`, 'info');
         break;
       case 'force_guard':
-        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y });
+        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y }, true);
         this.msg(`${colonist.profile?.name || 'Colonist'} guarding area`, 'info');
         break;
         
@@ -2261,12 +2407,12 @@ export class Game {
     return nearestFrom(shelters);
   }
 
-  forceColonistToRest(colonist: Colonist) {
+  forceColonistToRest(colonist: Colonist, isPlayerCommand = false) {
     const needsMedical = this.colonistNeedsMedicalBed(colonist);
     const restBuilding = this.findBestRestBuilding(colonist, { preferMedical: needsMedical, allowShelterFallback: true });
     
     if (restBuilding) {
-      this.setTask(colonist, 'rest', restBuilding);
+      this.setTask(colonist, 'rest', restBuilding, isPlayerCommand);
       const targetLabel = restBuilding.kind === 'bed' ? (restBuilding.isMedicalBed ? 'medical bed' : 'bed') : restBuilding.name || restBuilding.kind;
       this.msg(`${colonist.profile?.name || 'Colonist'} going to ${targetLabel}`, needsMedical ? 'info' : 'info');
     } else {
@@ -2274,8 +2420,17 @@ export class Game {
     }
   }
 
-  forceColonistToEat(colonist: Colonist) {
+  forceColonistToEat(colonist: Colonist, isPlayerCommand = false) {
     if (this.RES.food > 0) {
+      // Mark as player command if forced by player
+      if (isPlayerCommand) {
+        colonist.playerCommand = {
+          issued: true,
+          timestamp: colonist.t || 0,
+          task: 'eat',
+          expires: (colonist.t || 0) + 60 // Eating command expires after 1 minute
+        };
+      }
       // Simulate eating
       colonist.hunger = Math.max(0, (colonist.hunger || 0) - 30);
       this.RES.food = Math.max(0, this.RES.food - 1);

@@ -102,7 +102,7 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
 
 // Entry point from click/tap
 export function placeAtMouse(game: Game) {
-  if (game.paused) return; const t = game.selectedBuild; if (!t) return; const def = BUILD_TYPES[t]; if (!def) return;
+  const t = game.selectedBuild; if (!t) return; const def = BUILD_TYPES[t]; if (!def) return;
   if (!game.debug.forceDesktopMode && game.isActuallyTouchDevice && game.lastInputWasTouch) {
     const gx = Math.floor(game.mouse.wx / T) * T;
     const gy = Math.floor(game.mouse.wy / T) * T;

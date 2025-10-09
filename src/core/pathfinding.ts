@@ -58,34 +58,41 @@ export function clearGrid(grid: Grid): void {
  * Much faster than clearing the entire grid
  */
 export function clearGridArea(grid: Grid, startX: number, startY: number, width: number, height: number): void {
-  const endX = Math.min(grid.cols, startX + width);
-  const endY = Math.min(grid.rows, startY + height);
-  
-  for (let y = startY; y < endY; y++) {
-    for (let x = startX; x < endX; x++) {
-      const idx = y * grid.cols + x;
-      grid.solid[idx] = 0;
-      grid.cost[idx] = 1.0;
+  // Use partial terrain sync instead of inline logic
+  if (grid.terrainGrid) {
+    syncTerrainToGridPartial(grid, startX, startY, width, height);
+  } else {
+    // Fallback: clear to default passable state
+    const endX = Math.min(grid.cols, startX + width);
+    const endY = Math.min(grid.rows, startY + height);
+    
+    for (let y = startY; y < endY; y++) {
+      for (let x = startX; x < endX; x++) {
+        const idx = y * grid.cols + x;
+        grid.solid[idx] = 0;
+        grid.cost[idx] = 1.0;
+      }
     }
-  }
-  
-  // Mark affected sections as dirty
-  const startSectionX = Math.floor(startX / grid.sectionSize);
-  const startSectionY = Math.floor(startY / grid.sectionSize);
-  const endSectionX = Math.min(grid.sectionCols - 1, Math.floor((endX - 1) / grid.sectionSize));
-  const endSectionY = Math.min(grid.sectionRows - 1, Math.floor((endY - 1) / grid.sectionSize));
-  
-  for (let sy = startSectionY; sy <= endSectionY; sy++) {
-    for (let sx = startSectionX; sx <= endSectionX; sx++) {
-      const sectionIdx = sy * grid.sectionCols + sx;
-      grid.dirtyFlags[sectionIdx] = 1;
+    
+    // Mark affected sections as dirty
+    const startSectionX = Math.floor(startX / grid.sectionSize);
+    const startSectionY = Math.floor(startY / grid.sectionSize);
+    const endSectionX = Math.min(grid.sectionCols - 1, Math.floor((endX - 1) / grid.sectionSize));
+    const endSectionY = Math.min(grid.sectionRows - 1, Math.floor((endY - 1) / grid.sectionSize));
+    
+    for (let sy = startSectionY; sy <= endSectionY; sy++) {
+      for (let sx = startSectionX; sx <= endSectionX; sx++) {
+        const sectionIdx = sy * grid.sectionCols + sx;
+        grid.dirtyFlags[sectionIdx] = 1;
+      }
     }
   }
 }
 
 /**
- * Sync terrain grid costs to pathfinding grid
+ * Sync terrain grid costs to pathfinding grid (FULL - all cells)
  * Call this after modifying terrain or floors to update pathfinding
+ * WARNING: Slow! Processes all 57,600 cells. Use syncTerrainToGridPartial when possible.
  */
 export function syncTerrainToGrid(grid: Grid): void {
   if (!grid.terrainGrid) return;
@@ -106,15 +113,66 @@ export function syncTerrainToGrid(grid: Grid): void {
         minCost = cost;
       }
       
-      // Mark impassable terrain as solid
+      // Mark impassable terrain as solid, passable terrain as clear
       if (!isTerrainPassable(terrainGrid, x, y)) {
         grid.solid[idx] = 1;
+      } else {
+        grid.solid[idx] = 0;
       }
     }
   }
   
   grid.minCost = minCost;
   grid.dirtyFlags.fill(1); // Mark all sections dirty
+}
+
+/**
+ * Sync terrain grid costs for a specific area only (FAST)
+ * Much faster than full sync - only processes affected cells
+ */
+export function syncTerrainToGridPartial(
+  grid: Grid,
+  startX: number,
+  startY: number,
+  width: number,
+  height: number
+): void {
+  if (!grid.terrainGrid) return;
+  
+  const { cols, rows, terrainGrid } = grid;
+  const endX = Math.min(cols, startX + width);
+  const endY = Math.min(rows, startY + height);
+  
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
+      const idx = y * cols + x;
+      
+      // Calculate cost from terrain + floor layers
+      const cost = calculateMovementCost(terrainGrid, x, y);
+      grid.cost[idx] = cost;
+      
+      // Mark impassable terrain as solid, passable terrain as clear
+      if (!isTerrainPassable(terrainGrid, x, y)) {
+        grid.solid[idx] = 1;
+      } else {
+        grid.solid[idx] = 0;
+      }
+    }
+  }
+  
+  // Don't update minCost for partial sync - it's rarely needed and expensive to recalculate
+  // Mark affected sections as dirty
+  const startSectionX = Math.floor(startX / grid.sectionSize);
+  const startSectionY = Math.floor(startY / grid.sectionSize);
+  const endSectionX = Math.min(grid.sectionCols - 1, Math.floor((endX - 1) / grid.sectionSize));
+  const endSectionY = Math.min(grid.sectionRows - 1, Math.floor((endY - 1) / grid.sectionSize));
+  
+  for (let sy = startSectionY; sy <= endSectionY; sy++) {
+    for (let sx = startSectionX; sx <= endSectionX; sx++) {
+      const sectionIdx = sy * grid.sectionCols + sx;
+      grid.dirtyFlags[sectionIdx] = 1;
+    }
+  }
 }
 
 // Helper function to mark sections as dirty based on world coordinates
@@ -271,13 +329,15 @@ function clearSection(grid: Grid, sectionX: number, sectionY: number): void {
   for (let gy = startY; gy < endY; gy++) {
     for (let gx = startX; gx < endX; gx++) {
       const idx = gy * grid.cols + gx;
-      grid.solid[idx] = 0;
       
       // Restore terrain/floor costs from terrain grid, or default to 1.0
       if (grid.terrainGrid) {
         grid.cost[idx] = calculateMovementCost(grid.terrainGrid, gx, gy);
+        // Also restore solid state based on terrain passability
+        grid.solid[idx] = isTerrainPassable(grid.terrainGrid, gx, gy) ? 0 : 1;
       } else {
         grid.cost[idx] = 1.0; // Fallback to grass cost
+        grid.solid[idx] = 0; // Assume passable if no terrain grid
       }
     }
   }
@@ -311,19 +371,9 @@ function rebuildSection(grid: Grid, sectionX: number, sectionY: number, building
     }
   }
 
-  // Check trees that intersect with this section
-  for (const tree of trees) {
-    if (intersectsCircle(tree.x, tree.y, tree.r, startWorldX, startWorldY, endWorldX - startWorldX, endWorldY - startWorldY)) {
-      markCircleSolidNoUpdate(grid, tree.x, tree.y, tree.r);
-    }
-  }
-
-  // Check rocks that intersect with this section
-  for (const rock of rocks) {
-    if (intersectsCircle(rock.x, rock.y, rock.r, startWorldX, startWorldY, endWorldX - startWorldX, endWorldY - startWorldY)) {
-      markCircleSolidNoUpdate(grid, rock.x, rock.y, rock.r);
-    }
-  }
+  // OPTIMIZATION: Trees and rocks no longer block pathfinding
+  // Colonists can walk through them to eliminate stuttering from constant region rebuilds
+  // They still prevent building placement (checked in placementSystem.ts)
 }
 
 // Intersection helpers

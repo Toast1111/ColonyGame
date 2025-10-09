@@ -11,7 +11,7 @@
 export class TimeSystem {
   private day = 1;
   private tDay = 0; // Time of day (0-1, where 0.5 is noon/transition to night)
-  private dayLength = 180; // seconds per full day/night cycle
+  private dayLength = 1440; // seconds per full day/night cycle (24 minutes = 24 hours, 1 minute = 1 hour)
   private fastForward = 1; // Speed multiplier: 1 (normal) or 6 (fast)
   private paused = false;
   private prevIsNight = false;
@@ -81,6 +81,7 @@ export class TimeSystem {
   // Getters
   getDay(): number { return this.day; }
   getTimeOfDay(): number { return this.tDay; }
+  getHour(): number { return Math.floor(this.tDay * 24); } // Get current hour (0-23)
   getDayLength(): number { return this.dayLength; }
   getFastForward(): number { return this.fastForward; }
   isPaused(): boolean { return this.paused; }
