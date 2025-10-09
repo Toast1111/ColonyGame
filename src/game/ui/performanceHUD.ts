@@ -6,6 +6,11 @@
  * - Subsystem timings and budget utilization
  * - Top performance offenders
  * - Simulation stats
+ * 
+ * OPTIMIZATIONS:
+ * - Throttled updates (2-4 Hz instead of 60 Hz)
+ * - Offscreen canvas cache to avoid expensive text rendering every frame
+ * - Especially important for Safari/iPad where canvas text is costly
  */
 
 import { PerformanceMetrics } from '../../core/PerformanceMetrics';
@@ -24,6 +29,8 @@ export interface PerformanceHUDConfig {
   showDetails: boolean;
   /** Show budget queue stats */
   showQueues: boolean;
+  /** Update frequency in Hz (default: 3 = 3 updates per second) */
+  updateHz: number;
 }
 
 export class PerformanceHUD {
@@ -33,16 +40,29 @@ export class PerformanceHUD {
     opacity: 0.85,
     showDetails: true,
     showQueues: true,
+    updateHz: 3, // 3 updates per second
   };
 
   private metrics = PerformanceMetrics.getInstance();
   private simClock = SimulationClock.getInstance();
   private budgetManager = BudgetedExecutionManager.getInstance();
 
+  // Offscreen canvas cache
+  private offscreenCanvas: HTMLCanvasElement | null = null;
+  private offscreenCtx: CanvasRenderingContext2D | null = null;
+  private cachedWidth = 0;
+  private cachedHeight = 0;
+  
+  // Throttling
+  private lastUpdateTime = 0;
+  private updateInterval = 1000 / 3; // ms between updates (333ms for 3 Hz)
+  private isDirty = true; // Force initial render
+
   constructor(config?: Partial<PerformanceHUDConfig>) {
     if (config) {
       this.config = { ...this.config, ...config };
     }
+    this.updateInterval = 1000 / this.config.updateHz;
   }
 
   /**
@@ -50,6 +70,9 @@ export class PerformanceHUD {
    */
   public toggle(): void {
     this.config.visible = !this.config.visible;
+    if (this.config.visible) {
+      this.isDirty = true; // Force update when showing
+    }
   }
 
   /**
@@ -57,6 +80,9 @@ export class PerformanceHUD {
    */
   public setVisible(visible: boolean): void {
     this.config.visible = visible;
+    if (visible) {
+      this.isDirty = true; // Force update when showing
+    }
   }
 
   /**
@@ -64,63 +90,85 @@ export class PerformanceHUD {
    */
   public configure(config: Partial<PerformanceHUDConfig>): void {
     this.config = { ...this.config, ...config };
+    if (config.updateHz) {
+      this.updateInterval = 1000 / config.updateHz;
+    }
+    this.isDirty = true; // Force re-render on config change
   }
 
   /**
    * Draw the performance HUD
+   * Uses throttled updates and offscreen canvas caching for performance
    */
   public draw(game: Game): void {
     if (!this.config.visible) return;
 
-    const ctx = game.ctx;
-    const scale = (v: number) => v * game.DPR * game.uiScale;
-    
-    ctx.save();
+    const now = performance.now();
+    const shouldUpdate = now - this.lastUpdateTime >= this.updateInterval || this.isDirty;
 
-    // Calculate position
+    // Only regenerate the HUD content at throttled rate
+    if (shouldUpdate) {
+      this.updateOffscreenCanvas(game);
+      this.lastUpdateTime = now;
+      this.isDirty = false;
+    }
+
+    // Always blit the cached canvas (very cheap operation)
+    if (this.offscreenCanvas && this.offscreenCtx) {
+      this.blitToScreen(game);
+    }
+  }
+
+  /**
+   * Update the offscreen canvas with new HUD content
+   * This is the expensive operation (text rendering) that we throttle
+   */
+  private updateOffscreenCanvas(game: Game): void {
+    const scale = (v: number) => v * game.DPR * game.uiScale;
     const padding = scale(10);
     const width = scale(320);
     const lineHeight = scale(16);
-    let x = padding;
-    let y = padding;
 
-    if (this.config.position === 'top-right') {
-      x = game.canvas.width - width - padding;
-    } else if (this.config.position === 'bottom-left') {
-      y = game.canvas.height - padding;
-    } else if (this.config.position === 'bottom-right') {
-      x = game.canvas.width - width - padding;
-      y = game.canvas.height - padding;
-    }
-
-    // Build content
+    // Build content to get height
     const lines = this.buildHUDContent();
     const height = lines.length * lineHeight + scale(20);
 
-    // Adjust y for bottom positions
-    if (this.config.position.startsWith('bottom')) {
-      y -= height;
+    // Create or resize offscreen canvas if needed
+    if (!this.offscreenCanvas || this.cachedWidth !== width || this.cachedHeight !== height) {
+      this.offscreenCanvas = document.createElement('canvas');
+      this.offscreenCanvas.width = width;
+      this.offscreenCanvas.height = height;
+      this.offscreenCtx = this.offscreenCanvas.getContext('2d');
+      this.cachedWidth = width;
+      this.cachedHeight = height;
     }
+
+    const ctx = this.offscreenCtx!;
+    
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+    
+    ctx.save();
 
     // Draw background
     ctx.fillStyle = `rgba(0, 0, 0, ${this.config.opacity})`;
-    ctx.fillRect(x, y, width, height);
+    ctx.fillRect(0, 0, width, height);
 
     // Draw border
     ctx.strokeStyle = 'rgba(100, 200, 255, 0.5)';
     ctx.lineWidth = scale(2);
-    ctx.strokeRect(x, y, width, height);
+    ctx.strokeRect(0, 0, width, height);
 
     // Draw title bar
     ctx.fillStyle = 'rgba(100, 200, 255, 0.3)';
-    ctx.fillRect(x, y, width, lineHeight + scale(4));
+    ctx.fillRect(0, 0, width, lineHeight + scale(4));
 
     // Draw text
     ctx.fillStyle = '#ffffff';
     ctx.font = `${scale(12)}px monospace`;
     ctx.textBaseline = 'top';
 
-    let currentY = y + scale(4);
+    let currentY = scale(4);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
@@ -137,11 +185,38 @@ export class PerformanceHUD {
         ctx.fillStyle = '#e5e7eb'; // Default
       }
 
-      ctx.fillText(line, x + scale(6), currentY);
+      ctx.fillText(line, scale(6), currentY);
       currentY += lineHeight;
     }
 
     ctx.restore();
+  }
+
+  /**
+   * Blit the cached offscreen canvas to the main canvas
+   * This is very fast compared to text rendering
+   */
+  private blitToScreen(game: Game): void {
+    if (!this.offscreenCanvas) return;
+
+    const ctx = game.ctx;
+    const scale = (v: number) => v * game.DPR * game.uiScale;
+    const padding = scale(10);
+    
+    let x = padding;
+    let y = padding;
+
+    if (this.config.position === 'top-right') {
+      x = game.canvas.width - this.cachedWidth - padding;
+    } else if (this.config.position === 'bottom-left') {
+      y = game.canvas.height - this.cachedHeight - padding;
+    } else if (this.config.position === 'bottom-right') {
+      x = game.canvas.width - this.cachedWidth - padding;
+      y = game.canvas.height - this.cachedHeight - padding;
+    }
+
+    // Blit the cached canvas (extremely fast)
+    ctx.drawImage(this.offscreenCanvas, x, y);
   }
 
   /**

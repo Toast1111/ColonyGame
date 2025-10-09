@@ -187,10 +187,10 @@ export class RenderManager {
       const gx = Math.floor(game.mouse.wx / T) * T;
       const gy = Math.floor(game.mouse.wy / T) * T;
       const can = canPlacePlacement(game, { ...def, size: def.size } as any, gx, gy) && hasCost(game.RES, def.cost);
-      ctx.globalAlpha = 0.6;
-      ctx.fillStyle = can ? COLORS.ghost : '#ff6b6b88';
+      // Use rgba() in fillStyle instead of globalAlpha for better performance
+      // COLORS.ghost or #ff6b6b with 0.6 alpha built into the color
+      ctx.fillStyle = can ? (typeof COLORS.ghost === 'string' && COLORS.ghost.includes('rgba') ? COLORS.ghost : 'rgba(100, 200, 100, 0.6)') : 'rgba(255, 107, 107, 0.53)'; // 0.53 = 0.88 * 0.6
       ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T);
-      ctx.globalAlpha = 1;
     }
 
     // Right-drag erase rectangle
@@ -200,10 +200,9 @@ export class RenderManager {
       const w = Math.abs(game.mouse.wx - game.eraseDragStart.x);
       const h = Math.abs(game.mouse.wy - game.eraseDragStart.y);
       ctx.save();
-      ctx.globalAlpha = 0.18;
-      ctx.fillStyle = '#ef4444';
+      // Use rgba() instead of globalAlpha for better performance
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.18)'; // #ef4444 with 0.18 alpha
       ctx.fillRect(x0, y0, w, h);
-      ctx.globalAlpha = 1;
       ctx.strokeStyle = '#ef4444';
       ctx.setLineDash([6, 4]);
       ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
@@ -253,6 +252,8 @@ export class RenderManager {
     const cam = camera as any; // Camera type needs width/height
 
     ctx.save();
+    // Note: This globalAlpha is for entire debug visualization, acceptable in debug mode
+    // In production rendering, avoid globalAlpha - use rgba() instead
     ctx.globalAlpha = 0.4;
 
     // Draw solid/unwalkable tiles
@@ -417,26 +418,22 @@ export class RenderManager {
       }
 
       // Draw collision radius
-      ctx.strokeStyle = '#ff6b6b';
+      ctx.strokeStyle = 'rgba(255, 107, 107, 0.3)'; // #ff6b6b with 0.3 alpha
       ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.3;
       ctx.beginPath();
       ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.globalAlpha = 1;
 
       // Show interaction range for current task
       if (c.target && c.task && (c.task === 'chop' || c.task === 'mine')) {
         const target = c.target as any;
         if (target.x != null && target.r != null) {
           const interactRange = target.r + c.r + 4 + 2.5;
-          ctx.strokeStyle = '#22c55e';
+          ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)'; // #22c55e with 0.4 alpha
           ctx.lineWidth = 2;
-          ctx.globalAlpha = 0.4;
           ctx.beginPath();
           ctx.arc(target.x, target.y, interactRange, 0, Math.PI * 2);
           ctx.stroke();
-          ctx.globalAlpha = 1;
 
           // Distance to target
           const distance = Math.hypot(c.x - target.x, c.y - target.y);

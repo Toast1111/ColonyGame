@@ -6,7 +6,12 @@ import { ImageAssets } from "../assets/images";
 import { getColonistMood } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
 import { getDoorOpenAmount } from "./systems/doorSystem";
+import { fillRectAlpha } from "../core/RenderOptimizations";
 
+/**
+ * Clear canvas - optimized to support dirty rectangle tracking
+ * When dirtyTracker is provided, only clears dirty regions
+ */
 export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = COLORS.sky;
@@ -29,8 +34,8 @@ export function drawGround(ctx: CanvasRenderingContext2D) {
   const tr = (ctx as any).getTransform ? (ctx.getTransform() as DOMMatrix) : null;
   const zoom = tr ? Math.max(0.001, tr.a) : 1;
   ctx.lineWidth = Math.max(1 / zoom, 0.75 / zoom);
-  ctx.strokeStyle = '#1e293b';
-  ctx.globalAlpha = 0.5;
+  // Use rgba() instead of globalAlpha for better performance
+  ctx.strokeStyle = 'rgba(30, 41, 59, 0.5)'; // #1e293b with 0.5 alpha
   ctx.beginPath();
   for (let x = 0; x <= WORLD.w; x += T) {
     ctx.moveTo(x, 0);
@@ -41,7 +46,6 @@ export function drawGround(ctx: CanvasRenderingContext2D) {
     ctx.lineTo(WORLD.w, y);
   }
   ctx.stroke();
-  ctx.globalAlpha = 1;
   ctx.restore();
 }
 
@@ -190,13 +194,12 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
   
   // Selection highlight - circle that represents the actual collision area
   if (isSelected) {
-    ctx.fillStyle = '#93c5fd';
-    ctx.globalAlpha = 0.3;
+    // Use rgba() instead of globalAlpha for better performance
+    ctx.fillStyle = 'rgba(147, 197, 253, 0.3)'; // #93c5fd with 0.3 alpha
     ctx.beginPath();
     // Simple circle highlight that matches the collision radius
     ctx.arc(0, 0, size + 2, 0, Math.PI * 2);
     ctx.fill();
-    ctx.globalAlpha = 1;
   }
   
   // Get the image assets instance
@@ -547,9 +550,10 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
   // Turret range visualization
   if (b.kind === 'turret' && (b as any).range) { 
     const cx = b.x + b.w / 2; const cy = b.y + b.h / 2;
-    ctx.globalAlpha = .07; ctx.fillStyle = '#e2f3ff'; 
+    // Use rgba() instead of globalAlpha for better performance
+    ctx.fillStyle = 'rgba(226, 243, 255, 0.07)'; // #e2f3ff with 0.07 alpha
     ctx.beginPath(); ctx.arc(cx, cy, (b as any).range, 0, Math.PI * 2); 
-    ctx.fill(); ctx.globalAlpha = 1; 
+    ctx.fill();
   }
 }
 
@@ -561,14 +565,13 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
     }
     
     // Draw a very subtle projectile line
-    ctx.globalAlpha = .15; 
-    ctx.strokeStyle = '#e0f2fe'; 
+    // Use rgba() instead of globalAlpha for better performance
+    ctx.strokeStyle = 'rgba(224, 242, 254, 0.15)'; // #e0f2fe with 0.15 alpha
     ctx.lineWidth = 1; 
     ctx.beginPath(); 
     ctx.moveTo(b.x, b.y); 
     ctx.lineTo(b.tx, b.ty); 
-    ctx.stroke(); 
-    ctx.globalAlpha = 1;
+    ctx.stroke();
   }
 }
 

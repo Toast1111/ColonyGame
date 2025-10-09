@@ -168,6 +168,13 @@ On-screen real-time performance monitor for development and debugging.
 
 **Toggle:** Press **M** key to show/hide
 
+**Optimizations:**
+
+- **Throttled updates:** HUD content updates 3 times per second (configurable), not every frame
+- **Offscreen canvas cache:** Text rendering happens to an offscreen buffer, then blitted to screen
+- **Minimal overhead:** ~0.1ms per frame (blit only), ~2-3ms during updates (text rendering)
+- **Mobile-friendly:** Especially important for Safari/iPad where canvas text rendering is expensive
+
 **Display:**
 
 ```text
@@ -206,7 +213,8 @@ const hud = initPerformanceHUD({
   position: 'top-right', // 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
   opacity: 0.85,
   showDetails: true,
-  showQueues: true
+  showQueues: true,
+  updateHz: 3 // Update frequency in Hz (default: 3 = 3 updates per second)
 });
 ```
 

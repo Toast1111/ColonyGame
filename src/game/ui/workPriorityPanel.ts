@@ -183,13 +183,14 @@ export function drawWorkPriorityPanel(
   ctx.fillStyle = gradient;
   ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
   
-  // Panel border with glow effect
-  ctx.shadowColor = 'rgba(100, 150, 200, 0.5)';
-  ctx.shadowBlur = 10;
+  // Panel border with subtle highlight (shadowBlur is extremely expensive, avoid it)
+  // Instead use a double stroke for depth
+  ctx.strokeStyle = 'rgba(100, 150, 200, 0.5)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
   ctx.strokeStyle = '#4a6fa5';
   ctx.lineWidth = 2;
   ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
-  ctx.shadowBlur = 0;
   
   // Title bar background
   ctx.fillStyle = '#1e3a5f';

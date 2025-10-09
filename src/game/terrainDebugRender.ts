@@ -34,20 +34,28 @@ export function drawTerrainDebug(game: Game) {
       const visual = FLOOR_VISUALS[floorType];
       if (!visual) continue;
       
-      // Draw floor overlay
-      ctx.fillStyle = visual.color;
-      ctx.globalAlpha = 0.6; // Semi-transparent
+      // Parse color to get RGB values
+      const hexToRgb = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? {
+          r: parseInt(result[1], 16),
+          g: parseInt(result[2], 16),
+          b: parseInt(result[3], 16)
+        } : { r: 255, g: 255, b: 255 };
+      };
+      
+      // Draw floor overlay - use rgba() instead of globalAlpha for better performance
+      const rgb = hexToRgb(visual.color);
+      ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.6)`;
       ctx.fillRect(gx * T, gy * T, T, T);
       
       // Draw border to make tiles distinct
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
       ctx.lineWidth = 1;
-      ctx.globalAlpha = 0.4;
       ctx.strokeRect(gx * T, gy * T, T, T);
       
       // Draw floor type label for better debugging
-      ctx.fillStyle = 'white';
-      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -82,6 +90,16 @@ export function drawDetailedTerrainDebug(game: Game) {
   const endX = Math.min(terrainGrid.cols, Math.ceil((camera.x + ctx.canvas.width / camera.zoom) / T));
   const endY = Math.min(terrainGrid.rows, Math.ceil((camera.y + ctx.canvas.height / camera.zoom) / T));
   
+  // Helper function to convert hex to RGB
+  const hexToRgb = (hex: string) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16)
+    } : { r: 255, g: 255, b: 255 };
+  };
+  
   // Draw both terrain and floor
   for (let gy = startY; gy < endY; gy++) {
     for (let gx = startX; gx < endX; gx++) {
@@ -91,11 +109,11 @@ export function drawDetailedTerrainDebug(game: Game) {
       const floorType = getFloorTypeFromId(terrainGrid.floors[idx]);
       const cost = grid.cost[idx];
       
-      // Draw terrain base (faded)
+      // Draw terrain base (faded) - use rgba() instead of globalAlpha
       const terrainVisual = TERRAIN_VISUALS[terrainType];
       if (terrainVisual) {
-        ctx.fillStyle = terrainVisual.color;
-        ctx.globalAlpha = 0.2;
+        const rgb = hexToRgb(terrainVisual.color);
+        ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`;
         ctx.fillRect(gx * T, gy * T, T, T);
       }
       
@@ -103,24 +121,23 @@ export function drawDetailedTerrainDebug(game: Game) {
       if (floorType !== FloorType.NONE) {
         const floorVisual = FLOOR_VISUALS[floorType];
         if (floorVisual) {
-          ctx.fillStyle = floorVisual.color;
-          ctx.globalAlpha = 0.5;
+          const rgb = hexToRgb(floorVisual.color);
+          ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`;
           ctx.fillRect(gx * T, gy * T, T, T);
         }
       }
       
-      // Draw cost value
-      ctx.fillStyle = cost < 1 ? '#00ff00' : cost > 1 ? '#ff0000' : '#ffffff';
-      ctx.globalAlpha = 0.9;
+      // Draw cost value - use rgba() instead of globalAlpha
+      const costColor = cost < 1 ? '0, 255, 0' : cost > 1 ? '255, 0, 0' : '255, 255, 255';
+      ctx.fillStyle = `rgba(${costColor}, 0.9)`;
       ctx.font = '9px monospace';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(cost.toFixed(1), gx * T + T/2, gy * T + T/2);
       
       // Grid lines
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 0.5;
-      ctx.globalAlpha = 0.3;
       ctx.strokeRect(gx * T, gy * T, T, T);
     }
   }
