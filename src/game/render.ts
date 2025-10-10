@@ -34,25 +34,40 @@ export function applyWorldTransform(ctx: CanvasRenderingContext2D, cam: Camera) 
 }
 
 // Simple ground renderer with grid
-export function drawGround(ctx: CanvasRenderingContext2D) {
+export function drawGround(ctx: CanvasRenderingContext2D, camera?: Camera) {
   ctx.save();
   // Base ground
   ctx.fillStyle = COLORS.ground;
   ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+  
   // High-contrast grid that stays ~1px in screen space
   const tr = (ctx as any).getTransform ? (ctx.getTransform() as DOMMatrix) : null;
   const zoom = tr ? Math.max(0.001, tr.a) : 1;
   ctx.lineWidth = Math.max(1 / zoom, 0.75 / zoom);
+  
+  // Calculate visible bounds for grid culling
+  let startX = 0, endX = WORLD.w, startY = 0, endY = WORLD.h;
+  if (camera) {
+    const canvasWidth = ctx.canvas.width / zoom;
+    const canvasHeight = ctx.canvas.height / zoom;
+    startX = Math.max(0, Math.floor(camera.x / T) * T);
+    endX = Math.min(WORLD.w, Math.ceil((camera.x + canvasWidth) / T) * T);
+    startY = Math.max(0, Math.floor(camera.y / T) * T);
+    endY = Math.min(WORLD.h, Math.ceil((camera.y + canvasHeight) / T) * T);
+  }
+  
   // Use rgba() instead of globalAlpha for better performance
   ctx.strokeStyle = 'rgba(30, 41, 59, 0.5)'; // #1e293b with 0.5 alpha
   ctx.beginPath();
-  for (let x = 0; x <= WORLD.w; x += T) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, WORLD.h);
+  
+  // Only draw visible grid lines
+  for (let x = startX; x <= endX; x += T) {
+    ctx.moveTo(x, startY);
+    ctx.lineTo(x, endY);
   }
-  for (let y = 0; y <= WORLD.h; y += T) {
-    ctx.moveTo(0, y);
-    ctx.lineTo(WORLD.w, y);
+  for (let y = startY; y <= endY; y += T) {
+    ctx.moveTo(startX, y);
+    ctx.lineTo(endX, y);
   }
   ctx.stroke();
   ctx.restore();

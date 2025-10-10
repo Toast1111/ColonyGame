@@ -63,8 +63,8 @@ export class RenderManager {
     const { game } = this;
     const { ctx } = game;
 
-    // Ground and floors
-    drawGround(ctx);
+    // Ground and floors (with camera for grid culling)
+    drawGround(ctx, game.camera);
     drawFloors(ctx, game.terrainGrid, game.camera);
   }
 
@@ -75,24 +75,45 @@ export class RenderManager {
     const { game } = this;
     const { ctx } = game;
 
-    // Trees - use drawCircle helper
+    // Calculate visible bounds for culling
+    const camera = game.camera;
+    const viewportPadding = 100; // Extra padding to avoid pop-in
+    const minX = camera.x - viewportPadding;
+    const minY = camera.y - viewportPadding;
+    const maxX = camera.x + (game.canvas.width / camera.zoom) + viewportPadding;
+    const maxY = camera.y + (game.canvas.height / camera.zoom) + viewportPadding;
+    
+    // Helper: Check if entity is in viewport
+    const inViewport = (x: number, y: number, r: number = 0) => {
+      return x + r >= minX && x - r <= maxX && y + r >= minY && y - r <= maxY;
+    };
+
+    // Trees - use drawCircle helper (with culling)
     for (const tree of game.trees) {
-      drawCircle(ctx, tree.x, tree.y, tree.r, COLORS.tree);
+      if (inViewport(tree.x, tree.y, tree.r)) {
+        drawCircle(ctx, tree.x, tree.y, tree.r, COLORS.tree);
+      }
     }
 
-    // Rocks - use drawCircle helper
+    // Rocks - use drawCircle helper (with culling)
     for (const rock of game.rocks) {
-      drawCircle(ctx, rock.x, rock.y, rock.r, COLORS.rock);
+      if (inViewport(rock.x, rock.y, rock.r)) {
+        drawCircle(ctx, rock.x, rock.y, rock.r, COLORS.rock);
+      }
     }
 
-    // Buildings - use drawBuilding helper which handles all the rendering logic
+    // Buildings - use drawBuilding helper which handles all the rendering logic (with culling)
     for (const b of game.buildings) {
-      drawBuilding(ctx, b);
+      if (inViewport(b.x + b.w/2, b.y + b.h/2, Math.max(b.w, b.h)/2)) {
+        drawBuilding(ctx, b);
+      }
     }
 
-    // Colonist hiding indicators - show person icons on buildings with colonists inside
+    // Colonist hiding indicators - show person icons on buildings with colonists inside (with culling)
     for (const b of game.buildings) {
       if (!b.done) continue;
+      if (!inViewport(b.x + b.w/2, b.y + b.h/2, Math.max(b.w, b.h)/2)) continue;
+      
       const numInside = game.insideCounts.get(b) || 0;
       if (numInside > 0 && (b.kind === 'hq' || b.kind === 'house')) {
         // Draw person icon(s) in top-right corner of building
@@ -132,11 +153,14 @@ export class RenderManager {
       }
     }
 
-    // Colonists - use drawColonistAvatar helper which handles sprites, fallbacks, and mood indicators
+    // Colonists - use drawColonistAvatar helper which handles sprites, fallbacks, and mood indicators (with culling)
     for (const c of game.colonists) {
       if (!c.alive) continue;
       const hiddenInside = c.inside && (c.inside as any).kind !== 'bed';
       if (hiddenInside) continue;
+      
+      // Cull colonists outside viewport
+      if (!inViewport(c.x, c.y, 30)) continue; // 30px padding for sprite size
       
       // Check if this colonist is selected
       const isSelected = game.selColonist === c;
@@ -149,6 +173,8 @@ export class RenderManager {
     if ((game.debug as any).combat) {
       for (const b of game.buildings) {
         if (!(b as any).alive || !b.done) continue;
+        if (!inViewport(b.x + b.w/2, b.y + b.h/2, Math.max(b.w, b.h)/2)) continue;
+        
         const btype = BUILD_TYPES[b.kind] as any;
         if (!btype.isTurret) continue;
         const range = btype.range || 0;
@@ -167,16 +193,19 @@ export class RenderManager {
     // Long press progress circle
     (game as any).drawLongPressProgress();
 
-    // Enemies
+    // Enemies (with culling)
     for (const e of game.enemies) {
-      drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
+      if (inViewport(e.x, e.y, e.r + 5)) {
+        drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
+      }
     }
 
-    // Bullets
-    drawBullets(ctx, game.bullets);
+    // Bullets (with culling)
+    drawBullets(ctx, game.bullets.filter(b => inViewport(b.x, b.y, 20)));
 
-    // Particles (muzzle flash, impact effects)
-    drawParticles(ctx, game.particles);
+    // Particles (muzzle flash, impact effects) (with culling)
+    const visibleParticles = game.particles.filter(p => inViewport(p.x, p.y, p.size || 10));
+    drawParticles(ctx, visibleParticles);
 
     // Night overlay
     if (game.isNight()) {
