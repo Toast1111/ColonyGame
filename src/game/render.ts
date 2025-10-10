@@ -7,15 +7,24 @@ import { getColonistMood } from "./colonist_systems/colonistGenerator";
 import { drawParticles } from "../core/particles";
 import { getDoorOpenAmount } from "./systems/doorSystem";
 import { fillRectAlpha } from "../core/RenderOptimizations";
+import type { DirtyRectTracker } from "../core/DirtyRectTracker";
 
 /**
  * Clear canvas - optimized to support dirty rectangle tracking
  * When dirtyTracker is provided, only clears dirty regions
  */
-export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) {
+export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, dirtyTracker?: DirtyRectTracker) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = COLORS.sky;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  if (dirtyTracker) {
+    // Use dirty rect tracking for optimized clearing
+    dirtyTracker.optimize();
+    dirtyTracker.clearDirty(ctx, COLORS.sky);
+  } else {
+    // Fallback to full clear if no tracker
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 // Apply camera transform for world rendering
