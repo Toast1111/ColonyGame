@@ -288,32 +288,34 @@ export class RenderManager {
     // In production rendering, avoid globalAlpha - use rgba() instead
     ctx.globalAlpha = 0.4;
 
-    // Draw solid/unwalkable tiles
-    for (let r = 0; r < grid.rows; r++) {
-      for (let c = 0; c < grid.cols; c++) {
+    // Calculate visible tile range for culling
+    const startCol = Math.max(0, Math.floor((camera.x - 100) / T));
+    const endCol = Math.min(grid.cols, Math.ceil((camera.x + (ctx.canvas.width / camera.zoom) + 100) / T));
+    const startRow = Math.max(0, Math.floor((camera.y - 100) / T));
+    const endRow = Math.min(grid.rows, Math.ceil((camera.y + (ctx.canvas.height / camera.zoom) + 100) / T));
+
+    // Draw solid/unwalkable tiles (only visible ones)
+    for (let r = startRow; r < endRow; r++) {
+      for (let c = startCol; c < endCol; c++) {
         const idx = r * grid.cols + c;
         if (!grid.solid[idx]) continue;
         const x = c * T;
         const y = r * T;
-        if (x + T < cam.x - 100 || x > cam.x + cam.w + 100) continue;
-        if (y + T < cam.y - 100 || y > cam.y + cam.h + 100) continue;
         ctx.fillStyle = '#ff000088';
         ctx.fillRect(x, y, T, T);
       }
     }
 
-    // Draw movement costs (terrain speed modifiers)
+    // Draw movement costs (terrain speed modifiers) (only visible ones)
     ctx.font = '8px monospace';
-    for (let r = 0; r < grid.rows; r++) {
-      for (let c = 0; c < grid.cols; c++) {
+    for (let r = startRow; r < endRow; r++) {
+      for (let c = startCol; c < endCol; c++) {
         const idx = r * grid.cols + c;
         if (grid.solid[idx]) continue;
         const cost = grid.cost[idx];
         if (cost === 1) continue;
         const x = c * T;
         const y = r * T;
-        if (x + T < cam.x - 100 || x > cam.x + cam.w + 100) continue;
-        if (y + T < cam.y - 100 || y > cam.y + cam.h + 100) continue;
         const alpha = Math.min(1, (cost - 1) * 0.3);
         ctx.fillStyle = `rgba(255, 200, 0, ${alpha})`;
         ctx.fillRect(x, y, T, T);
@@ -324,9 +326,20 @@ export class RenderManager {
 
     ctx.restore();
 
-    // Colonist paths
+    // Colonist paths (with culling)
+    const viewportPadding = 100;
+    const minX = camera.x - viewportPadding;
+    const minY = camera.y - viewportPadding;
+    const maxX = camera.x + (ctx.canvas.width / camera.zoom) + viewportPadding;
+    const maxY = camera.y + (ctx.canvas.height / camera.zoom) + viewportPadding;
+    
+    const inViewport = (x: number, y: number) => {
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    };
+
     for (const c of game.colonists) {
       if (!c.alive || !c.path || c.path.length === 0) continue;
+      if (!inViewport(c.x, c.y)) continue; // Cull paths for colonists outside viewport
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
@@ -363,6 +376,8 @@ export class RenderManager {
 
     // Enemy paths
     for (const e of game.enemies) {
+      if (!inViewport(e.x, e.y)) continue; // Cull paths for enemies outside viewport
+      
       const enemyAny = e as any;
       const path = enemyAny.path;
       if (!path || path.length === 0) continue;
@@ -394,6 +409,18 @@ export class RenderManager {
     const { game } = this;
     const { ctx } = game;
 
+    // Calculate visible bounds for culling
+    const camera = game.camera;
+    const viewportPadding = 100;
+    const minX = camera.x - viewportPadding;
+    const minY = camera.y - viewportPadding;
+    const maxX = camera.x + (game.canvas.width / camera.zoom) + viewportPadding;
+    const maxY = camera.y + (game.canvas.height / camera.zoom) + viewportPadding;
+    
+    const inViewport = (x: number, y: number) => {
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    };
+
     ctx.save();
     ctx.font = '10px monospace';
     ctx.lineWidth = 1;
@@ -402,6 +429,9 @@ export class RenderManager {
       if (!c.alive) continue;
       const hiddenInside = c.inside && c.inside.kind !== 'bed';
       if (hiddenInside) continue;
+      
+      // Cull debug info for colonists outside viewport
+      if (!inViewport(c.x, c.y)) continue;
 
       // Enhanced colonist state display
       const x = c.x - 35;
@@ -489,10 +519,25 @@ export class RenderManager {
     const { game } = this;
     const { ctx } = game;
 
+    // Calculate visible bounds for culling
+    const camera = game.camera;
+    const viewportPadding = 100;
+    const minX = camera.x - viewportPadding;
+    const minY = camera.y - viewportPadding;
+    const maxX = camera.x + (game.canvas.width / camera.zoom) + viewportPadding;
+    const maxY = camera.y + (game.canvas.height / camera.zoom) + viewportPadding;
+    
+    const inViewport = (x: number, y: number) => {
+      return x >= minX && x <= maxX && y >= minY && y <= maxY;
+    };
+
     ctx.save();
     ctx.font = '9px monospace';
 
     for (const e of game.enemies) {
+      // Cull debug info for enemies outside viewport
+      if (!inViewport(e.x, e.y)) continue;
+      
       const enemyAny = e as any;
       const path = enemyAny.path;
 
