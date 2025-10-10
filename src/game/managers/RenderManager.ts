@@ -32,7 +32,7 @@ export class RenderManager {
     const { ctx, canvas } = game;
 
     // Clear and set up world transform
-    clear(ctx, canvas);
+    clear(ctx, canvas, game.dirtyRectTracker);
     (game as any).clampCameraToWorld(); // Private method access
     ctx.save();
     applyWorldTransform(ctx, game.camera);
@@ -51,6 +51,9 @@ export class RenderManager {
 
     // UI rendering in screen space
     this.renderUI();
+    
+    // Reset dirty rects for next frame
+    game.dirtyRectTracker.reset();
   }
 
   /**

@@ -48,10 +48,14 @@ import { PerformanceMetrics } from '../core/PerformanceMetrics';
 import { SimulationClock } from '../core/SimulationClock';
 import { BudgetedExecutionManager } from '../core/BudgetedExecution';
 import { initPerformanceHUD, drawPerformanceHUD, togglePerformanceHUD } from './ui/performanceHUD';
+import { DirtyRectTracker } from '../core/DirtyRectTracker';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
   DPR = 1;
+  
+  // Dirty rect tracking for optimized rendering
+  dirtyRectTracker!: DirtyRectTracker;
   
   // Core systems
   state = new GameState();
@@ -301,6 +305,10 @@ export class Game {
     this.canvas = canvas; this.ctx = ctx;
     this.DPR = Math.max(1, Math.min(2, (window as any).devicePixelRatio || 1));
     this.handleResize();
+    
+    // Initialize dirty rect tracker with canvas dimensions
+    this.dirtyRectTracker = new DirtyRectTracker(canvas.width, canvas.height);
+    
     window.addEventListener('resize', () => this.handleResize());
     this.bindInput();
     this.newGame();
@@ -582,6 +590,11 @@ export class Game {
     
     // Update camera system with new canvas dimensions
     this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
+    
+    // Update dirty rect tracker with new canvas dimensions
+    if (this.dirtyRectTracker) {
+      this.dirtyRectTracker.resize(this.canvas.width, this.canvas.height);
+    }
     
     // Calculate UI scale based on screen size and DPR
     this.calculateUIScale();
@@ -2224,8 +2237,85 @@ export class Game {
    * Main render loop - delegates to RenderManager
    */
   draw() {
+    // Mark dirty regions for all moving/changing entities before rendering
+    this.markDirtyRegions();
     this.renderManager.render();
   }
+  
+  /**
+   * Mark dirty regions for entities that have moved or changed
+   * This allows selective rendering of only changed areas
+   */
+  private markDirtyRegions(): void {
+    const { dirtyRectTracker, camera } = this;
+    const camZoom = camera.zoom;
+    
+    // Convert world coordinates to screen coordinates
+    const worldToScreen = (wx: number, wy: number) => {
+      return {
+        sx: (wx - camera.x) * camZoom,
+        sy: (wy - camera.y) * camZoom
+      };
+    };
+    
+    // Mark colonists as dirty (they move frequently)
+    for (const c of this.colonists) {
+      if (!c.alive) continue;
+      const { sx, sy } = worldToScreen(c.x, c.y);
+      // Mark a larger area for colonist + mood indicator + debug info
+      const padding = 60; // Account for sprite size and UI elements
+      dirtyRectTracker.markDirty(sx - padding, sy - padding, padding * 2, padding * 2);
+    }
+    
+    // Mark enemies as dirty (they move frequently)
+    for (const e of this.enemies) {
+      const { sx, sy } = worldToScreen(e.x, e.y);
+      const padding = 40;
+      dirtyRectTracker.markDirty(sx - padding, sy - padding, padding * 2, padding * 2);
+    }
+    
+    // Mark bullets as dirty (they move every frame)
+    for (const b of this.bullets) {
+      const { sx, sy } = worldToScreen(b.x, b.y);
+      dirtyRectTracker.markDirty(sx - 10, sy - 10, 20, 20);
+    }
+    
+    // Mark particles as dirty (they animate every frame)
+    for (const p of this.particles) {
+      const { sx, sy } = worldToScreen(p.x, p.y);
+      const size = p.size || 5;
+      dirtyRectTracker.markDirty(sx - size, sy - size, size * 2, size * 2);
+    }
+    
+    // Mark buildings under construction as dirty (progress bar changes)
+    for (const b of this.buildings) {
+      if (!b.done || (b.hp < 100)) {
+        const { sx, sy } = worldToScreen(b.x, b.y);
+        const w = b.w * camZoom;
+        const h = b.h * camZoom;
+        dirtyRectTracker.markDirty(sx - 5, sy - 10, w + 10, h + 20);
+      }
+    }
+    
+    // For first few frames or when camera moves significantly, mark full redraw
+    // This handles cases like camera pan, zoom, or initial render
+    if (!this.lastCameraX || !this.lastCameraY || !this.lastCameraZoom ||
+        Math.abs(camera.x - this.lastCameraX) > 5 ||
+        Math.abs(camera.y - this.lastCameraY) > 5 ||
+        Math.abs(camera.zoom - this.lastCameraZoom) > 0.01) {
+      dirtyRectTracker.markFullRedraw();
+    }
+    
+    // Store camera position for next frame
+    this.lastCameraX = camera.x;
+    this.lastCameraY = camera.y;
+    this.lastCameraZoom = camera.zoom;
+  }
+  
+  // Track last camera position to detect movement
+  private lastCameraX?: number;
+  private lastCameraY?: number;
+  private lastCameraZoom?: number;
 
   costText(c: Partial<typeof this.RES>) { const parts: string[] = []; if (c.wood) parts.push(`${c.wood}w`); if (c.stone) parts.push(`${c.stone}s`); if (c.food) parts.push(`${c.food}f`); return parts.join(' '); }
 
