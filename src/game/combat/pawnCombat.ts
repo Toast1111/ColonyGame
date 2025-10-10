@@ -116,9 +116,15 @@ function pickTarget(game: Game, c: Colonist, range: number): Enemy | null {
  * Implements RimWorld-like behavior:
  *  - Ranged: colonist must remain stationary to progress warmup and fire. Any movement resets warmup/burst.
  *  - Melee: discrete swings gated by meleeCd; requires being stationary on that tick to connect.
+ *  - Drafted colonists will auto-engage enemies in range
  */
 export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   if (!c.alive || c.inside) return;
+  
+  // Only engage in combat if drafted or inCombat flag is set
+  const shouldEngage = c.isDrafted || (c as any).inCombat;
+  if (!shouldEngage) return;
+  
   const stats = getWeaponStats(c);
 
   // Track last position for stationary fire requirement (RimWorld style: must stand still to shoot)
@@ -136,10 +142,27 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     const T = 32;
     const reach = 1.3 * T + c.r;
     let target: Enemy | null = null; let bestD = Infinity;
-    for (const e of game.enemies) {
-      const d = Math.hypot(e.x - c.x, e.y - c.y);
-      if (d < bestD) { bestD = d; target = e; }
+    
+    // If drafted with specific target, prefer that target
+    if (c.isDrafted && c.draftedTarget) {
+      const dTarget = c.draftedTarget as any;
+      if (dTarget.hp > 0 && dTarget.alive !== false) {
+        const d = Math.hypot(dTarget.x - c.x, dTarget.y - c.y);
+        if (d <= reach) {
+          target = dTarget;
+          bestD = d;
+        }
+      }
     }
+    
+    // Otherwise find nearest enemy
+    if (!target) {
+      for (const e of game.enemies) {
+        const d = Math.hypot(e.x - c.x, e.y - c.y);
+        if (d < bestD) { bestD = d; target = e; }
+      }
+    }
+    
     if (target && bestD <= reach) {
       // Require being mostly stationary to land a melee blow (aligning with RimWorld style stop & swing)
       if (movedThisTick) return;
@@ -173,6 +196,25 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   (c as any).warmup = Math.max(0, ((c as any).warmup || 0) - dt);
 
   let target: Enemy | null = (c as any).combatTarget || null;
+  
+  // If drafted with specific target, use that
+  if (c.isDrafted && c.draftedTarget) {
+    const dTarget = c.draftedTarget as any;
+    if (dTarget.hp > 0 && dTarget.alive !== false) {
+      target = dTarget;
+      (c as any).combatTarget = target;
+      // Start warmup if we acquired a new target
+      if (target && target !== (c as any).combatTarget) {
+        (c as any).warmup = stats.warmup;
+      }
+    } else {
+      // Assigned target is dead, clear it
+      c.draftedTarget = null;
+      target = null;
+    }
+  }
+  
+  // Otherwise auto-acquire target
   if (!target || target.hp <= 0) {
     target = pickTarget(game, c, stats.rangePx);
     (c as any).combatTarget = target;

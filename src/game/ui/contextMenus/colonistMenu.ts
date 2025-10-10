@@ -51,6 +51,12 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
 
   const items: ContextMenuItem<Colonist>[] = [
     {
+      id: 'draft',
+      label: colonist.isDrafted ? 'Undraft' : 'Draft',
+      icon: colonist.isDrafted ? '⚔️' : '🎯',
+      enabled: true,
+    },
+    {
       id: 'prioritize',
       label: 'Prioritize',
       icon: '⚡',

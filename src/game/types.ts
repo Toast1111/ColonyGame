@@ -76,7 +76,7 @@ export interface BuildingInventory {
   maxWeight?: number; // Optional weight limit (future feature)
 }
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread' | 'haulBread';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread' | 'haulBread' | 'drafted';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -235,6 +235,11 @@ export type Colonist = {
     task: string;              // The task that was commanded
     expires?: number;          // Optional expiration time (for temporary overrides)
   };
+  
+  // Draft system for combat control
+  isDrafted?: boolean;         // True if colonist is drafted for combat
+  draftedTarget?: Enemy | Colonist | null; // Specific target assigned by player (null = auto-target)
+  draftedPosition?: { x: number; y: number } | null; // Position to hold/move to while drafted
 };
 
 export type Enemy = { 
