@@ -848,6 +848,24 @@ export class Game {
         this.mouse.rdown = true;
         if (this.showBuildMenu) { this.showBuildMenu = false; return; }
         
+        // Check if we have a drafted colonist selected
+        if (this.selColonist && this.selColonist.isDrafted) {
+          // Right-click on enemy to assign target
+          const clickedEnemy = this.findEnemyAt(this.mouse.wx, this.mouse.wy);
+          if (clickedEnemy) {
+            this.selColonist.draftedTarget = clickedEnemy;
+            this.selColonist.draftedPosition = null; // Clear position order
+            this.msg(`${this.selColonist.profile?.name || 'Colonist'} targeting enemy`, 'info');
+            return;
+          }
+          
+          // Right-click on ground to move there
+          this.selColonist.draftedPosition = { x: this.mouse.wx, y: this.mouse.wy };
+          this.selColonist.draftedTarget = null; // Clear target order
+          this.msg(`${this.selColonist.profile?.name || 'Colonist'} moving to position`, 'info');
+          return;
+        }
+        
         // Check for colonist context menu
         const clickedColonist = this.findColonistAt(this.mouse.wx, this.mouse.wy);
         if (clickedColonist) {
@@ -1245,6 +1263,16 @@ export class Game {
       if (!c.alive || hiddenInside) continue;
       const d2 = (c.x - x) * (c.x - x) + (c.y - y) * (c.y - y);
       if (d2 <= (c.r + 2) * (c.r + 2)) return c;
+    }
+    return null;
+  }
+  
+  findEnemyAt(x: number, y: number): Enemy | null {
+    for (let i = this.enemies.length - 1; i >= 0; i--) {
+      const e = this.enemies[i];
+      if (e.hp <= 0) continue;
+      const d2 = (e.x - x) * (e.x - x) + (e.y - y) * (e.y - y);
+      if (d2 <= (e.r + 4) * (e.r + 4)) return e;
     }
     return null;
   }

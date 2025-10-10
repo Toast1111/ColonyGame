@@ -252,6 +252,64 @@ export class RenderManager {
         
         ctx.restore();
       }
+      
+      // Drafted position indicator
+      if (c.isDrafted && c.draftedPosition) {
+        ctx.save();
+        ctx.strokeStyle = '#10b981'; // green
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.2)';
+        ctx.lineWidth = 2;
+        
+        // Draw X marker at position
+        const size = 12;
+        ctx.beginPath();
+        ctx.moveTo(c.draftedPosition.x - size, c.draftedPosition.y - size);
+        ctx.lineTo(c.draftedPosition.x + size, c.draftedPosition.y + size);
+        ctx.moveTo(c.draftedPosition.x + size, c.draftedPosition.y - size);
+        ctx.lineTo(c.draftedPosition.x - size, c.draftedPosition.y + size);
+        ctx.stroke();
+        
+        // Draw circle around position
+        ctx.beginPath();
+        ctx.arc(c.draftedPosition.x, c.draftedPosition.y, size, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        ctx.restore();
+      }
+      
+      // Drafted target indicator
+      if (c.isDrafted && c.draftedTarget) {
+        const target = c.draftedTarget as any;
+        if (target.hp > 0 && target.alive !== false) {
+          ctx.save();
+          ctx.strokeStyle = '#ef4444'; // red
+          ctx.lineWidth = 2;
+          
+          // Draw line from colonist to target
+          ctx.setLineDash([5, 5]);
+          ctx.beginPath();
+          ctx.moveTo(c.x, c.y);
+          ctx.lineTo(target.x, target.y);
+          ctx.stroke();
+          
+          // Draw target reticle
+          ctx.setLineDash([]);
+          const reticleSize = 14;
+          ctx.beginPath();
+          ctx.arc(target.x, target.y, reticleSize, 0, Math.PI * 2);
+          ctx.stroke();
+          
+          // Draw crosshair
+          ctx.beginPath();
+          ctx.moveTo(target.x - reticleSize, target.y);
+          ctx.lineTo(target.x + reticleSize, target.y);
+          ctx.moveTo(target.x, target.y - reticleSize);
+          ctx.lineTo(target.x, target.y + reticleSize);
+          ctx.stroke();
+          
+          ctx.restore();
+        }
+      }
     }
 
     // Combat debug: turret ranges
