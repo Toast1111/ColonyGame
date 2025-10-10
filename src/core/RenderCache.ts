@@ -111,7 +111,7 @@ export class WorldBackgroundCache {
 export class ColonistSpriteCache {
   private cache = new Map<string, HTMLCanvasElement>();
   private spriteWidth = 32;
-  private spriteHeight = 32;
+  private spriteHeight = 48; // Match the actual sprite height used in render.ts
 
   /**
    * Get cache key for colonist sprite composition
@@ -158,12 +158,16 @@ export class ColonistSpriteCache {
     if (bodySprite) {
       const tintedBody = createTintedSprite(bodySprite, profile.avatar.skinTone);
       ctx.drawImage(tintedBody, 0, 0);
+    } else if (Math.random() < 0.05) {
+      console.warn(`[Cache] Body sprite not found: body_${sprites.bodyType}_${direction}`);
     }
 
     const apparelSprite = imageAssets.getColonistSprite('apparel', sprites.apparelType, direction);
     if (apparelSprite) {
       const tintedApparel = createTintedSprite(apparelSprite, profile.avatar.clothing);
       ctx.drawImage(tintedApparel, 0, 0);
+    } else if (Math.random() < 0.05) {
+      console.warn(`[Cache] Apparel sprite not found: apparel_${sprites.apparelType}_${direction}`);
     }
 
     const headSprite = imageAssets.getColonistSprite('head', sprites.headType, direction);
@@ -176,6 +180,11 @@ export class ColonistSpriteCache {
     if (hairSprite) {
       const tintedHair = createTintedSprite(hairSprite, profile.avatar.hairColor);
       ctx.drawImage(tintedHair, 0, 0);
+    }
+
+    // Log successful composition for debugging (sample 1%)
+    if (Math.random() < 0.01) {
+      console.log(`[Cache] Composed sprite: body=${sprites.bodyType}, apparel=${sprites.apparelType}, head=${sprites.headType}, hair=${sprites.hairStyle}, dir=${direction}`);
     }
 
     this.cache.set(key, canvas);

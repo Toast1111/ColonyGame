@@ -77,7 +77,7 @@ export const HAIR_STYLES = [
 
 // Body Types
 export const BODY_TYPES = [
-  'Male_Average_Normal'  // Can be expanded with more body types
+  'naked_male'  // Must match the sprite asset naming in images.ts
 ];
 
 // Clothing Colors

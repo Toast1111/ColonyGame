@@ -49,6 +49,7 @@ import { SimulationClock } from '../core/SimulationClock';
 import { BudgetedExecutionManager } from '../core/BudgetedExecution';
 import { initPerformanceHUD, drawPerformanceHUD, togglePerformanceHUD } from './ui/performanceHUD';
 import { DirtyRectTracker } from '../core/DirtyRectTracker';
+import { colonistSpriteCache } from '../core/RenderCache';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -1310,10 +1311,30 @@ export class Game {
   this.buildReservations.clear();
   this.insideCounts.clear();
   this.sleepReservations.clear();
+  
+  // Clear colonist sprite cache on new game to ensure fresh sprite composition
+  colonistSpriteCache.clear();
+  
   this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - (this.canvas.width / this.DPR) / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - (this.canvas.height / this.DPR) / (2 * this.camera.zoom);
     this.buildHQ();
     this.scatter();
   for (let i = 0; i < 3; i++) { const a = rand(0, Math.PI * 2); const r = 80 + rand(-10, 10); this.spawnColonist({ x: HQ_POS.x + Math.cos(a) * r, y: HQ_POS.y + Math.sin(a) * r }); }
+    
+    // Fix up any colonists with old body type naming (migration)
+    let migratedCount = 0;
+    for (const c of this.colonists) {
+      if (c.profile?.avatar?.sprites?.bodyType === 'Male_Average_Normal') {
+        c.profile.avatar.sprites.bodyType = 'naked_male';
+        migratedCount++;
+      }
+    }
+    
+    // Clear sprite cache if we migrated any colonists to force re-compositing with correct sprites
+    if (migratedCount > 0) {
+      console.log(`Migrated ${migratedCount} colonist(s) to new body type, clearing sprite cache`);
+      colonistSpriteCache.clear();
+    }
+    
     // Post-process: ensure at least one starting colonist has a ranged weapon
     const hasAnyRanged = this.colonists.some(c => c.inventory?.equipment?.weapon && (c.inventory!.equipment!.weapon!.defName === 'Pistol' || c.inventory!.equipment!.weapon!.defName === 'Rifle'));
     if (!hasAnyRanged && this.colonists.length) {

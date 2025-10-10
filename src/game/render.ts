@@ -302,6 +302,8 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
     if (bodySprite) {
       const tintedBody = createTintedSprite(bodySprite, profile.avatar.skinTone);
       ctx.drawImage(tintedBody, -spriteWidth/2, -offsetY);
+    } else if (Math.random() < 0.01) {
+      console.warn(`Body sprite not found: body_${sprites.bodyType}_${spriteDirection}`);
     }
     
     // 2. Apparel (clothing) - tinted with clothing color
@@ -309,6 +311,8 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
     if (apparelSprite) {
       const tintedApparel = createTintedSprite(apparelSprite, profile.avatar.clothing);
       ctx.drawImage(tintedApparel, -spriteWidth/2, -offsetY);
+    } else if (Math.random() < 0.01) {
+      console.warn(`Apparel sprite not found: apparel_${sprites.apparelType}_${spriteDirection}`);
     }
     
     // 3. Head (tinted with skin tone)
