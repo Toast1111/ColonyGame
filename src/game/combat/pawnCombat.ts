@@ -58,12 +58,21 @@ function willHitFriendly(game: Game, from: { x: number; y: number }, to: { x: nu
   return false;
 }
 
+/**
+ * Calculate cover penalty for a shot from `from` to `to`
+ * Cover values:
+ *  - Walls: 75% (best cover, colonists lean out to fire)
+ *  - Stone chunks: 50% (better than trees)
+ *  - Trees: 30% (basic cover)
+ * Enemies can also use cover - if they advance, they can use defensive lines.
+ */
 function coverPenalty(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): number {
-  // Approximate RimWorld cover: if a wall is near the target along the line, reduce hit chance
+  // RimWorld-style cover: walls, stone chunks, and trees near the target reduce hit chance
   let penalty = 0;
+  
+  // Check walls (75% cover when leaning from side)
   for (const b of game.buildings) {
     if (!b.done || b.kind !== 'wall') continue;
-    // If the segment passes within ~14px of a wall near the target, apply penalty
     // Compute distance from wall center to the line segment
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
     const vx = to.x - from.x, vy = to.y - from.y;
@@ -74,10 +83,41 @@ function coverPenalty(game: Game, from: { x: number; y: number }, to: { x: numbe
     const dist = Math.hypot(px - cx, py - cy);
     // Only consider cover within last 25% of the shot path (near the target)
     if (t > 0.75 && dist < Math.max(12, Math.min(b.w, b.h) * 0.6)) {
-      penalty += 0.25; // 25% cover per wall (stacking, capped below)
+      penalty = Math.max(penalty, 0.75); // 75% cover from walls (best cover)
     }
   }
-  return Math.min(0.6, penalty); // cap total cover penalty at 60%
+  
+  // Check stone chunks/rocks (50% cover - better than trees)
+  for (const rock of game.rocks) {
+    const cx = rock.x, cy = rock.y;
+    const vx = to.x - from.x, vy = to.y - from.y;
+    const wx = cx - from.x, wy = cy - from.y;
+    const vv = vx*vx + vy*vy || 1;
+    const t = Math.max(0, Math.min(1, (wx*vx + wy*vy) / vv));
+    const px = from.x + t * vx, py = from.y + t * vy;
+    const dist = Math.hypot(px - cx, py - cy);
+    // Stone chunks provide cover when near the target
+    if (t > 0.75 && dist < rock.r + 8) {
+      penalty = Math.max(penalty, 0.5); // 50% cover from stone chunks
+    }
+  }
+  
+  // Check trees (30% cover - basic cover)
+  for (const tree of game.trees) {
+    const cx = tree.x, cy = tree.y;
+    const vx = to.x - from.x, vy = to.y - from.y;
+    const wx = cx - from.x, wy = cy - from.y;
+    const vv = vx*vx + vy*vy || 1;
+    const t = Math.max(0, Math.min(1, (wx*vx + wy*vy) / vv));
+    const px = from.x + t * vx, py = from.y + t * vy;
+    const dist = Math.hypot(px - cx, py - cy);
+    // Trees provide basic cover when near the target
+    if (t > 0.75 && dist < tree.r + 6) {
+      penalty = Math.max(penalty, 0.3); // 30% cover from trees
+    }
+  }
+  
+  return penalty; // Return the highest cover value found
 }
 
 function getWeaponStats(c: Colonist) {
