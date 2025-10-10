@@ -28,6 +28,7 @@ import { updateTurret as updateTurretCombat, updateProjectiles as updateProjecti
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
+import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
 import { getInventoryItemCount } from './systems/buildingInventory';
@@ -66,6 +67,7 @@ export class Game {
   performanceMetrics = PerformanceMetrics.getInstance();
   simulationClock = SimulationClock.getInstance({ simulationHz: 30 });
   budgetManager = BudgetedExecutionManager.getInstance();
+  adaptiveTickRate = new AdaptiveTickRateManager();
   
   deferredRebuildSystem = new (class DeferredRebuildSystem {
     private game: Game;
@@ -2010,17 +2012,84 @@ export class Game {
     
   // AI updates - track performance
   this.performanceMetrics.startTiming('ai');
-  for (const c of this.colonists) { if (c.alive) {
+  
+  // Begin frame for adaptive tick rate system (use performance.now() for high-resolution timing)
+  this.adaptiveTickRate.beginFrame(performance.now() / 1000);
+  
+  // Colonist AI with adaptive tick rates
+  for (const c of this.colonists) { 
+    if (c.alive) {
       // Initialize health system for existing colonists (backward compatibility)
       if (!c.health) {
         initializeColonistHealth(c);
       }
       
-      // RimWorld-like pawn combat runs before FSM so states can react to being in combat
-      updateColonistCombat(this, c, dt * this.fastForward);
-      updateColonistFSM(this, c, dt * this.fastForward);
-    } }
-  for (let i = this.enemies.length - 1; i >= 0; i--) { const e = this.enemies[i]; updateEnemyFSM(this, e, dt * this.fastForward); if (e.hp <= 0) { this.enemies.splice(i, 1); if (Math.random() < .5) this.RES.food += 1; } }
+      // Calculate importance based on multiple factors
+      const importance = this.adaptiveTickRate.calculateImportance({
+        entityX: c.x,
+        entityY: c.y,
+        cameraX: this.camera.x,
+        cameraY: this.camera.y,
+        cameraWidth: this.canvas.width / this.DPR,
+        cameraHeight: this.canvas.height / this.DPR,
+        cameraZoom: this.camera.zoom,
+        isInCombat: (c as any).inCombat || (c.state as any) === 'fight',
+        isSleeping: c.state === 'sleep',
+        isStasis: false, // Could add stasis state later
+        task: c.task || undefined,
+        health: c.hp,
+        maxHealth: 100 // Default max health
+      });
+      
+      // Generate unique ID for colonist (use profile name + index for stability)
+      const colonistId = `colonist_${c.profile?.name || 'unknown'}_${this.colonists.indexOf(c)}`;
+      
+      // Check if this colonist should update this frame
+      if (this.adaptiveTickRate.shouldUpdate(colonistId, importance)) {
+        // RimWorld-like pawn combat runs before FSM so states can react to being in combat
+        updateColonistCombat(this, c, dt * this.fastForward);
+        updateColonistFSM(this, c, dt * this.fastForward);
+      }
+      // If skipped, the colonist continues with its last command (movement/task)
+      // Physics still updates (position), just decision-making is deferred
+    } 
+  }
+  
+  // Enemy AI with adaptive tick rates
+  for (let i = this.enemies.length - 1; i >= 0; i--) { 
+    const e = this.enemies[i];
+    
+    // Calculate importance for enemy
+    const importance = this.adaptiveTickRate.calculateImportance({
+      entityX: e.x,
+      entityY: e.y,
+      cameraX: this.camera.x,
+      cameraY: this.camera.y,
+      cameraWidth: this.canvas.width / this.DPR,
+      cameraHeight: this.canvas.height / this.DPR,
+      cameraZoom: this.camera.zoom,
+      isInCombat: true, // Enemies are always considered in combat
+      isSleeping: false,
+      isStasis: false,
+      health: e.hp,
+      maxHealth: 100 // Default enemy max health
+    });
+    
+    const enemyId = `enemy_${i}`;
+    
+    // Update enemy if tick rate allows
+    if (this.adaptiveTickRate.shouldUpdate(enemyId, importance)) {
+      updateEnemyFSM(this, e, dt * this.fastForward);
+    }
+    
+    // Clean up dead enemies
+    if (e.hp <= 0) { 
+      this.enemies.splice(i, 1); 
+      if (Math.random() < .5) this.RES.food += 1;
+      this.adaptiveTickRate.removeEntity(enemyId);
+    }
+  }
+  
   this.performanceMetrics.endTiming('colonist & enemy AI');
   
     for (const b of this.buildings) {

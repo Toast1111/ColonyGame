@@ -129,8 +129,8 @@ export class PerformanceHUD {
     const width = scale(320);
     const lineHeight = scale(16);
 
-    // Build content to get height
-    const lines = this.buildHUDContent();
+    // Build content to get height (pass game for tick rate stats)
+    const lines = this.buildHUDContent(game);
     const height = lines.length * lineHeight + scale(20);
 
     // Create or resize offscreen canvas if needed
@@ -222,7 +222,7 @@ export class PerformanceHUD {
   /**
    * Build HUD content lines
    */
-  private buildHUDContent(): string[] {
+  private buildHUDContent(game?: Game): string[] {
     const lines: string[] = [];
     const avg = this.metrics.getAverageMetrics();
     const fps = avg.totalFrameMs > 0 ? 1000 / avg.totalFrameMs : 0;
@@ -238,6 +238,22 @@ export class PerformanceHUD {
 
     // Simulation stats
     lines.push(`⏱ Sim: ${simStats.simulationHz}Hz | α: ${simStats.alpha.toFixed(2)}`);
+
+    // Adaptive AI tick rate stats
+    if (game && game.adaptiveTickRate) {
+      const tickStats = game.adaptiveTickRate.getStats();
+      lines.push(`🤖 AI: ${tickStats.updatePercentage} updated (${tickStats.updatedThisFrame}/${tickStats.totalEntities})`);
+      
+      // Show breakdown by importance level if details enabled
+      if (this.config.showDetails && tickStats.byImportance) {
+        const importanceNames = ['CRIT', 'NORM', 'LOW', 'MIN'];
+        const counts = Object.values(tickStats.byImportance);
+        const summary = counts.map((c, i) => `${importanceNames[i]}:${c}`).filter((_, i) => counts[i] > 0).join(' ');
+        if (summary) {
+          lines.push(`  └─ ${summary}`);
+        }
+      }
+    }
 
     if (this.config.showDetails) {
       lines.push(''); // Blank line
