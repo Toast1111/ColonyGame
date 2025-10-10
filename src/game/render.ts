@@ -8,6 +8,7 @@ import { drawParticles } from "../core/particles";
 import { getDoorOpenAmount } from "./systems/doorSystem";
 import { fillRectAlpha } from "../core/RenderOptimizations";
 import type { DirtyRectTracker } from "../core/DirtyRectTracker";
+import { colonistSpriteCache } from "../core/RenderCache";
 
 /**
  * Clear canvas - optimized to support dirty rectangle tracking
@@ -283,32 +284,46 @@ export function drawColonistAvatar(ctx: CanvasRenderingContext2D, x: number, y: 
     return tempCanvas;
   };
   
-  // 1. Body (tinted with skin tone)
-  const bodySprite = imageAssets.getColonistSprite('body', sprites.bodyType, spriteDirection);
-  if (bodySprite) {
-    const tintedBody = createTintedSprite(bodySprite, profile.avatar.skinTone);
-    ctx.drawImage(tintedBody, -spriteWidth/2, -offsetY);
-  }
+  // Try to get cached composed sprite first
+  const composedSprite = colonistSpriteCache.getComposedSprite(
+    colonist,
+    spriteDirection,
+    imageAssets,
+    createTintedSprite
+  );
   
-  // 2. Apparel (clothing) - tinted with clothing color
-  const apparelSprite = imageAssets.getColonistSprite('apparel', sprites.apparelType, spriteDirection);
-  if (apparelSprite) {
-    const tintedApparel = createTintedSprite(apparelSprite, profile.avatar.clothing);
-    ctx.drawImage(tintedApparel, -spriteWidth/2, -offsetY);
-  }
-  
-  // 3. Head (tinted with skin tone)
-  const headSprite = imageAssets.getColonistSprite('head', sprites.headType, spriteDirection);
-  if (headSprite) {
-    const tintedHead = createTintedSprite(headSprite, profile.avatar.skinTone);
-    ctx.drawImage(tintedHead, -spriteWidth/2, -offsetY);
-  }
-  
-  // 4. Hair (tinted with hair color)
-  const hairSprite = imageAssets.getColonistSprite('hair', sprites.hairStyle, spriteDirection);
-  if (hairSprite) {
-    const tintedHair = createTintedSprite(hairSprite, profile.avatar.hairColor);
-    ctx.drawImage(tintedHair, -spriteWidth/2, -offsetY);
+  if (composedSprite) {
+    // Use cached composed sprite (single blit instead of 4 layers)
+    ctx.drawImage(composedSprite, -spriteWidth/2, -offsetY);
+  } else {
+    // Fallback to individual layer rendering if cache fails
+    // 1. Body (tinted with skin tone)
+    const bodySprite = imageAssets.getColonistSprite('body', sprites.bodyType, spriteDirection);
+    if (bodySprite) {
+      const tintedBody = createTintedSprite(bodySprite, profile.avatar.skinTone);
+      ctx.drawImage(tintedBody, -spriteWidth/2, -offsetY);
+    }
+    
+    // 2. Apparel (clothing) - tinted with clothing color
+    const apparelSprite = imageAssets.getColonistSprite('apparel', sprites.apparelType, spriteDirection);
+    if (apparelSprite) {
+      const tintedApparel = createTintedSprite(apparelSprite, profile.avatar.clothing);
+      ctx.drawImage(tintedApparel, -spriteWidth/2, -offsetY);
+    }
+    
+    // 3. Head (tinted with skin tone)
+    const headSprite = imageAssets.getColonistSprite('head', sprites.headType, spriteDirection);
+    if (headSprite) {
+      const tintedHead = createTintedSprite(headSprite, profile.avatar.skinTone);
+      ctx.drawImage(tintedHead, -spriteWidth/2, -offsetY);
+    }
+    
+    // 4. Hair (tinted with hair color)
+    const hairSprite = imageAssets.getColonistSprite('hair', sprites.hairStyle, spriteDirection);
+    if (hairSprite) {
+      const tintedHair = createTintedSprite(hairSprite, profile.avatar.hairColor);
+      ctx.drawImage(tintedHair, -spriteWidth/2, -offsetY);
+    }
   }
   
   // Mood indicator (small colored dot above the head) - not flipped

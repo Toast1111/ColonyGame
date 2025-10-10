@@ -8,7 +8,7 @@ import { COLORS, T, WORLD } from '../constants';
 import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render';
 import { drawRegionDebug } from '../navigation/regionDebugRender';
 import { drawTerrainDebug } from '../terrainDebugRender';
-import { drawParticles } from '../../core/particles/particleRender';
+import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/colonistProfile';
 import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
@@ -20,9 +20,63 @@ import { BUILD_TYPES, hasCost } from '../buildings';
 import { drawDebugConsole } from '../ui/debugConsole';
 import { drawPerformanceHUD } from '../ui/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
+import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
 
 export class RenderManager {
+  // Performance optimization flags
+  public useWorldCache = true;  // Toggle world background caching
+  public useColonistCache = true;  // Toggle colonist sprite caching (enabled via import)
+  public useNightCache = true;  // Toggle night overlay caching
+  public useParticleSprites = true;  // Toggle particle sprite caching
+
   constructor(private game: Game) {}
+
+  /**
+   * Toggle world background caching
+   */
+  public toggleWorldCache(enabled: boolean): void {
+    this.useWorldCache = enabled;
+    if (!enabled) {
+      // Clear cache when disabled
+      worldBackgroundCache.markDirty();
+    }
+  }
+
+  /**
+   * Toggle colonist sprite caching
+   */
+  public toggleColonistCache(enabled: boolean): void {
+    this.useColonistCache = enabled;
+    if (!enabled) {
+      // Clear cache when disabled
+      colonistSpriteCache.clear();
+    }
+  }
+
+  /**
+   * Toggle particle sprite caching
+   */
+  public toggleParticleCache(enabled: boolean): void {
+    this.useParticleSprites = enabled;
+    toggleParticleSprites(enabled);
+  }
+
+  /**
+   * Get performance stats for debugging
+   */
+  public getPerformanceStats(): {
+    worldCacheEnabled: boolean;
+    colonistCacheEnabled: boolean;
+    colonistCacheSize: number;
+    particleSpritesEnabled: boolean;
+  } {
+    return {
+      worldCacheEnabled: this.useWorldCache,
+      colonistCacheEnabled: this.useColonistCache,
+      colonistCacheSize: colonistSpriteCache.size(),
+      particleSpritesEnabled: this.useParticleSprites
+    };
+  }
 
   /**
    * Main render loop - orchestrates all drawing
@@ -63,9 +117,15 @@ export class RenderManager {
     const { game } = this;
     const { ctx } = game;
 
-    // Ground and floors (with camera for grid culling)
-    drawGround(ctx, game.camera);
-    drawFloors(ctx, game.terrainGrid, game.camera);
+    if (this.useWorldCache) {
+      // Use cached world background (single blit instead of hundreds of fillRect)
+      const worldCanvas = worldBackgroundCache.getCanvas(ctx, game.terrainGrid);
+      ctx.drawImage(worldCanvas, 0, 0);
+    } else {
+      // Legacy rendering (hundreds of fillRect calls)
+      drawGround(ctx, game.camera);
+      drawFloors(ctx, game.terrainGrid, game.camera);
+    }
   }
 
   /**
@@ -209,8 +269,15 @@ export class RenderManager {
 
     // Night overlay
     if (game.isNight()) {
-      ctx.fillStyle = `rgba(6,10,18, 0.58)`;
-      ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+      if (this.useNightCache) {
+        // Use cached night overlay (single blit instead of fillRect)
+        const nightCanvas = nightOverlayCache.getCanvas();
+        ctx.drawImage(nightCanvas, 0, 0);
+      } else {
+        // Legacy rendering
+        ctx.fillStyle = `rgba(6,10,18, 0.58)`;
+        ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+      }
     }
 
     // Ghost building preview
