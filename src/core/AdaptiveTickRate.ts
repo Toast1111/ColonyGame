@@ -31,28 +31,28 @@ export interface ImportanceConfig {
 
 export const IMPORTANCE_CONFIGS: Record<ImportanceLevel, ImportanceConfig> = {
   [ImportanceLevel.CRITICAL]: {
-    targetHz: 15,
+    targetHz: 20,             // Increased from 15 to 20 for very responsive combat
+    minInterval: 1 / 30,      // 30 Hz max
+    maxInterval: 1 / 15,      // 15 Hz min
+    jitterRange: 0.005        // Reduced jitter for smoother updates
+  },
+  [ImportanceLevel.NORMAL]: {
+    targetHz: 15,             // Increased from 7.5 to 15 for smooth visible movement
     minInterval: 1 / 20,      // 20 Hz max
     maxInterval: 1 / 10,      // 10 Hz min
     jitterRange: 0.01         // 10ms jitter
   },
-  [ImportanceLevel.NORMAL]: {
-    targetHz: 7.5,
+  [ImportanceLevel.LOW]: {
+    targetHz: 5,              // Increased from 3 to 5
     minInterval: 1 / 10,      // 10 Hz max
-    maxInterval: 1 / 5,       // 5 Hz min
+    maxInterval: 1 / 3,       // 3 Hz min
     jitterRange: 0.02         // 20ms jitter
   },
-  [ImportanceLevel.LOW]: {
-    targetHz: 3,
-    minInterval: 1 / 5,       // 5 Hz max
-    maxInterval: 1,           // 1 Hz min
-    jitterRange: 0.05         // 50ms jitter
-  },
   [ImportanceLevel.MINIMAL]: {
-    targetHz: 0.6,
-    minInterval: 1,           // 1 Hz max
-    maxInterval: 5,           // 0.2 Hz min
-    jitterRange: 0.1          // 100ms jitter
+    targetHz: 1,              // Increased from 0.6 to 1
+    minInterval: 1 / 2,       // 2 Hz max
+    maxInterval: 2,           // 0.5 Hz min
+    jitterRange: 0.05         // 50ms jitter
   }
 };
 
@@ -79,6 +79,7 @@ export class AdaptiveTickRateManager {
    */
   public beginFrame(currentTime: number): void {
     this.frameTime = currentTime;
+    this.totalEntities = 0;  // Reset total count each frame
     this.updatedThisFrame = 0;
     this.skippedThisFrame = 0;
   }
@@ -142,7 +143,8 @@ export class AdaptiveTickRateManager {
       entityY <= cameraY + worldHeight + 100;
     
     // CRITICAL: Very close to camera center (player likely watching)
-    const closeThreshold = Math.min(worldWidth, worldHeight) * 0.25;
+    // Increased threshold for more responsive visible area
+    const closeThreshold = Math.min(worldWidth, worldHeight) * 0.4; // Increased from 0.25 to 0.4
     if (isOnScreen && distanceFromCenter < closeThreshold) {
       return ImportanceLevel.CRITICAL;
     }
@@ -152,7 +154,8 @@ export class AdaptiveTickRateManager {
       return ImportanceLevel.CRITICAL;
     }
     
-    // NORMAL: On screen but not close
+    // NORMAL: On screen but not close - still very important for smooth visuals
+    // All visible entities should be NORMAL at minimum for smooth movement
     if (isOnScreen) {
       return ImportanceLevel.NORMAL;
     }
