@@ -227,6 +227,31 @@ export class RenderManager {
       
       // Use the helper function which handles all the sprite rendering logic
       drawColonistAvatar(ctx, c.x, c.y, c, c.r, isSelected);
+      
+      // Draft indicator - draw a shield icon above drafted colonists
+      if (c.isDrafted) {
+        ctx.save();
+        ctx.strokeStyle = '#10b981'; // green
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
+        ctx.lineWidth = 2;
+        
+        // Draw shield-shaped indicator above colonist
+        const shieldX = c.x;
+        const shieldY = c.y - c.r - 12;
+        const shieldSize = 8;
+        
+        ctx.beginPath();
+        ctx.moveTo(shieldX, shieldY - shieldSize);
+        ctx.lineTo(shieldX + shieldSize, shieldY);
+        ctx.lineTo(shieldX + shieldSize * 0.6, shieldY + shieldSize);
+        ctx.lineTo(shieldX - shieldSize * 0.6, shieldY + shieldSize);
+        ctx.lineTo(shieldX - shieldSize, shieldY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.restore();
+      }
     }
 
     // Combat debug: turret ranges

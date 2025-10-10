@@ -2607,6 +2607,23 @@ export class Game {
     console.log(`Context menu action: ${actionId} for colonist:`, colonist.profile?.name);
     
     switch (actionId) {
+      // Draft/Undraft
+      case 'draft':
+        if (colonist.isDrafted) {
+          // Undraft
+          colonist.isDrafted = false;
+          colonist.draftedTarget = null;
+          colonist.draftedPosition = null;
+          this.msg(`${colonist.profile?.name || 'Colonist'} undrafted`, 'info');
+        } else {
+          // Draft
+          colonist.isDrafted = true;
+          colonist.draftedTarget = null;
+          colonist.draftedPosition = null;
+          this.msg(`${colonist.profile?.name || 'Colonist'} drafted for combat`, 'info');
+        }
+        break;
+        
       // Prioritize actions
       case 'prioritize_medical':
         // Set high priority for medical work

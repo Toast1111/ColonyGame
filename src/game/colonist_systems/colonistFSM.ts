@@ -7,6 +7,8 @@ import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor } from "../systems/doorSystem";
 import { addItemToInventory, removeItemFromInventory, getInventoryItemCount } from "../systems/buildingInventory";
+import { itemDatabase } from "../../data/itemDatabase";
+
 
 // Helper to check if colonist should wait for a door
 function checkDoorInteraction(game: any, c: Colonist): Building | null {
@@ -451,6 +453,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (!best || prio > best.prio) best = { state, prio, reason };
     };
     // Highest first
+    
+    // Drafted state - player has direct control, override almost everything
+    if (c.isDrafted && !c.inside) {
+      set('drafted', 99, 'drafted by player');
+      return best; // Return immediately - drafted overrides all other considerations
+    }
+    
     if (!c.inside && danger) set('flee', 100, 'danger detected');
     
     // Medical work - ALL colonists can treat injuries (RimWorld style)
@@ -508,6 +517,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     const statePriority = (s: ColonistState | undefined): number => {
       switch (s) {
         case 'flee': return 100;
+        case 'drafted': return 99; // Player control - overrides almost everything
         case 'waitingAtDoor': return 98; // High priority - must wait
         case 'beingTreated': return 96; // Very high priority - patient needs care
         case 'doctoring': return 95; // High priority for active medical work
@@ -1969,6 +1979,57 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.target = null;
         changeState('seekTask', 'no bread to store');
       }
+      break;
+    }
+    
+    case 'drafted': {
+      // Drafted colonists are under player control for combat
+      // They will automatically engage enemies they can see with ranged weapons
+      // Or fight in melee when adjacent to enemies
+      
+      // Check if colonist should exit drafted state
+      if (!c.isDrafted) {
+        changeState('seekTask', 'undrafted by player');
+        break;
+      }
+      
+      // If player assigned a position, move there
+      if (c.draftedPosition) {
+        const distance = Math.hypot(c.x - c.draftedPosition.x, c.y - c.draftedPosition.y);
+        if (distance > 10) {
+          game.moveAlongPath(c, dt, c.draftedPosition, 10);
+        }
+        // Combat will be handled by updateColonistCombat which runs before this FSM
+        break;
+      }
+      
+      // If player assigned a specific target, try to move toward it (if it's far)
+      if (c.draftedTarget && (c.draftedTarget as any).alive !== false && (c.draftedTarget as any).hp > 0) {
+        const target = c.draftedTarget as any;
+        const distance = Math.hypot(c.x - target.x, c.y - target.y);
+        
+        // Get weapon range to determine appropriate distance
+        const weapon = c.inventory?.equipment?.weapon;
+        let optimalRange = 40; // Default melee/close range
+        if (weapon && weapon.defName) {
+          const itemDef = (itemDatabase as any).getItemDef(weapon.defName);
+          if (itemDef && itemDef.range > 2) {
+            // Ranged weapon - stay at 60% of max range for optimal positioning
+            const T = 32;
+            optimalRange = (itemDef.range * T) * 0.6;
+          }
+        }
+        
+        // Move to optimal engagement range
+        if (distance > optimalRange * 1.2) {
+          game.moveAlongPath(c, dt, { x: target.x, y: target.y }, optimalRange);
+        }
+        // Combat will be handled by updateColonistCombat
+        break;
+      }
+      
+      // No specific orders - just hold position and engage enemies automatically
+      // Combat handled by updateColonistCombat
       break;
     }
   }
