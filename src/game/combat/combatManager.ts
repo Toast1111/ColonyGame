@@ -544,6 +544,13 @@ export class CombatManager {
     return positions;
   }
 
+  /**
+   * Get cover value at a position relative to a threat
+   * Cover values:
+   *  - Walls: 75% (best cover)
+   *  - Stone chunks: 50% (better than trees)
+   *  - Trees: 30% (basic cover)
+   */
   private getCoverValueAtPosition(x: number, y: number, threat?: Enemy): number {
     if (!threat) return 0;
     

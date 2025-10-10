@@ -58,6 +58,14 @@ function willHitFriendly(game: Game, from: { x: number; y: number }, to: { x: nu
   return false;
 }
 
+/**
+ * Calculate cover penalty for a shot from `from` to `to`
+ * Cover values:
+ *  - Walls: 75% (best cover, colonists lean out to fire)
+ *  - Stone chunks: 50% (better than trees)
+ *  - Trees: 30% (basic cover)
+ * Enemies can also use cover - if they advance, they can use defensive lines.
+ */
 function coverPenalty(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): number {
   // RimWorld-style cover: walls, stone chunks, and trees near the target reduce hit chance
   let penalty = 0;
