@@ -2048,6 +2048,21 @@ export class Game {
       togglePerformanceHUD();
       this.toast(this.debug.performanceHUD ? 'Performance HUD ON' : 'Performance HUD OFF');
     }
+    
+    // Render optimization toggles (for testing performance)
+    if (!consoleOpen && this.keyPressed('1')) {
+      this.renderManager.toggleWorldCache(!this.renderManager.useWorldCache);
+      this.toast(this.renderManager.useWorldCache ? 'World Cache: ON (optimized)' : 'World Cache: OFF (legacy)');
+    }
+    if (!consoleOpen && this.keyPressed('2')) {
+      this.renderManager.toggleColonistCache(!this.renderManager.useColonistCache);
+      this.toast(this.renderManager.useColonistCache ? 'Colonist Cache: ON (optimized)' : 'Colonist Cache: OFF (legacy)');
+    }
+    if (!consoleOpen && this.keyPressed('3')) {
+      this.renderManager.toggleParticleCache(!this.renderManager.useParticleSprites);
+      this.toast(this.renderManager.useParticleSprites ? 'Particle Sprites: ON (optimized)' : 'Particle Sprites: OFF (legacy)');
+    }
+    
   if (!consoleOpen && this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
     if (!consoleOpen && this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
     
