@@ -428,6 +428,60 @@ export class CombatManager {
       }
     }
     
+    // Find stone chunks that can provide cover
+    const nearbyRocks = this.game.rocks.filter(r =>
+      Math.hypot(r.x - colonist.x, r.y - colonist.y) < searchRadius
+    );
+    
+    for (const rock of nearbyRocks) {
+      const positions_around = this.getPositionsAroundCircle(rock.x, rock.y, rock.r);
+      
+      for (const pos of positions_around) {
+        const coverValue = this.getCoverValueAtPosition(pos.x, pos.y, situation.nearestThreat?.enemy);
+        const distanceToThreat = situation.nearestThreat
+          ? Math.hypot(pos.x - situation.nearestThreat.enemy.x, pos.y - situation.nearestThreat.enemy.y)
+          : Infinity;
+        
+        const distanceScore = Math.min(1, distanceToThreat / 200);
+        const safetyScore = coverValue * 0.7 + distanceScore * 0.3;
+        
+        positions.push({
+          x: pos.x,
+          y: pos.y,
+          coverValue,
+          distanceToThreat,
+          safetyScore
+        });
+      }
+    }
+    
+    // Find trees that can provide cover
+    const nearbyTrees = this.game.trees.filter(t =>
+      Math.hypot(t.x - colonist.x, t.y - colonist.y) < searchRadius
+    );
+    
+    for (const tree of nearbyTrees) {
+      const positions_around = this.getPositionsAroundCircle(tree.x, tree.y, tree.r);
+      
+      for (const pos of positions_around) {
+        const coverValue = this.getCoverValueAtPosition(pos.x, pos.y, situation.nearestThreat?.enemy);
+        const distanceToThreat = situation.nearestThreat
+          ? Math.hypot(pos.x - situation.nearestThreat.enemy.x, pos.y - situation.nearestThreat.enemy.y)
+          : Infinity;
+        
+        const distanceScore = Math.min(1, distanceToThreat / 200);
+        const safetyScore = coverValue * 0.7 + distanceScore * 0.3;
+        
+        positions.push({
+          x: pos.x,
+          y: pos.y,
+          coverValue,
+          distanceToThreat,
+          safetyScore
+        });
+      }
+    }
+    
     // Also consider defensive buildings (turrets, fortifications)
     const defensiveBuildings = this.game.buildings.filter(b =>
       (b.kind === 'turret' || b.kind === 'wall') &&
@@ -474,12 +528,29 @@ export class CombatManager {
     return positions;
   }
 
+  private getPositionsAroundCircle(cx: number, cy: number, radius: number): { x: number; y: number }[] {
+    const positions: { x: number; y: number }[] = [];
+    const distance = radius + 16; // Stand a bit away from the object
+    
+    // 8 positions around the circle (N, NE, E, SE, S, SW, W, NW)
+    for (let i = 0; i < 8; i++) {
+      const angle = (i * Math.PI) / 4; // 45 degree increments
+      positions.push({
+        x: cx + Math.cos(angle) * distance,
+        y: cy + Math.sin(angle) * distance
+      });
+    }
+    
+    return positions;
+  }
+
   private getCoverValueAtPosition(x: number, y: number, threat?: Enemy): number {
     if (!threat) return 0;
     
-    // Check if there's a wall between position and threat
+    // Check for cover from walls, stone chunks, and trees
     let coverValue = 0;
     
+    // Check walls (75% cover - best cover, colonists lean out to fire)
     for (const wall of this.game.buildings) {
       if (wall.kind !== 'wall' || !wall.done) continue;
       
@@ -487,7 +558,7 @@ export class CombatManager {
       const wallCenter = this.game.centerOf(wall);
       const distToWall = Math.hypot(wallCenter.x - x, wallCenter.y - y);
       
-      // Wall must be close to position
+      // Wall must be close to position (adjacent)
       if (distToWall > 40) continue;
       
       // Check if wall blocks line to threat
@@ -498,6 +569,56 @@ export class CombatManager {
       // Even if not directly blocking, nearby walls provide some cover
       if (distToWall < 20) {
         coverValue = Math.max(coverValue, 0.3);
+      }
+    }
+    
+    // Check stone chunks (50% cover - better than trees)
+    for (const rock of this.game.rocks) {
+      const distToRock = Math.hypot(rock.x - x, rock.y - y);
+      
+      // Rock must be close to position (adjacent)
+      if (distToRock > 35) continue;
+      
+      // Check if rock is between position and threat (simple line check)
+      const dx = threat.x - x, dy = threat.y - y;
+      const rx = rock.x - x, ry = rock.y - y;
+      const len = Math.hypot(dx, dy) || 1;
+      const t = Math.max(0, Math.min(1, (rx * dx + ry * dy) / (len * len)));
+      const px = x + t * dx, py = y + t * dy;
+      const distToLine = Math.hypot(px - rock.x, py - rock.y);
+      
+      if (distToLine < rock.r + 5) {
+        coverValue = Math.max(coverValue, 0.5); // 50% cover from stone chunks
+      }
+      
+      // Adjacent rocks provide some cover even if not directly blocking
+      if (distToRock < 20) {
+        coverValue = Math.max(coverValue, 0.25);
+      }
+    }
+    
+    // Check trees (30% cover - basic cover)
+    for (const tree of this.game.trees) {
+      const distToTree = Math.hypot(tree.x - x, tree.y - y);
+      
+      // Tree must be close to position (adjacent)
+      if (distToTree > 30) continue;
+      
+      // Check if tree is between position and threat
+      const dx = threat.x - x, dy = threat.y - y;
+      const tx = tree.x - x, ty = tree.y - y;
+      const len = Math.hypot(dx, dy) || 1;
+      const t = Math.max(0, Math.min(1, (tx * dx + ty * dy) / (len * len)));
+      const px = x + t * dx, py = y + t * dy;
+      const distToLine = Math.hypot(px - tree.x, py - tree.y);
+      
+      if (distToLine < tree.r + 4) {
+        coverValue = Math.max(coverValue, 0.3); // 30% cover from trees
+      }
+      
+      // Adjacent trees provide minimal cover
+      if (distToTree < 18) {
+        coverValue = Math.max(coverValue, 0.15);
       }
     }
     
