@@ -271,6 +271,17 @@ export class PerformanceHUD {
       }
     }
 
+    // Render cache stats
+    if (game && game.renderManager) {
+      const renderStats = game.renderManager.getPerformanceStats();
+      const status = renderStats.worldCacheEnabled && renderStats.colonistCacheEnabled && renderStats.particleSpritesEnabled ? '✓' : '⚠';
+      lines.push(`${status} Render: W:${renderStats.worldCacheEnabled ? 'ON' : 'OFF'} C:${renderStats.colonistCacheEnabled ? 'ON' : 'OFF'} P:${renderStats.particleSpritesEnabled ? 'ON' : 'OFF'}`);
+      
+      if (this.config.showDetails && renderStats.colonistCacheSize > 0) {
+        lines.push(`  └─ ${renderStats.colonistCacheSize} colonist sprites cached`);
+      }
+    }
+
     if (this.config.showDetails) {
       lines.push(''); // Blank line
       lines.push('SUBSYSTEMS:');

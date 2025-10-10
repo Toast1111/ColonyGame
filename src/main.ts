@@ -99,6 +99,7 @@ if (helpEl) {
     <h2>How to play</h2>
     <div><b>Goal:</b> Gather wood & stone, build farms for food, add houses for pop cap; survive nightly raids with turrets/walls.</div>
   <div><b>Controls:</b> 1..9 quick-build, <b>B</b> build menu, <b>P</b> work priorities, LMB place, RMB cancel/erase; WASD pan; Space pause; H toggle help; +/- zoom; F fast-forward.</div>
+  <div><b>Debug:</b> <b>M</b> performance HUD, <b>G</b> nav grid, <b>J</b> colonist info, <b>R</b> regions, <b>T</b> terrain. <b>1/2/3</b> toggle render optimizations (world/colonist/particle cache).</div>
   <div><b>UI Modes:</b> 📱 Mobile UI shows touch controls for tap/touch gameplay. 🖥️ Desktop UI is clean with keyboard shortcuts only.</div>
   `;
 }
