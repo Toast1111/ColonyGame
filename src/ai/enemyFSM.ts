@@ -122,6 +122,11 @@ function moveEnemyAlongPath(game: any, e: Enemy, dt: number): number {
   if (e.staggeredUntil && e.staggeredUntil > currentTime) {
     speed = speed / 6;
   }
+  
+  // Apply stun effect if enemy is stunned (speed reduced to near zero)
+  if ((e as any).stunnedUntil && (e as any).stunnedUntil > currentTime) {
+    speed = speed * 0.1; // 90% reduction
+  }
 
   const step = speed * dt;
 
@@ -304,6 +309,18 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
   } else {
     const c = tgt as Colonist; const d = Math.hypot(e.x - c.x, e.y - c.y);
     if (d < e.r + 8) {
+      // Check if another enemy is already attacking this colonist (prevent stacking)
+      const otherEnemyAttacking = (game.enemies as Enemy[]).some((other: Enemy) => {
+        if (other === e) return false;
+        const otherDist = Math.hypot(other.x - c.x, other.y - c.y);
+        return otherDist < other.r + 8 && other.target === c;
+      });
+      
+      if (otherEnemyAttacking) {
+        // Another enemy is already attacking this colonist, don't stack
+        return;
+      }
+      
       if (!movedThisTick && (e as any).meleeCd <= 0) {
         // Apply armor-aware damage with appropriate damage type (discrete hit)
         let damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise';
