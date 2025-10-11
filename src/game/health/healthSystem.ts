@@ -17,8 +17,8 @@ export const DEFAULT_BODY_PARTS: BodyPart[] = [
   {
     type: 'head',
     label: 'Head',
-    maxHp: 40,
-    currentHp: 40,
+    maxHp: 10, // Brain has 10 HP
+    currentHp: 10,
     coverage: 0.08, // 8% chance to be hit
     vital: true,
     efficiency: 1.0
@@ -26,8 +26,8 @@ export const DEFAULT_BODY_PARTS: BodyPart[] = [
   {
     type: 'torso',
     label: 'Torso',
-    maxHp: 80,
-    currentHp: 80,
+    maxHp: 40, // Torso (general body) has 40 HP
+    currentHp: 40,
     coverage: 0.40, // 40% chance to be hit
     vital: true,
     efficiency: 1.0

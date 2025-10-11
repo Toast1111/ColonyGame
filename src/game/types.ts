@@ -240,6 +240,8 @@ export type Colonist = {
   isDrafted?: boolean;         // True if colonist is drafted for combat
   draftedTarget?: Enemy | Colonist | null; // Specific target assigned by player (null = auto-target)
   draftedPosition?: { x: number; y: number } | null; // Position to hold/move to while drafted
+  // Stagger/stopping power effects
+  staggeredUntil?: number;     // Game time until stagger effect ends (speed reduced to 1/6th)
 };
 
 export type Enemy = { 
@@ -253,6 +255,8 @@ export type Enemy = {
   waitingForDoor?: Building | null;  // Door the enemy is waiting to break/open
   doorWaitStart?: number;            // Game time when started waiting/attacking door
   id?: string;                       // Unique identifier for door queue management
+  // Stagger/stopping power effects
+  staggeredUntil?: number;           // Game time until stagger effect ends (speed reduced to 1/6th)
 };
 
 export type Bullet = {
@@ -268,6 +272,9 @@ export type Bullet = {
   owner?: 'turret' | 'colonist' | 'enemy';
   shooterId?: string;       // colonist id for XP attribution (if owner is colonist)
   particles?: Particle[];
+  // Advanced combat stats
+  armorPenetration?: number; // 0-1, ability to ignore armor (AP directly subtracts from armor rating)
+  stoppingPower?: number;    // >= 1 can stagger humans, reducing speed to 1/6th for 95 ticks (1.58s)
 };
 
 export type Particle = {

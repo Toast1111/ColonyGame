@@ -117,6 +117,12 @@ function moveEnemyAlongPath(game: any, e: Enemy, dt: number): number {
     }
   }
 
+  // Apply stagger effect if enemy is staggered (speed reduced to 1/6th)
+  const currentTime = performance.now() / 1000;
+  if (e.staggeredUntil && e.staggeredUntil > currentTime) {
+    speed = speed / 6;
+  }
+
   const step = speed * dt;
 
   // Grid-aligned movement: smaller tolerance to ensure we hit node centers

@@ -86,7 +86,11 @@ function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: num
   if (distance < 5) return true; // Close enough
   
   const pathSpeedBonus = getSpeedMultiplier(game, c.x, c.y);
-  const speed = c.speed * speedMultiplier * pathSpeedBonus;
+  
+  // Apply stagger effect if colonist is staggered (speed reduced to 1/6th)
+  const staggerMultiplier = (c.staggeredUntil && c.staggeredUntil > (c.t || 0)) ? (1 / 6) : 1;
+  
+  const speed = c.speed * speedMultiplier * pathSpeedBonus * staggerMultiplier;
   const moveDistance = speed * dt;
   const normalizedDx = dx / distance;
   const normalizedDy = dy / distance;

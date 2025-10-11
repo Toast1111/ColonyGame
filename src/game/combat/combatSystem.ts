@@ -159,15 +159,41 @@ export function updateProjectiles(game: Game, dt: number) {
       }
 
       if (hitEnemy) {
-        const dmg = Math.max(1, Math.round((b.dmg || 10)));
+        let dmg = Math.max(1, Math.round((b.dmg || 10)));
         
         // Check if this is hitting a colonist (for friendly fire)
         const isColonist = (game.colonists as any[]).includes(hitEnemy);
+        
+        // Apply armor penetration if target has armor
         if (isColonist) {
+          const colonist = hitEnemy as any;
+          const armorItem = colonist.inventory?.equipment?.armor;
+          if (armorItem && armorItem.defName) {
+            const armorDef = (game as any).itemDatabase?.getItemDef?.(armorItem.defName);
+            if (armorDef && armorDef.armorRating) {
+              const ap = (b as any).armorPenetration || 0;
+              const effectiveArmor = Math.max(0, armorDef.armorRating - ap);
+              dmg = Math.round(dmg * (1 - effectiveArmor));
+            }
+          }
+          
+          // Apply damage to colonist
           (game as any).applyDamageToColonist(hitEnemy, dmg, 'gunshot');
+          
+          // Apply stopping power (stagger effect)
+          const sp = (b as any).stoppingPower || 0;
+          if (sp >= 1) {
+            colonist.staggeredUntil = (colonist.t || 0) + 1.58; // 95 ticks at 60fps = 1.58 seconds
+          }
         } else {
-          // Regular enemy damage
+          // Regular enemy damage (enemies don't have armor yet)
           hitEnemy.hp -= dmg;
+          
+          // Apply stopping power to enemies
+          const sp = (b as any).stoppingPower || 0;
+          if (sp >= 1) {
+            (hitEnemy as any).staggeredUntil = performance.now() / 1000 + 1.58;
+          }
         }
         
         // Shooting XP for the colonist who fired this bullet
