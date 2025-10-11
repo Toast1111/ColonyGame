@@ -78,6 +78,41 @@ function getDirectionalCoverMultiplier(attackAngleDeg: number): number {
 }
 
 /**
+ * Interpolate weapon accuracy based on distance
+ * Uses linear interpolation between defined range breakpoints:
+ * - Touch: 3 tiles
+ * - Short: 12 tiles
+ * - Medium: 25 tiles
+ * - Long: 40 tiles
+ */
+function interpolateAccuracy(def: any, distanceInTiles: number): number {
+  const touch = def.accuracyTouch ?? 0.9;
+  const short = def.accuracyShort ?? 0.75;
+  const medium = def.accuracyMedium ?? 0.6;
+  const long = def.accuracyLong ?? 0.4;
+  
+  if (distanceInTiles <= 3) {
+    // At or below touch range
+    return touch;
+  } else if (distanceInTiles <= 12) {
+    // Between touch and short: interpolate
+    const t = (distanceInTiles - 3) / (12 - 3);
+    return touch + t * (short - touch);
+  } else if (distanceInTiles <= 25) {
+    // Between short and medium: interpolate
+    const t = (distanceInTiles - 12) / (25 - 12);
+    return short + t * (medium - short);
+  } else if (distanceInTiles <= 40) {
+    // Between medium and long: interpolate
+    const t = (distanceInTiles - 25) / (40 - 25);
+    return medium + t * (long - medium);
+  } else {
+    // Beyond long range
+    return long;
+  }
+}
+
+/**
  * Calculate distance-based cover reduction
  * - Cover is only 33.33% effective at point-blank range (directly in front)
  * - Cover is 66.666% effective at 1 tile away
@@ -273,15 +308,40 @@ function getWeaponStats(c: Colonist) {
   const T = 32;
   const rangePx = (def.range || 10) * T;
   const damage = def.damage || 12;
-  const accuracy = def.accuracy ?? 0.7;
-  const burst = def.defName === 'Rifle' ? 3 : 1;
-  const warmup = def.defName === 'Rifle' ? 0.6 : 0.4;
-  const betweenShots = 0.1; // time between burst shots
-  const cooldown = def.defName === 'Rifle' ? 0.7 : 0.5;
-  const speed = 680;
+  
+  // Use new accuracy system with range-based interpolation
+  const accuracyFn = (distPx: number) => {
+    const distTiles = distPx / T;
+    return interpolateAccuracy(def, distTiles);
+  };
+  
+  // Use new weapon stats if available, otherwise use legacy values
+  const burst = def.burstCount ?? (def.defName === 'Rifle' ? 3 : 1);
+  const warmup = def.aimTime ?? (def.defName === 'Rifle' ? 0.6 : 0.4);
+  const betweenShots = 0.1; // time between burst shots (fixed)
+  const cooldown = def.cooldownTime ?? (def.defName === 'Rifle' ? 0.7 : 0.5);
+  const speed = 680; // bullet speed in px/s
   const minRangePx = 1.25 * T; // too close -> bad for ranged
   const isMelee = (def.range || 0) <= 2;
-  return { rangePx, damage, accuracy, burst, warmup, betweenShots, cooldown, speed, minRangePx, isMelee };
+  
+  // New stats
+  const armorPenetration = def.armorPenetration ?? 0;
+  const stoppingPower = def.stoppingPower ?? 0;
+  
+  return { 
+    rangePx, 
+    damage, 
+    accuracyFn, // Function to get accuracy at specific distance
+    burst, 
+    warmup, 
+    betweenShots, 
+    cooldown, 
+    speed, 
+    minRangePx, 
+    isMelee,
+    armorPenetration,
+    stoppingPower
+  };
 }
 
 function pickTarget(game: Game, c: Colonist, range: number): Enemy | null {
@@ -454,13 +514,13 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   if (((c as any).betweenShots || 0) > 0) return;
 
   // Fire one shot in burst
-  // Accuracy reduced by distance and cover near target
+  // Use distance-based accuracy interpolation
   // Shooting skill influences accuracy
   const shootLvl = c.skills ? skillLevel(c, 'Shooting') : 0;
-  const baseAcc = Math.min(0.98, stats.accuracy * (1 + shootLvl * 0.02));
-  const distFactor = Math.max(0.5, 1 - (dist / stats.rangePx) * 0.5); // 50% reduction at max range
+  const weaponAcc = stats.accuracyFn(dist); // Get accuracy at current distance
+  const baseAcc = Math.min(0.98, weaponAcc * (1 + shootLvl * 0.02));
   const cover = coverPenalty(game, c, target);
-  const acc = Math.max(0.1, baseAcc * distFactor * (1 - cover));
+  const acc = Math.max(0.1, baseAcc * (1 - cover));
   const ang = Math.atan2(target.y - c.y, target.x - c.x);
   const maxSpread = (1 - acc) * 20 * (Math.PI / 180);
   const aimAng = ang + (Math.random() - 0.5) * maxSpread;
@@ -481,7 +541,9 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     life: 0,
     maxLife: Math.max(0.12, dist / stats.speed + 0.12),
     owner: 'colonist',
-    shooterId: (c as any).id || ((c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`)
+    shooterId: (c as any).id || ((c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`),
+    armorPenetration: stats.armorPenetration || 0,
+    stoppingPower: stats.stoppingPower || 0
   };
   const dx = ax - c.x, dy = ay - c.y; const L = Math.hypot(dx, dy) || 1;
   bullet.vx = (dx / L) * stats.speed;

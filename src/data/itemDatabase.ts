@@ -15,8 +15,21 @@ export interface ItemDef {
   // Combat stats
   damage?: number;
   range?: number;
-  accuracy?: number;
+  accuracy?: number; // Deprecated - use accuracy at specific ranges
   ammoType?: string;
+  
+  // Advanced weapon stats (RimWorld-style)
+  armorPenetration?: number; // 0-1, ability to ignore armor (AP directly subtracts from armor rating)
+  stoppingPower?: number; // >= 1 can stagger humans, reducing speed to 1/6th for 95 ticks (1.58s)
+  burstCount?: number; // How many bullets are fired at a time
+  aimTime?: number; // Seconds before shooting (warmup)
+  cooldownTime?: number; // Seconds after shooting (cooldown)
+  
+  // Accuracy at specific ranges (in tiles)
+  accuracyTouch?: number; // Accuracy at 3 tiles (touch range)
+  accuracyShort?: number; // Accuracy at 12 tiles (short range)
+  accuracyMedium?: number; // Accuracy at 25 tiles (medium range)
+  accuracyLong?: number; // Accuracy at 40 tiles (long range)
   
   // Protection stats
   armorRating?: number;
@@ -122,10 +135,19 @@ export class ItemDatabase {
           stackable: false,
           value: 150,
           weight: 1.2,
-          damage: 25,
-          range: 15,
-          accuracy: 0.7,
-          ammoType: 'Bullets'
+          damage: 12,
+          range: 25,
+          accuracy: 0.7, // Legacy fallback
+          ammoType: 'Bullets',
+          armorPenetration: 0.15,
+          stoppingPower: 0.8,
+          burstCount: 1,
+          aimTime: 0.4,
+          cooldownTime: 0.5,
+          accuracyTouch: 0.95,
+          accuracyShort: 0.80,
+          accuracyMedium: 0.55,
+          accuracyLong: 0.35
         },
         {
           defName: 'Rifle',
@@ -137,10 +159,19 @@ export class ItemDatabase {
           stackable: false,
           value: 400,
           weight: 3.8,
-          damage: 40,
-          range: 25,
-          accuracy: 0.8,
-          ammoType: 'Bullets'
+          damage: 15,
+          range: 45,
+          accuracy: 0.8, // Legacy fallback
+          ammoType: 'Bullets',
+          armorPenetration: 0.25,
+          stoppingPower: 1.2,
+          burstCount: 3,
+          aimTime: 0.6,
+          cooldownTime: 0.7,
+          accuracyTouch: 0.70,
+          accuracyShort: 0.88,
+          accuracyMedium: 0.75,
+          accuracyLong: 0.50
         },
         {
           defName: 'Knife',
@@ -154,7 +185,12 @@ export class ItemDatabase {
           weight: 0.5,
           damage: 15,
           range: 1,
-          accuracy: 0.9
+          accuracy: 0.9,
+          armorPenetration: 0.1,
+          stoppingPower: 0.5,
+          burstCount: 1,
+          aimTime: 0.2,
+          cooldownTime: 0.6
         },
         
         // Armor
