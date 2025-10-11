@@ -59,65 +59,209 @@ function willHitFriendly(game: Game, from: { x: number; y: number }, to: { x: nu
 }
 
 /**
+ * Calculate directional cover effectiveness based on attack angle
+ * a < 15° = 100% effectiveness
+ * 15° < a < 27° = 80% effectiveness
+ * 27° < a < 40° = 60% effectiveness
+ * 40° < a < 52° = 40% effectiveness
+ * 52° < a < 65° = 20% effectiveness
+ * a > 65° = 0% effectiveness
+ */
+function getDirectionalCoverMultiplier(attackAngleDeg: number): number {
+  const a = Math.abs(attackAngleDeg);
+  if (a < 15) return 1.0;
+  if (a < 27) return 0.8;
+  if (a < 40) return 0.6;
+  if (a < 52) return 0.4;
+  if (a < 65) return 0.2;
+  return 0;
+}
+
+/**
+ * Calculate distance-based cover reduction
+ * - Cover is only 33.33% effective at point-blank range (directly in front)
+ * - Cover is 66.666% effective at 1 tile away
+ * - Cover is 100% effective at 2+ tiles away
+ */
+function getDistanceCoverMultiplier(distanceToCover: number): number {
+  const T = 32; // tile size
+  if (distanceToCover < T * 0.5) {
+    // Point-blank range (directly in front of cover)
+    return 0.3333;
+  } else if (distanceToCover < T * 1.5) {
+    // 1 tile away - interpolate between 33.33% and 66.666%
+    const t = (distanceToCover - T * 0.5) / T;
+    return 0.3333 + t * (0.6666 - 0.3333);
+  } else if (distanceToCover < T * 2.5) {
+    // 1-2 tiles away - interpolate between 66.666% and 100%
+    const t = (distanceToCover - T * 1.5) / T;
+    return 0.6666 + t * (1.0 - 0.6666);
+  }
+  return 1.0; // Full effectiveness at 2+ tiles
+}
+
+/**
  * Calculate cover penalty for a shot from `from` to `to`
- * Cover values:
- *  - Walls: 75% (best cover, colonists lean out to fire)
- *  - Stone chunks: 50% (better than trees)
- *  - Trees: 30% (basic cover)
- * Enemies can also use cover - if they advance, they can use defensive lines.
+ * 
+ * Cover Types:
+ * - High Cover (Walls): 75% base cover, blocks line of sight completely, must lean out to fire
+ * - Low Cover (Sandbags, Rocks, Trees): 30-50% base cover, can shoot over
+ * 
+ * Directional effectiveness: Cover works best when attack comes straight at it (0-15° = 100%),
+ * decreasing effectiveness at angles (>65° = 0%)
+ * 
+ * Distance reduction: Cover is less effective at point-blank (33.33%) and 1 tile away (66.666%)
+ * 
+ * Multiple sources: Low cover pieces can stack when shot comes from diagonal angles
  */
 function coverPenalty(game: Game, from: { x: number; y: number }, to: { x: number; y: number }): number {
-  // RimWorld-style cover: walls, stone chunks, and trees near the target reduce hit chance
-  let penalty = 0;
+  const T = 32; // tile size
   
-  // Check walls (75% cover when leaning from side)
+  // Track all cover sources that could affect this shot
+  interface CoverSource {
+    value: number; // base cover value (0.3 for trees, 0.5 for rocks, 0.75 for walls)
+    isHighCover: boolean; // true for walls
+    angle: number; // angle in degrees relative to shot direction
+    distanceToShooter: number; // distance from shooter to cover
+    effectiveValue: number; // final cover value after modifiers
+  }
+  
+  const coverSources: CoverSource[] = [];
+  
+  // Shot direction vector (from shooter to target)
+  const shotVx = to.x - from.x;
+  const shotVy = to.y - from.y;
+  const shotAngle = Math.atan2(shotVy, shotVx);
+  const shotDistance = Math.hypot(shotVx, shotVy) || 1;
+  
+  // Check walls (75% high cover - blocks line of sight)
   for (const b of game.buildings) {
     if (!b.done || b.kind !== 'wall') continue;
-    // Compute distance from wall center to the line segment
+    
     const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
-    const vx = to.x - from.x, vy = to.y - from.y;
     const wx = cx - from.x, wy = cy - from.y;
-    const vv = vx*vx + vy*vy || 1;
-    const t = Math.max(0, Math.min(1, (wx*vx + wy*vy) / vv));
-    const px = from.x + t * vx, py = from.y + t * vy;
-    const dist = Math.hypot(px - cx, py - cy);
+    const t = Math.max(0, Math.min(1, (wx * shotVx + wy * shotVy) / (shotDistance * shotDistance)));
+    const px = from.x + t * shotVx, py = from.y + t * shotVy;
+    const distToCover = Math.hypot(px - cx, py - cy);
+    
     // Only consider cover within last 25% of the shot path (near the target)
-    if (t > 0.75 && dist < Math.max(12, Math.min(b.w, b.h) * 0.6)) {
-      penalty = Math.max(penalty, 0.75); // 75% cover from walls (best cover)
+    if (t > 0.75 && distToCover < Math.max(12, Math.min(b.w, b.h) * 0.6)) {
+      // Calculate angle between shot direction and wall normal
+      // For walls, we approximate the normal based on wall orientation
+      const wallIsVertical = b.h > b.w;
+      const wallNormalAngle = wallIsVertical ? 0 : Math.PI / 2; // 0° for vertical, 90° for horizontal
+      
+      let angleDiff = Math.abs((shotAngle - wallNormalAngle) * 180 / Math.PI);
+      // Normalize to 0-90 range
+      while (angleDiff > 90) angleDiff = Math.abs(angleDiff - 180);
+      if (angleDiff > 90) angleDiff = 180 - angleDiff;
+      
+      const directionalMult = getDirectionalCoverMultiplier(angleDiff);
+      const distanceFromCover = Math.hypot(from.x - cx, from.y - cy);
+      const distanceMult = getDistanceCoverMultiplier(distanceFromCover);
+      
+      const effectiveValue = 0.75 * directionalMult * distanceMult;
+      
+      if (effectiveValue > 0) {
+        coverSources.push({
+          value: 0.75,
+          isHighCover: true,
+          angle: angleDiff,
+          distanceToShooter: distanceFromCover,
+          effectiveValue
+        });
+      }
     }
   }
   
-  // Check stone chunks/rocks (50% cover - better than trees)
+  // Check stone chunks/rocks (50% low cover)
   for (const rock of game.rocks) {
     const cx = rock.x, cy = rock.y;
-    const vx = to.x - from.x, vy = to.y - from.y;
     const wx = cx - from.x, wy = cy - from.y;
-    const vv = vx*vx + vy*vy || 1;
-    const t = Math.max(0, Math.min(1, (wx*vx + wy*vy) / vv));
-    const px = from.x + t * vx, py = from.y + t * vy;
-    const dist = Math.hypot(px - cx, py - cy);
-    // Stone chunks provide cover when near the target
-    if (t > 0.75 && dist < rock.r + 8) {
-      penalty = Math.max(penalty, 0.5); // 50% cover from stone chunks
+    const t = Math.max(0, Math.min(1, (wx * shotVx + wy * shotVy) / (shotDistance * shotDistance)));
+    const px = from.x + t * shotVx, py = from.y + t * shotVy;
+    const distToCover = Math.hypot(px - cx, py - cy);
+    
+    if (t > 0.75 && distToCover < rock.r + 8) {
+      // Calculate angle between shot direction and target-to-cover direction
+      const targetToCoverAngle = Math.atan2(cy - to.y, cx - to.x);
+      let angleDiff = Math.abs((shotAngle - targetToCoverAngle) * 180 / Math.PI);
+      // Normalize to 0-180 range
+      if (angleDiff > 180) angleDiff = 360 - angleDiff;
+      if (angleDiff > 90) angleDiff = 180 - angleDiff;
+      
+      const directionalMult = getDirectionalCoverMultiplier(angleDiff);
+      const distanceFromCover = Math.hypot(from.x - cx, from.y - cy);
+      const distanceMult = getDistanceCoverMultiplier(distanceFromCover);
+      
+      const effectiveValue = 0.5 * directionalMult * distanceMult;
+      
+      if (effectiveValue > 0) {
+        coverSources.push({
+          value: 0.5,
+          isHighCover: false,
+          angle: angleDiff,
+          distanceToShooter: distanceFromCover,
+          effectiveValue
+        });
+      }
     }
   }
   
-  // Check trees (30% cover - basic cover)
+  // Check trees (30% low cover)
   for (const tree of game.trees) {
     const cx = tree.x, cy = tree.y;
-    const vx = to.x - from.x, vy = to.y - from.y;
     const wx = cx - from.x, wy = cy - from.y;
-    const vv = vx*vx + vy*vy || 1;
-    const t = Math.max(0, Math.min(1, (wx*vx + wy*vy) / vv));
-    const px = from.x + t * vx, py = from.y + t * vy;
-    const dist = Math.hypot(px - cx, py - cy);
-    // Trees provide basic cover when near the target
-    if (t > 0.75 && dist < tree.r + 6) {
-      penalty = Math.max(penalty, 0.3); // 30% cover from trees
+    const t = Math.max(0, Math.min(1, (wx * shotVx + wy * shotVy) / (shotDistance * shotDistance)));
+    const px = from.x + t * shotVx, py = from.y + t * shotVy;
+    const distToCover = Math.hypot(px - cx, py - cy);
+    
+    if (t > 0.75 && distToCover < tree.r + 6) {
+      // Calculate angle between shot direction and target-to-cover direction
+      const targetToCoverAngle = Math.atan2(cy - to.y, cx - to.x);
+      let angleDiff = Math.abs((shotAngle - targetToCoverAngle) * 180 / Math.PI);
+      if (angleDiff > 180) angleDiff = 360 - angleDiff;
+      if (angleDiff > 90) angleDiff = 180 - angleDiff;
+      
+      const directionalMult = getDirectionalCoverMultiplier(angleDiff);
+      const distanceFromCover = Math.hypot(from.x - cx, from.y - cy);
+      const distanceMult = getDistanceCoverMultiplier(distanceFromCover);
+      
+      const effectiveValue = 0.3 * directionalMult * distanceMult;
+      
+      if (effectiveValue > 0) {
+        coverSources.push({
+          value: 0.3,
+          isHighCover: false,
+          angle: angleDiff,
+          distanceToShooter: distanceFromCover,
+          effectiveValue
+        });
+      }
     }
   }
   
-  return penalty; // Return the highest cover value found
+  // Calculate final cover penalty
+  if (coverSources.length === 0) return 0;
+  
+  // High cover always takes precedence (blocks line of sight)
+  const highCover = coverSources.find(c => c.isHighCover);
+  if (highCover) {
+    return highCover.effectiveValue;
+  }
+  
+  // For low cover, multiple sources can combine (e.g., diagonal shots through multiple pieces)
+  // Take the highest individual cover value, but add 20% of any additional low cover sources
+  coverSources.sort((a, b) => b.effectiveValue - a.effectiveValue);
+  let totalCover = coverSources[0].effectiveValue;
+  
+  // Add partial benefit from additional low cover sources (max 2 additional sources)
+  for (let i = 1; i < Math.min(3, coverSources.length); i++) {
+    totalCover += coverSources[i].effectiveValue * 0.2;
+  }
+  
+  // Cap total cover at 0.9 (90%) to ensure some shots can get through
+  return Math.min(0.9, totalCover);
 }
 
 function getWeaponStats(c: Colonist) {
