@@ -545,23 +545,65 @@ export class CombatManager {
   }
 
   /**
+   * Calculate directional cover effectiveness based on attack angle
+   */
+  private getDirectionalCoverMultiplier(attackAngleDeg: number): number {
+    const a = Math.abs(attackAngleDeg);
+    if (a < 15) return 1.0;
+    if (a < 27) return 0.8;
+    if (a < 40) return 0.6;
+    if (a < 52) return 0.4;
+    if (a < 65) return 0.2;
+    return 0;
+  }
+
+  /**
+   * Calculate distance-based cover reduction
+   */
+  private getDistanceCoverMultiplier(distanceToCover: number): number {
+    const T = 32; // tile size
+    if (distanceToCover < T * 0.5) {
+      return 0.3333; // Point-blank
+    } else if (distanceToCover < T * 1.5) {
+      const t = (distanceToCover - T * 0.5) / T;
+      return 0.3333 + t * (0.6666 - 0.3333);
+    } else if (distanceToCover < T * 2.5) {
+      const t = (distanceToCover - T * 1.5) / T;
+      return 0.6666 + t * (1.0 - 0.6666);
+    }
+    return 1.0;
+  }
+
+  /**
    * Get cover value at a position relative to a threat
-   * Cover values:
-   *  - Walls: 75% (best cover)
-   *  - Stone chunks: 50% (better than trees)
-   *  - Trees: 30% (basic cover)
+   * 
+   * Uses refined cover system with:
+   * - Directional effectiveness (100% at 0-15°, 0% at >65°)
+   * - Distance-based reduction (33.33% at point-blank, 66.666% at 1 tile)
+   * - High cover (walls) vs Low cover (rocks, trees)
+   * - Multiple cover sources can combine
    */
   private getCoverValueAtPosition(x: number, y: number, threat?: Enemy): number {
     if (!threat) return 0;
     
-    // Check for cover from walls, stone chunks, and trees
-    let coverValue = 0;
+    interface CoverSource {
+      value: number;
+      isHighCover: boolean;
+      effectiveValue: number;
+    }
     
-    // Check walls (75% cover - best cover, colonists lean out to fire)
+    const coverSources: CoverSource[] = [];
+    const T = 32;
+    
+    // Shot direction from threat to position
+    const shotVx = x - threat.x;
+    const shotVy = y - threat.y;
+    const shotAngle = Math.atan2(shotVy, shotVx);
+    
+    // Check walls (75% high cover)
     for (const wall of this.game.buildings) {
       if (wall.kind !== 'wall' || !wall.done) continue;
       
-      // Check if wall is between position and threat
       const wallCenter = this.game.centerOf(wall);
       const distToWall = Math.hypot(wallCenter.x - x, wallCenter.y - y);
       
@@ -570,41 +612,69 @@ export class CombatManager {
       
       // Check if wall blocks line to threat
       if (this.lineIntersectsRect(x, y, threat.x, threat.y, wall)) {
-        coverValue = Math.max(coverValue, 0.75); // 75% cover from wall
-      }
-      
-      // Even if not directly blocking, nearby walls provide some cover
-      if (distToWall < 20) {
-        coverValue = Math.max(coverValue, 0.3);
+        // Calculate angle between shot direction and wall normal
+        const wallIsVertical = wall.h > wall.w;
+        const wallNormalAngle = wallIsVertical ? 0 : Math.PI / 2;
+        
+        let angleDiff = Math.abs((shotAngle - wallNormalAngle) * 180 / Math.PI);
+        while (angleDiff > 90) angleDiff = Math.abs(angleDiff - 180);
+        if (angleDiff > 90) angleDiff = 180 - angleDiff;
+        
+        const directionalMult = this.getDirectionalCoverMultiplier(angleDiff);
+        const distanceFromCover = Math.hypot(threat.x - wallCenter.x, threat.y - wallCenter.y);
+        const distanceMult = this.getDistanceCoverMultiplier(distanceFromCover);
+        
+        const effectiveValue = 0.75 * directionalMult * distanceMult;
+        
+        if (effectiveValue > 0) {
+          coverSources.push({
+            value: 0.75,
+            isHighCover: true,
+            effectiveValue
+          });
+        }
       }
     }
     
-    // Check stone chunks (50% cover - better than trees)
+    // Check stone chunks (50% low cover)
     for (const rock of this.game.rocks) {
       const distToRock = Math.hypot(rock.x - x, rock.y - y);
       
       // Rock must be close to position (adjacent)
       if (distToRock > 35) continue;
       
-      // Check if rock is between position and threat (simple line check)
-      const dx = threat.x - x, dy = threat.y - y;
-      const rx = rock.x - x, ry = rock.y - y;
+      // Check if rock is between position and threat
+      const dx = x - threat.x, dy = y - threat.y;
+      const rx = rock.x - threat.x, ry = rock.y - threat.y;
       const len = Math.hypot(dx, dy) || 1;
       const t = Math.max(0, Math.min(1, (rx * dx + ry * dy) / (len * len)));
-      const px = x + t * dx, py = y + t * dy;
+      const px = threat.x + t * dx, py = threat.y + t * dy;
       const distToLine = Math.hypot(px - rock.x, py - rock.y);
       
       if (distToLine < rock.r + 5) {
-        coverValue = Math.max(coverValue, 0.5); // 50% cover from stone chunks
-      }
-      
-      // Adjacent rocks provide some cover even if not directly blocking
-      if (distToRock < 20) {
-        coverValue = Math.max(coverValue, 0.25);
+        // Calculate angle between shot direction and position-to-cover direction
+        const posToCoverAngle = Math.atan2(rock.y - y, rock.x - x);
+        let angleDiff = Math.abs((shotAngle - posToCoverAngle) * 180 / Math.PI);
+        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+        if (angleDiff > 90) angleDiff = 180 - angleDiff;
+        
+        const directionalMult = this.getDirectionalCoverMultiplier(angleDiff);
+        const distanceFromCover = Math.hypot(threat.x - rock.x, threat.y - rock.y);
+        const distanceMult = this.getDistanceCoverMultiplier(distanceFromCover);
+        
+        const effectiveValue = 0.5 * directionalMult * distanceMult;
+        
+        if (effectiveValue > 0) {
+          coverSources.push({
+            value: 0.5,
+            isHighCover: false,
+            effectiveValue
+          });
+        }
       }
     }
     
-    // Check trees (30% cover - basic cover)
+    // Check trees (30% low cover)
     for (const tree of this.game.trees) {
       const distToTree = Math.hypot(tree.x - x, tree.y - y);
       
@@ -612,24 +682,55 @@ export class CombatManager {
       if (distToTree > 30) continue;
       
       // Check if tree is between position and threat
-      const dx = threat.x - x, dy = threat.y - y;
-      const tx = tree.x - x, ty = tree.y - y;
+      const dx = x - threat.x, dy = y - threat.y;
+      const tx = tree.x - threat.x, ty = tree.y - threat.y;
       const len = Math.hypot(dx, dy) || 1;
       const t = Math.max(0, Math.min(1, (tx * dx + ty * dy) / (len * len)));
-      const px = x + t * dx, py = y + t * dy;
+      const px = threat.x + t * dx, py = threat.y + t * dy;
       const distToLine = Math.hypot(px - tree.x, py - tree.y);
       
       if (distToLine < tree.r + 4) {
-        coverValue = Math.max(coverValue, 0.3); // 30% cover from trees
-      }
-      
-      // Adjacent trees provide minimal cover
-      if (distToTree < 18) {
-        coverValue = Math.max(coverValue, 0.15);
+        // Calculate angle between shot direction and position-to-cover direction
+        const posToCoverAngle = Math.atan2(tree.y - y, tree.x - x);
+        let angleDiff = Math.abs((shotAngle - posToCoverAngle) * 180 / Math.PI);
+        if (angleDiff > 180) angleDiff = 360 - angleDiff;
+        if (angleDiff > 90) angleDiff = 180 - angleDiff;
+        
+        const directionalMult = this.getDirectionalCoverMultiplier(angleDiff);
+        const distanceFromCover = Math.hypot(threat.x - tree.x, threat.y - tree.y);
+        const distanceMult = this.getDistanceCoverMultiplier(distanceFromCover);
+        
+        const effectiveValue = 0.3 * directionalMult * distanceMult;
+        
+        if (effectiveValue > 0) {
+          coverSources.push({
+            value: 0.3,
+            isHighCover: false,
+            effectiveValue
+          });
+        }
       }
     }
     
-    return coverValue;
+    // Calculate final cover value
+    if (coverSources.length === 0) return 0;
+    
+    // High cover takes precedence
+    const highCover = coverSources.find(c => c.isHighCover);
+    if (highCover) {
+      return highCover.effectiveValue;
+    }
+    
+    // For low cover, combine multiple sources
+    coverSources.sort((a, b) => b.effectiveValue - a.effectiveValue);
+    let totalCover = coverSources[0].effectiveValue;
+    
+    // Add partial benefit from additional sources
+    for (let i = 1; i < Math.min(3, coverSources.length); i++) {
+      totalCover += coverSources[i].effectiveValue * 0.2;
+    }
+    
+    return Math.min(0.9, totalCover);
   }
 
   private findSafePosition(colonist: Colonist, situation: CombatSituation): CombatPosition | null {
