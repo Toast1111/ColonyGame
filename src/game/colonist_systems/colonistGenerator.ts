@@ -56,6 +56,7 @@ export interface ColonistProfile {
     fatigueRate: number;
   };
   startingInventory: ColonistInventory; // New field for starting equipment and items
+  passiveTraits?: import('./traits/passiveTraits').PassiveTrait[]; // Passive gameplay traits
 }
 
 // Extended data for Prison Architect-style generation

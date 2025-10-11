@@ -237,8 +237,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   // Update health system (heal injuries, update stats)
   if (c.health) {
   // Progress bleeding/infections on cadence
-  updateHealthProgression(c.health, dt);
-  healInjuries(c.health, dt);
+  updateHealthProgression(c, dt);
+  healInjuries(c, dt);
   updateHealthStats(c.health);
     
     // Sync legacy HP with new health system

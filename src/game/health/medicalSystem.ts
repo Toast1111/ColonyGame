@@ -151,7 +151,7 @@ export class MedicalSystem {
     const success = Math.random() < successRate;
     
     if (success) {
-      this.applySuccessfulTreatment(patient, targetInjury, treatment);
+      this.applySuccessfulTreatment(patient, targetInjury, treatment, doctorSkill);
       // Grant Medicine XP; more for harder treatments
       if (doctor.skills) {
         const base = 20 + treatment.skillRequired * 4;
@@ -169,8 +169,15 @@ export class MedicalSystem {
   }
 
   // Apply successful treatment effects
-  private applySuccessfulTreatment(patient: Colonist, injury: Injury, treatment: MedicalTreatment): void {
+  private applySuccessfulTreatment(patient: Colonist, injury: Injury, treatment: MedicalTreatment, doctorSkill: number): void {
     if (!patient.health) return;
+
+    // Calculate treatment quality (0-1 scale)
+    // Base quality from skill: 0.2 + (skill * 0.03) caps at ~0.8 for skill 20
+    // Medicine bonus will be added here in future (herbal +0.1, medicine +0.2, advanced +0.3)
+    const baseQuality = Math.min(1.0, 0.2 + (doctorSkill * 0.03));
+    const medicineBonus = 0; // TODO: Add medicine quality bonus when medicine types are implemented
+    injury.treatmentQuality = Math.min(1.0, baseQuality + medicineBonus);
 
     // Reduce pain
     injury.pain = Math.max(0, injury.pain - treatment.painReduction);
@@ -203,7 +210,7 @@ export class MedicalSystem {
     // Mark as treated
     injury.treatedBy = treatment.id;
     
-    console.log(`Successfully treated ${injury.description} with ${treatment.name}`);
+    console.log(`Successfully treated ${injury.description} with ${treatment.name} (quality: ${(injury.treatmentQuality * 100).toFixed(0)}%)`);
   }
 
   // Apply failed treatment effects
