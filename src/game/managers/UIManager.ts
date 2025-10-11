@@ -75,6 +75,7 @@ export class UIManager {
   colonistPanelRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistPanelCloseRect: { x: number; y: number; w: number; h: number } | null = null;
   colonistProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'skills' | 'log' = 'bio';
+  lastProfileTab: 'bio' | 'health' | 'gear' | 'social' | 'skills' | 'log' = 'bio'; // Remember last active tab
   colonistTabRects: Array<{ 
     tab: string; 
     x: number; 
@@ -145,6 +146,10 @@ export class UIManager {
    */
   selectColonist(colonist: Colonist | null): void {
     this.selColonist = colonist;
+    // Restore last active tab when selecting a colonist
+    if (colonist) {
+      this.colonistProfileTab = this.lastProfileTab;
+    }
   }
   
   /**

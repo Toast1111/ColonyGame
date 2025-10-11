@@ -51,12 +51,28 @@ export function drawColonistProfile(game: any, c: any) {
     const tab = tabs[i];
     const tabX = X + game.scale(16) + i * tabWidth;
     const isActive = game.colonistProfileTab === tab.id;
+    
+    // Enhanced tab styling with better visual hierarchy
     ctx.fillStyle = isActive ? '#1e293b' : '#0f172a';
     ctx.fillRect(tabX, tabY, tabWidth, tabHeight);
-    ctx.strokeStyle = isActive ? '#3b82f6' : '#1e293b';
-    ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
+    
+    // Active tab gets brighter border and slight elevation effect
+    if (isActive) {
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
+      // Add subtle glow effect for active tab
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+      ctx.fillRect(tabX + 2, tabY + 2, tabWidth - 4, tabHeight - 4);
+    } else {
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
+    }
+    
+    // Tab text with better contrast
     ctx.fillStyle = isActive ? '#60a5fa' : '#9ca3af';
-    ctx.font = game.getScaledFont(10, '600');
+    ctx.font = game.getScaledFont(isActive ? 11 : 10, isActive ? '700' : '600');
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const textY = tabY + tabHeight / 2;

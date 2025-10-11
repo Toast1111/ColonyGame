@@ -228,17 +228,24 @@ export class RenderManager {
       // Use the helper function which handles all the sprite rendering logic
       drawColonistAvatar(ctx, c.x, c.y, c, c.r, isSelected);
       
-      // Draft indicator - draw a shield icon above drafted colonists
+      // Draft indicator - draw a larger, more visible shield icon with label
       if (c.isDrafted) {
         ctx.save();
-        ctx.strokeStyle = '#10b981'; // green
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
-        ctx.lineWidth = 2;
         
-        // Draw shield-shaped indicator above colonist
+        // Draw green circle background
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y - c.r - 16, 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw shield icon
+        ctx.strokeStyle = '#10b981'; // green
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.5)';
+        ctx.lineWidth = 2.5;
+        
         const shieldX = c.x;
-        const shieldY = c.y - c.r - 12;
-        const shieldSize = 8;
+        const shieldY = c.y - c.r - 16;
+        const shieldSize = 9;
         
         ctx.beginPath();
         ctx.moveTo(shieldX, shieldY - shieldSize);
@@ -249,6 +256,13 @@ export class RenderManager {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        
+        // Add "DRAFTED" label below for clarity
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('DRAFTED', c.x, c.y + c.r + 4);
         
         ctx.restore();
       }
