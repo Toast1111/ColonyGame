@@ -319,6 +319,85 @@ export const SPECIAL_TRAITS: PassiveTrait[] = [
       { stat: 'equipmentBreakage', modifier: 1.3, type: 'multiplicative', description: '+30% equipment breakage rate' }
     ],
     rarity: 'uncommon'
+  },
+  // Immunity and healing traits
+  {
+    id: 'super_immune',
+    name: 'Super-Immune',
+    description: 'Exceptionally strong immune system that fights off infections with ease.',
+    type: 'positive',
+    category: 'special',
+    effects: [
+      { stat: 'immunityGain', modifier: 1.5, type: 'multiplicative', description: '+50% immunity gain rate' }
+    ],
+    rarity: 'rare'
+  },
+  {
+    id: 'hardy',
+    name: 'Hardy',
+    description: 'Naturally resilient with strong immunity and faster healing.',
+    type: 'positive',
+    category: 'special',
+    effects: [
+      { stat: 'immunityGain', modifier: 1.3, type: 'multiplicative', description: '+30% immunity gain rate' },
+      { stat: 'healingRate', modifier: 1.2, type: 'multiplicative', description: '+20% healing rate' }
+    ],
+    rarity: 'uncommon'
+  },
+  {
+    id: 'quick_healer',
+    name: 'Quick Healer',
+    description: 'Wounds heal remarkably fast.',
+    type: 'positive',
+    category: 'special',
+    effects: [
+      { stat: 'healingRate', modifier: 2.0, type: 'multiplicative', description: '100% faster healing (2x)' }
+    ],
+    rarity: 'rare'
+  },
+  {
+    id: 'very_fast_healer',
+    name: 'Very Fast Healer',
+    description: 'Wounds heal at an incredible rate.',
+    type: 'positive',
+    category: 'special',
+    effects: [
+      { stat: 'healingRate', modifier: 4.0, type: 'multiplicative', description: '300% faster healing (4x)' }
+    ],
+    rarity: 'legendary'
+  },
+  {
+    id: 'slow_healer',
+    name: 'Slow Healer',
+    description: 'Wounds take longer to heal than normal.',
+    type: 'negative',
+    category: 'special',
+    effects: [
+      { stat: 'healingRate', modifier: 0.5, type: 'multiplicative', description: '-50% healing rate (0.5x)' }
+    ],
+    rarity: 'common'
+  },
+  {
+    id: 'weak_immunity',
+    name: 'Weak Immunity',
+    description: 'Struggles to fight off infections.',
+    type: 'negative',
+    category: 'special',
+    effects: [
+      { stat: 'immunityGain', modifier: 0.9, type: 'multiplicative', description: '-10% immunity gain rate' }
+    ],
+    rarity: 'common'
+  },
+  {
+    id: 'good_immunity',
+    name: 'Good Immunity',
+    description: 'Above average immune system.',
+    type: 'positive',
+    category: 'special',
+    effects: [
+      { stat: 'immunityGain', modifier: 1.1, type: 'multiplicative', description: '+10% immunity gain rate' }
+    ],
+    rarity: 'uncommon'
   }
 ];
 

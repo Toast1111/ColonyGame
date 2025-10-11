@@ -84,7 +84,10 @@ export function initializeColonistHealth(colonist: Colonist): void {
     manipulation: 1.0,
     immunity: 1.0,
     lastBleedCalcTime: 0,
-    lastInfectionTick: 0
+    lastInfectionTick: 0,
+    implants: [], // No implants by default
+    kidneyHealth: 1.0, // Perfect kidney health
+    liverHealth: 1.0 // Perfect liver health
   };
 }
 
@@ -348,14 +351,25 @@ export function tickBleeding(health: ColonistHealth, elapsedSeconds: number) {
 }
 
 // Infection logic: wounds with infectionChance accumulate progress; immunity counters it
-export function tickInfections(health: ColonistHealth, elapsedSeconds: number) {
+export function tickInfections(colonist: Colonist, elapsedSeconds: number) {
+  const health = colonist.health;
+  if (!health) return;
+  
+  // Calculate dynamic immunity gain rate
+  const immunityGainRate = calculateImmunityGainRate(colonist);
+  
+  // Build up immunity over time (base rate: reaches 1.0 in ~10 game hours if rate = 1.0)
+  // Each disease has its own base immunity generation speed, this is the colonist modifier
+  const baseImmunityGainPerSecond = 1 / (10 * 3600); // 10 hours to full immunity at 1x rate
+  health.immunity = Math.min(1.0, health.immunity + (baseImmunityGainPerSecond * immunityGainRate * elapsedSeconds));
+  
   for (const inj of health.injuries) {
     if (inj.infected) {
       // Infection progresses toward 1; immunity pushes back
       const immune = health.immunity;
-  inj.infectionProgress = Math.min(1, (inj.infectionProgress || 0) + (elapsedSeconds / 600) * (1 - immune * 0.8));
+      inj.infectionProgress = Math.min(1, (inj.infectionProgress || 0) + (elapsedSeconds / 600) * (1 - immune * 0.8));
       // Severe infection -> systemic effects (reduce blood & add pain)
-  if ((inj.infectionProgress || 0) > 0.7) {
+      if ((inj.infectionProgress || 0) > 0.7) {
         health.bloodLevel = Math.max(0, health.bloodLevel - 0.0005 * elapsedSeconds);
         inj.pain = Math.min(1, inj.pain + 0.05 * (elapsedSeconds / 60));
       }
@@ -371,7 +385,10 @@ export function tickInfections(health: ColonistHealth, elapsedSeconds: number) {
 }
 
 // High level periodic update (called each frame)
-export function updateHealthProgression(health: ColonistHealth, dt: number) {
+export function updateHealthProgression(colonist: Colonist, dt: number) {
+  const health = colonist.health;
+  if (!health) return;
+  
   health.lastBleedCalcTime = (health.lastBleedCalcTime || 0) + dt;
   health.lastInfectionTick = (health.lastInfectionTick || 0) + dt;
   if (health.lastBleedCalcTime >= 1) { // 1s cadence
@@ -379,7 +396,7 @@ export function updateHealthProgression(health: ColonistHealth, dt: number) {
     health.lastBleedCalcTime = 0;
   }
   if (health.lastInfectionTick >= 4) { // every 4s
-    tickInfections(health, health.lastInfectionTick);
+    tickInfections(colonist, health.lastInfectionTick);
     health.lastInfectionTick = 0;
   }
 }
@@ -396,16 +413,30 @@ export function getHealthStatus(health: ColonistHealth): string {
   return "Near death";
 }
 
-// Heal injuries over time
-export function healInjuries(health: ColonistHealth, deltaTime: number): void {
+// Heal injuries over time using RimWorld-style healing points system
+export function healInjuries(colonist: Colonist, deltaTime: number): void {
+  const health = colonist.health;
+  if (!health) return;
+  
+  // Calculate healing points per day
+  const healingPointsPerDay = calculateHealingPointsPerDay(colonist);
+  
+  // Convert to healing per second (86400 seconds in a day)
+  const healingPerSecond = healingPointsPerDay / 86400;
+  
   for (let i = health.injuries.length - 1; i >= 0; i--) {
     const injury = health.injuries[i];
     
+    // Calculate injury-specific healing points
+    const injuryHealingPoints = calculateHealingPointsPerDay(colonist, injury);
+    const injuryHealingPerSecond = injuryHealingPoints / 86400;
+    
     // Reduce injury severity based on heal rate
-    const healAmount = injury.healRate * deltaTime / 86400; // Convert seconds to days
+    // Each injury has a base severity (damage amount), healing points reduce this
+    const healAmount = injuryHealingPerSecond * deltaTime;
     injury.severity = Math.max(0, injury.severity - healAmount);
     
-    // Update injury effects
+    // Update injury effects proportional to severity
     injury.pain = injury.pain * (injury.severity / (injury.severity + 0.1));
     injury.bleeding = injury.bleeding * injury.severity;
     
@@ -415,17 +446,21 @@ export function healInjuries(health: ColonistHealth, deltaTime: number): void {
     }
   }
   
-  // Slowly regenerate body part HP for minor damage
-  for (const part of health.bodyParts) {
-    if (part.currentHp < part.maxHp && part.currentHp > 0) {
-      const regenRate = 0.1 * deltaTime / 86400; // Very slow natural healing
-      part.currentHp = Math.min(part.maxHp, part.currentHp + regenRate);
+  // Slowly regenerate body part HP for minor damage (only if not starving)
+  if (colonist.hunger < 0.9) {
+    for (const part of health.bodyParts) {
+      if (part.currentHp < part.maxHp && part.currentHp > 0) {
+        // Use same healing points for body part regeneration
+        const regenRate = healingPerSecond * deltaTime * 0.1; // 10% of injury healing rate
+        part.currentHp = Math.min(part.maxHp, part.currentHp + regenRate);
+      }
     }
   }
   
-  // Slowly restore blood level
-  if (health.bloodLevel < 1.0) {
-    health.bloodLevel = Math.min(1.0, health.bloodLevel + 0.01 * deltaTime / 86400);
+  // Slowly restore blood level (only if not starving)
+  if (health.bloodLevel < 1.0 && colonist.hunger < 0.9) {
+    const bloodRegenRate = healingPerSecond * deltaTime * 0.05; // 5% of injury healing rate
+    health.bloodLevel = Math.min(1.0, health.bloodLevel + bloodRegenRate);
   }
   
   updateHealthStats(health);
@@ -471,4 +506,167 @@ export function basicFieldTreatment(health: ColonistHealth): { bandaged: number;
   }
   updateHealthStats(health);
   return { bandaged, painReduced: Number(painReduced.toFixed(2)) };
+}
+
+// --------------------------------------------------------------------------------------
+// RimWorld-style Immunity and Healing Calculations
+// --------------------------------------------------------------------------------------
+
+/**
+ * Calculate immunity gain rate multiplier based on colonist conditions
+ * Base rate is 1.0, modified by various factors:
+ * - Hunger: -10% if hungry, -30% if starving
+ * - Sleep: -4% tired, -8% exhausted, -20% extreme fatigue
+ * - Age: Starting at 54, lose 1% per year up to 50% max penalty
+ * - Lying in bed: +10%
+ * - Bed type: floor 0%, basic bed +5%, sleeping bag +7%, medical bed +11%
+ * - Immunizer implant: +8% per implant (max 2)
+ * - Filtering kidneys implant: +2.5% per implant (max 2)
+ * - Kidney/liver health: Strong effect on immunity
+ * - Traits/genes: -10%/+10%/+30%/+50%
+ */
+export function calculateImmunityGainRate(colonist: Colonist): number {
+  let multiplier = 1.0;
+  
+  // Hunger effects
+  if (colonist.hunger > 0.85) { // Starving
+    multiplier *= 0.7; // -30%
+  } else if (colonist.hunger > 0.65) { // Hungry
+    multiplier *= 0.9; // -10%
+  }
+  
+  // Sleep/fatigue effects
+  const fatigue = colonist.fatigue || 0;
+  if (fatigue > 0.9) { // Extreme fatigue
+    multiplier *= 0.8; // -20%
+  } else if (fatigue > 0.75) { // Exhausted
+    multiplier *= 0.92; // -8%
+  } else if (fatigue > 0.6) { // Tired
+    multiplier *= 0.96; // -4%
+  }
+  
+  // Age effects - starting at age 54, lose 1% per year up to 50% max penalty
+  const age = colonist.profile?.age || 25;
+  if (age >= 54) {
+    const agePenalty = Math.min(0.5, (age - 54) * 0.01); // 1% per year, max 50%
+    multiplier *= (1.0 - agePenalty);
+  }
+  
+  // Bed effects
+  const restingOn = colonist.restingOn;
+  if (restingOn) {
+    // Lying in bed gives +10% base
+    multiplier *= 1.1;
+    
+    // Bed type bonus
+    if (restingOn.kind === 'bed') {
+      if (restingOn.isMedicalBed) {
+        multiplier *= 1.11; // Medical bed +11%
+      } else {
+        multiplier *= 1.05; // Basic bed +5%
+      }
+    } else if (restingOn.kind === 'tent') {
+      multiplier *= 1.07; // Sleeping bag/tent +7%
+    }
+    // Floor/ground would be +0% (no additional bonus beyond lying down)
+  }
+  
+  // Implant effects
+  if (colonist.health?.implants) {
+    const immunizers = colonist.health.implants.filter(i => i.type === 'immunizer');
+    const filteringKidneys = colonist.health.implants.filter(i => i.type === 'filtering_kidneys');
+    
+    // Immunizer implants: +8% each, max 2
+    const immunizerBonus = Math.min(immunizers.length, 2) * 0.08;
+    multiplier *= (1.0 + immunizerBonus);
+    
+    // Filtering kidneys: +2.5% each, max 2
+    const kidneyBonus = Math.min(filteringKidneys.length, 2) * 0.025;
+    multiplier *= (1.0 + kidneyBonus);
+  }
+  
+  // Organ health effects (kidney and liver strongly affect immunity)
+  const kidneyHealth = colonist.health?.kidneyHealth ?? 1.0;
+  const liverHealth = colonist.health?.liverHealth ?? 1.0;
+  const organAverage = (kidneyHealth + liverHealth) / 2;
+  // Strong effect: 50% organs = 50% immunity gain, 100% organs = 100% immunity gain
+  multiplier *= organAverage;
+  
+  // Trait/gene effects
+  if (colonist.profile?.passiveTraits) {
+    for (const trait of colonist.profile.passiveTraits) {
+      const immunityEffect = trait.effects.find(e => e.stat === 'immunityGain');
+      if (immunityEffect) {
+        if (immunityEffect.type === 'multiplicative') {
+          multiplier *= immunityEffect.modifier;
+        } else if (immunityEffect.type === 'additive') {
+          multiplier += immunityEffect.modifier;
+        }
+      }
+    }
+  }
+  
+  return Math.max(0.01, multiplier); // Minimum 1% to prevent complete stall
+}
+
+/**
+ * Calculate healing points per day for wound healing
+ * Base: 8 healing points
+ * Treatment: +4 points + (0.08 * quality)
+ * Bed type: floor +4, bed/sleeping bag +8, medical bed +14
+ * Healer implant: 1.5x multiplier
+ * Genes: 0.5x/2x/4x multipliers
+ */
+export function calculateHealingPointsPerDay(colonist: Colonist, injury?: Injury): number {
+  let healingPoints = 8; // Base healing points
+  
+  // Treatment quality bonus (if injury was treated)
+  if (injury?.treatedBy) {
+    const treatmentQuality = (injury as any).treatmentQuality || 0.5; // Default to medium quality
+    healingPoints += 4 + (0.08 * treatmentQuality * 100); // Quality is 0-1, scale to 0-100
+  }
+  
+  // Bed type bonus
+  const restingOn = colonist.restingOn;
+  if (restingOn) {
+    if (restingOn.kind === 'bed') {
+      if (restingOn.isMedicalBed) {
+        healingPoints += 14; // Medical bed
+      } else {
+        healingPoints += 8; // Basic bed
+      }
+    } else if (restingOn.kind === 'tent') {
+      healingPoints += 8; // Sleeping bag
+    }
+  } else {
+    // On floor/ground
+    healingPoints += 4;
+  }
+  
+  // Check for healer implant
+  if (colonist.health?.implants) {
+    const hasHealerImplant = colonist.health.implants.some(i => i.type === 'healer');
+    if (hasHealerImplant) {
+      healingPoints *= 1.5; // 1.5x multiplier
+    }
+  }
+  
+  // Gene/trait effects for healing rate
+  if (colonist.profile?.passiveTraits) {
+    for (const trait of colonist.profile.passiveTraits) {
+      const healingEffect = trait.effects.find(e => e.stat === 'healingRate');
+      if (healingEffect) {
+        if (healingEffect.type === 'multiplicative') {
+          healingPoints *= healingEffect.modifier;
+        }
+      }
+    }
+  }
+  
+  // Hunger penalty - can't heal if starving
+  if (colonist.hunger > 0.9) {
+    healingPoints = 0; // No healing when starving
+  }
+  
+  return Math.max(0, healingPoints);
 }

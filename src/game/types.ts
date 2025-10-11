@@ -142,6 +142,7 @@ export interface Injury {
   // Enhanced system fields
   bandaged?: boolean; // bandaging reduces bleeding multiplier
   infectionProgress?: number; // 0-1 progression toward severe infection
+  treatmentQuality?: number; // 0-1, quality of medical treatment received
 }
 
 export interface ColonistHealth {
@@ -156,6 +157,19 @@ export interface ColonistHealth {
   // Internal timers for bleeding/infection cadence
   lastBleedCalcTime?: number;
   lastInfectionTick?: number;
+  // Implants for medical system
+  implants?: HealthImplant[];
+  // Organ health (0-1, affects immunity and healing)
+  kidneyHealth?: number; // 0-1, affects immunity
+  liverHealth?: number; // 0-1, affects immunity
+}
+
+export type ImplantType = 'immunizer' | 'filtering_kidneys' | 'healer' | 'bionic_eye' | 'bionic_arm' | 'bionic_leg';
+
+export interface HealthImplant {
+  type: ImplantType;
+  quality: number; // 0-1, affects effectiveness
+  label: string;
 }
 
 // Skill System
