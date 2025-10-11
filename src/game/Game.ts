@@ -416,7 +416,13 @@ export class Game {
     }
 
     // Apply armor reduction first
-    const armorReduction = this.getArmorReduction(colonist);
+    let armorReduction = this.getArmorReduction(colonist);
+    
+    // Blunt damage (bruise) ignores most armor - reduce armor effectiveness to 30%
+    if (damageType === 'bruise') {
+      armorReduction = armorReduction * 0.3;
+    }
+    
     const effectiveDamage = damage * (1 - armorReduction);
 
     // Delegate to the health system's damage function (imported from healthSystem.ts)

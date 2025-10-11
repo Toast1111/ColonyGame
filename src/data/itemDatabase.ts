@@ -24,6 +24,9 @@ export interface ItemDef {
   burstCount?: number; // How many bullets are fired at a time
   aimTime?: number; // Seconds before shooting (warmup)
   cooldownTime?: number; // Seconds after shooting (cooldown)
+  meleeHitChance?: number; // Base hit chance for melee weapons (0-1), modified by Melee skill
+  damageType?: 'cut' | 'blunt'; // Type of damage for melee weapons (blunt = bruise, cut = cut)
+  stunChance?: number; // Chance to stun on hit (only for blunt weapons)
   
   // Accuracy at specific ranges (in tiles)
   accuracyTouch?: number; // Accuracy at 3 tiles (touch range)
@@ -190,7 +193,31 @@ export class ItemDatabase {
           stoppingPower: 0.5,
           burstCount: 1,
           aimTime: 0.2,
-          cooldownTime: 0.6
+          cooldownTime: 0.6,
+          meleeHitChance: 0.85,
+          damageType: 'cut'
+        },
+        {
+          defName: 'Club',
+          label: 'wooden club',
+          description: 'A heavy wooden club for bashing enemies. Less effective against armor.',
+          category: 'Weapon',
+          equipSlot: 'weapon',
+          maxDurability: 80,
+          stackable: false,
+          value: 20,
+          weight: 2.5,
+          damage: 12,
+          range: 1,
+          accuracy: 0.8,
+          armorPenetration: 0.0, // No armor penetration
+          stoppingPower: 1.0, // Can stagger
+          burstCount: 1,
+          aimTime: 0.3,
+          cooldownTime: 0.8,
+          meleeHitChance: 0.80,
+          damageType: 'blunt',
+          stunChance: 0.25 // 25% chance to stun
         },
         {
           defName: 'SniperRifle',

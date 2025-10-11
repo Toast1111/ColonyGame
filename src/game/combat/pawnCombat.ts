@@ -408,22 +408,60 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     }
     
     if (target && bestD <= reach) {
+      // Check if another colonist is already in melee range of this target (prevent stacking)
+      const otherColonistInMelee = game.colonists.some((other: Colonist) => {
+        if (other === c || !other.alive || other.inside) return false;
+        const otherDist = Math.hypot(target!.x - other.x, target!.y - other.y);
+        const otherReach = 1.3 * T + other.r;
+        return otherDist <= otherReach;
+      });
+      
+      if (otherColonistInMelee) {
+        // Another colonist is already engaging this target, don't stack
+        return;
+      }
+      
       // Require being mostly stationary to land a melee blow (aligning with RimWorld style stop & swing)
       if (movedThisTick) return;
       // Simple melee cooldown on colonist
       (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
       if (((c as any).meleeCd || 0) <= 0) {
         const meleeLvl = c.skills ? skillLevel(c, 'Melee') : 0;
+        const weaponDef = stats ? itemDatabase.getItemDef((c.inventory?.equipment?.weapon as any)?.defName) : null;
+        
+        // Calculate hit chance based on weapon and skill
+        const baseHitChance = weaponDef?.meleeHitChance ?? 0.75; // Default 75% if not specified
+        const skillBonus = meleeLvl * 0.02; // 2% per skill level
+        const hitChance = Math.min(0.98, baseHitChance + skillBonus);
+        
+        // Check if hit lands
+        if (Math.random() > hitChance) {
+          // Miss!
+          (c as any).meleeCd = 0.8; // attack every 0.8s
+          return;
+        }
+        
         const dmg = Math.round((stats?.damage || 10) * (1 + meleeLvl * 0.03));
+        
+        // Determine damage type from weapon
+        const damageType = weaponDef?.damageType === 'blunt' ? 'bruise' : 'cut';
         
         // Check if hitting a colonist (friendly fire in melee)
         const isColonist = (game.colonists as any[]).includes(target);
         if (isColonist) {
-          const meleeType = stats?.isMelee ? 'cut' : 'bruise';
+          const meleeType = stats?.isMelee ? damageType : 'bruise';
           (game as any).applyDamageToColonist(target, dmg, meleeType);
         } else {
           // Regular enemy damage
           target.hp -= dmg;
+          
+          // Check for stun on blunt damage
+          if (damageType === 'bruise' && weaponDef?.stunChance) {
+            if (Math.random() < weaponDef.stunChance) {
+              // Stun the enemy for 1.5 seconds (reduce speed to near zero)
+              (target as any).stunnedUntil = performance.now() / 1000 + 1.5;
+            }
+          }
         }
         
         // XP for landing a melee hit
@@ -475,6 +513,19 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
     if (((c as any).meleeCd || 0) <= 0) {
       const meleeDmg = Math.max(8, Math.round(stats.damage * 0.6));
+      
+      // Calculate hit chance for gun bash (lower than melee weapon)
+      const meleeLvl = c.skills ? skillLevel(c, 'Melee') : 0;
+      const baseHitChance = 0.65; // Gun bash is less accurate
+      const skillBonus = meleeLvl * 0.02;
+      const hitChance = Math.min(0.95, baseHitChance + skillBonus);
+      
+      // Check if hit lands
+      if (Math.random() > hitChance) {
+        // Miss!
+        (c as any).meleeCd = 0.9;
+        return;
+      }
       
       // Check if hitting a colonist (friendly fire)
       const isColonist = (game.colonists as any[]).includes(target);
