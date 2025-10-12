@@ -442,6 +442,180 @@
             width: 100%;
             height: 100%;
         }
+        
+        /* Tree View Styles */
+        .tree-view-panel {
+            position: fixed;
+            top: 70px;
+            right: -600px;
+            width: 600px;
+            height: calc(100vh - 100px);
+            background: linear-gradient(135deg, #1e1e1e, #2d2d30);
+            border-left: 3px solid #0078d4;
+            box-shadow: -4px 0 12px rgba(0,0,0,0.5);
+            transition: right 0.3s ease;
+            z-index: 1500;
+            overflow-y: auto;
+            padding: 20px;
+        }
+        
+        .tree-view-panel.open {
+            right: 0;
+        }
+        
+        .tree-view-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #0078d4;
+        }
+        
+        .tree-view-header h2 {
+            color: #00bcf2;
+            margin: 0;
+            font-size: 18px;
+        }
+        
+        .tree-view-close {
+            background: #ff4444;
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .tree-view-close:hover {
+            background: #ff5555;
+        }
+        
+        .tree-section {
+            margin-bottom: 25px;
+        }
+        
+        .tree-section-title {
+            color: #00bcf2;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            background: rgba(0, 120, 212, 0.2);
+            border-radius: 6px;
+            border-left: 4px solid #0078d4;
+        }
+        
+        .tree-node {
+            margin: 8px 0;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #666;
+            transition: all 0.2s;
+        }
+        
+        .tree-node:hover {
+            background: rgba(0, 120, 212, 0.15);
+            border-left-color: #0078d4;
+        }
+        
+        .tree-node.critical { border-left-color: #ff4444; }
+        .tree-node.work { border-left-color: #44ff44; }
+        .tree-node.rest { border-left-color: #4444ff; }
+        .tree-node.movement { border-left-color: #ffff44; }
+        .tree-node.management { border-left-color: #ff44ff; }
+        
+        .tree-node-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        
+        .tree-node-name {
+            font-weight: bold;
+            font-size: 13px;
+            color: #ffffff;
+        }
+        
+        .tree-node-priority {
+            background: rgba(0, 120, 212, 0.3);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            color: #00bcf2;
+        }
+        
+        .tree-node-desc {
+            font-size: 11px;
+            color: #aaa;
+            margin-bottom: 8px;
+        }
+        
+        .tree-transitions {
+            margin-top: 8px;
+            padding-left: 16px;
+        }
+        
+        .tree-transition {
+            margin: 4px 0;
+            font-size: 11px;
+            color: #ccc;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+        
+        .tree-transition-arrow {
+            color: #0078d4;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        
+        .tree-transition-target {
+            color: #00bcf2;
+            font-weight: 500;
+        }
+        
+        .tree-transition-condition {
+            color: #999;
+            font-style: italic;
+            margin-left: 4px;
+        }
+        
+        .tree-stats {
+            background: rgba(0, 120, 212, 0.1);
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 12px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .tree-stat {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .tree-stat-label {
+            color: #aaa;
+        }
+        
+        .tree-stat-value {
+            color: #00bcf2;
+            font-weight: bold;
+        }
+        
+        .tree-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #666;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -455,6 +629,7 @@
         <button onclick="clearAll()" class="danger">🗑️ Clear All</button>
         <button onclick="saveProject()">💾 Save Project</button>
         <button onclick="loadProject()">📁 Load Project</button>
+        <button onclick="toggleTreeView()">🌳 Tree View</button>
     </div>
     
     <div class="main-container">
@@ -462,21 +637,29 @@
             <div class="code-section">
                 <h3>📝 Paste Your FSM Code Here</h3>
                 <textarea id="codeInput" class="code-input" placeholder="Paste your TypeScript FSM code here...
-Example:
-const colonistStates = {
-  seekTask: {
-    priority: 10,
-    conditions: {
-      idle: 'No tasks available'
+
+Example - Paste the entire updateColonistFSM or updateEnemyFSM function:
+
+export function updateColonistFSM(game: any, c: Colonist, dt: number) {
+  // ... initialization code ...
+  
+  switch (c.state) {
+    case 'seekTask': {
+      // Look for available work
+      if (danger) changeState('flee', 'danger nearby');
+      if (task) changeState('build', 'assigned build task');
+      break;
     }
-  },
-  idle: {
-    priority: 15,
-    conditions: {
-      seekTask: 'Looking for tasks'
+    case 'flee': {
+      // Escape from danger
+      if (!danger) changeState('seekTask', 'safe now');
+      break;
     }
+    // ... more states ...
   }
-};"></textarea>
+}
+
+The editor will automatically extract all states and transitions!"></textarea>
                 <button onclick="parseCode()" style="width: 100%; margin-top: 10px; padding: 8px;">
                     🔄 Parse & Visualize
                 </button>
@@ -485,17 +668,29 @@ const colonistStates = {
             <div class="code-section">
                 <h3>📋 Instructions</h3>
                 <div style="font-size: 11px; color: #ccc; line-height: 1.4;">
-                    <p><strong>1.</strong> Paste your FSM code above</p>
-                    <p><strong>2.</strong> Click "Parse & Visualize"</p>
-                    <p><strong>3.</strong> Drag nodes to organize</p>
-                    <p><strong>4.</strong> Add/edit states visually</p>
-                    <p><strong>5.</strong> Export clean TypeScript</p>
+                    <p><strong>1.</strong> Copy entire updateColonistFSM or updateEnemyFSM function</p>
+                    <p><strong>2.</strong> Paste it above and click "Parse & Visualize"</p>
+                    <p><strong>3.</strong> Click "Auto Layout" to organize states by priority</p>
+                    <p><strong>4.</strong> Click "Tree View" to see hierarchical transitions</p>
+                    <p><strong>5.</strong> Drag nodes to customize layout</p>
+                    <p><strong>6.</strong> Double-click connections to add bendable handles</p>
+                    <p><strong>7.</strong> Export clean TypeScript documentation</p>
                     <br>
-                    <p><strong>💡 Tips:</strong></p>
-                    <p>• Drag nodes from palette to add new states</p>
-                    <p>• Right-click nodes to edit properties</p>
-                    <p>• Use Auto Layout for clean organization</p>
-                    <p>• Save/Load projects as JSON files</p>
+                    <p><strong>💡 Features:</strong></p>
+                    <p>• Parses switch-case FSM patterns automatically</p>
+                    <p>• Extracts all states and transitions</p>
+                    <p>• Works with colonist, enemy, or any FSM</p>
+                    <p>• Color-codes by state type (critical/work/rest/etc)</p>
+                    <p>• Organizes by priority (100=highest)</p>
+                    <p>• Tree view shows clear transition hierarchy</p>
+                    <p>• Save/Load projects as JSON</p>
+                    <br>
+                    <p><strong>🎨 Keyboard Shortcuts:</strong></p>
+                    <p>• Ctrl+S: Save project</p>
+                    <p>• Ctrl+O: Load project</p>
+                    <p>• Ctrl+E: Export code</p>
+                    <p>• Delete: Remove connection handles</p>
+                    <p>• Esc: Cancel connection</p>
                 </div>
             </div>
         </div>
@@ -545,6 +740,19 @@ const colonistStates = {
             
             <div class="minimap">
                 <canvas id="minimapCanvas"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tree View Panel -->
+    <div id="treeViewPanel" class="tree-view-panel">
+        <div class="tree-view-header">
+            <h2>🌳 State Transition Tree</h2>
+            <button class="tree-view-close" onclick="toggleTreeView()">✕ Close</button>
+        </div>
+        <div id="treeViewContent">
+            <div class="tree-empty">
+                📥 Parse FSM code to see the state transition tree
             </div>
         </div>
     </div>
@@ -616,7 +824,7 @@ const colonistStates = {
             };
         }
 
-        // Code parsing function
+        // Code parsing function - Universal FSM parser
         function parseCode() {
             const code = document.getElementById('codeInput').value.trim();
             if (!code) {
@@ -630,71 +838,131 @@ const colonistStates = {
                 const connections = [];
                 let nodeCounter = 0;
 
-                // Parse your actual switch-case FSM structure
-                const switchRegex = /switch\s*\(\s*c\.state\s*\)\s*\{([\s\S]*?)\n\s*\}/;
-                const switchMatch = code.match(switchRegex);
+                // Detect FSM type and state variable pattern
+                let stateVariable = 'c.state'; // Default for colonist FSM
+                let switchRegex = /switch\s*\(\s*c\.state\s*\)\s*\{([\s\S]*?)(?=\n\s*\}[^}]*$)/;
+                let switchMatch = code.match(switchRegex);
+                
+                // Try enemy FSM pattern if colonist pattern fails
+                if (!switchMatch) {
+                    stateVariable = 'e.state';
+                    switchRegex = /switch\s*\(\s*e\.state\s*\)\s*\{([\s\S]*?)(?=\n\s*\}[^}]*$)/;
+                    switchMatch = code.match(switchRegex);
+                }
+                
+                // Try generic state pattern
+                if (!switchMatch) {
+                    switchRegex = /switch\s*\(\s*(\w+\.state)\s*\)\s*\{([\s\S]*?)(?=\n\s*\}[^}]*$)/;
+                    switchMatch = code.match(switchRegex);
+                    if (switchMatch) {
+                        stateVariable = switchMatch[1];
+                    }
+                }
                 
                 if (!switchMatch) {
-                    updateStatus('❌ Could not find switch(c.state) block');
+                    updateStatus('❌ Could not find switch(state) block. Make sure you pasted the updateFSM function!');
                     return;
                 }
 
-                const switchContent = switchMatch[1];
+                const switchContent = switchMatch[switchMatch.length - 1]; // Get the last capture group
                 
                 // Extract all case statements and their content
-                const caseRegex = /case\s+['"`](\w+)['"`]\s*:\s*\{([\s\S]*?)(?=case\s+['"`]\w+['"`]|default:|break;\s*\}|\}$)/g;
+                // This regex handles multi-line case blocks with nested braces
+                const caseRegex = /case\s+['"`](\w+)['"`]\s*:\s*\{([\s\S]*?)(?=\n\s*case\s+['"`]|\n\s*default\s*:|\n\s*\}\s*$)/g;
                 
                 let match;
                 const states = new Set();
                 const transitions = [];
+                const stateContents = new Map();
                 
+                // First pass: collect all case statements
                 while ((match = caseRegex.exec(switchContent)) !== null) {
-                    const [, stateName, caseContent] = match;
+                    const stateName = match[1];
+                    const caseContent = match[2];
                     states.add(stateName);
-                    
+                    stateContents.set(stateName, caseContent);
+                }
+                
+                // Second pass: find all transitions from each state
+                for (const [stateName, caseContent] of stateContents.entries()) {
                     // Look for changeState calls to find transitions
-                    const changeStateRegex = /changeState\s*\(\s*['"`](\w+)['"`]\s*,\s*['"`]([^'"`]+)['"`]\s*\)/g;
+                    const changeStateRegex = /changeState\s*\(\s*['"`](\w+)['"`]\s*(?:,\s*['"`]([^'"`]*)['"`])?\s*\)/g;
                     let transitionMatch;
                     
                     while ((transitionMatch = changeStateRegex.exec(caseContent)) !== null) {
-                        const [, targetState, condition] = transitionMatch;
+                        const targetState = transitionMatch[1];
+                        const condition = transitionMatch[2] || 'condition';
+                        
                         states.add(targetState); // Also add target states
-                        transitions.push({
-                            from: stateName,
-                            to: targetState,
-                            condition: condition
-                        });
+                        
+                        // Avoid duplicate transitions
+                        const exists = transitions.some(t => 
+                            t.from === stateName && t.to === targetState && t.condition === condition
+                        );
+                        
+                        if (!exists) {
+                            transitions.push({
+                                from: stateName,
+                                to: targetState,
+                                condition: condition
+                            });
+                        }
+                    }
+                    
+                    // Also look for direct state assignments (e.g., c.state = 'newState')
+                    const directStateRegex = new RegExp(`${stateVariable.replace('.', '\\.')}\\s*=\\s*['"\`](\\w+)['"\`]`, 'g');
+                    while ((transitionMatch = directStateRegex.exec(caseContent)) !== null) {
+                        const targetState = transitionMatch[1];
+                        states.add(targetState);
+                        
+                        const exists = transitions.some(t => 
+                            t.from === stateName && t.to === targetState
+                        );
+                        
+                        if (!exists) {
+                            transitions.push({
+                                from: stateName,
+                                to: targetState,
+                                condition: 'direct assignment'
+                            });
+                        }
                     }
                 }
 
-                // Also look for changeState calls in the evaluateIntent function and other places
-                const globalChangeStateRegex = /(?:set|changeState)\s*\(\s*['"`](\w+)['"`]/g;
-                while ((match = globalChangeStateRegex.exec(code)) !== null) {
-                    const [, targetState] = match;
-                    states.add(targetState);
+                // Third pass: look for states referenced outside the switch (e.g., in initialization or global logic)
+                const globalStateRegex = /['"`](\w+)['"`]\s*(?:\/\/.*state|as\s+(?:Colonist|Enemy)?State)/gi;
+                while ((match = globalStateRegex.exec(code)) !== null) {
+                    states.add(match[1]);
                 }
 
                 // Create nodes for all discovered states
-                states.forEach(stateName => {
+                const stateArray = Array.from(states).sort();
+                stateArray.forEach((stateName, index) => {
                     nodes[stateName] = {
                         id: stateName,
-                        title: stateName.charAt(0).toUpperCase() + stateName.slice(1),
+                        title: stateName.charAt(0).toUpperCase() + stateName.slice(1).replace(/([A-Z])/g, ' $1').trim(),
                         description: getStateDescription(stateName),
                         priority: getStatePriority(stateName),
                         type: getStateType(stateName),
                         position: { 
-                            x: 100 + (nodeCounter % 4) * 250, 
-                            y: 100 + Math.floor(nodeCounter / 4) * 200 
+                            x: 100 + (index % 4) * 280, 
+                            y: 100 + Math.floor(index / 4) * 200 
                         },
                         size: { width: 200, height: 140 },
                         conditions: {}
                     };
-                    nodeCounter++;
                 });
 
-                // Create connections
+                // Create connections and update node conditions
                 transitions.forEach((trans, index) => {
                     if (nodes[trans.from] && nodes[trans.to]) {
+                        // Add to node conditions
+                        if (!nodes[trans.from].conditions) {
+                            nodes[trans.from].conditions = {};
+                        }
+                        nodes[trans.from].conditions[trans.to] = trans.condition;
+                        
+                        // Create connection
                         connections.push({
                             id: `conn_${index}`,
                             from: trans.from,
@@ -713,7 +981,8 @@ const colonistStates = {
                 } else {
                     fsm = { nodes, connections };
                     render();
-                    updateStatus(`✅ Parsed ${nodeCount} states and ${connCount} transitions from your ColonistFSM!`);
+                    updateTreeView(); // Update tree view automatically
+                    updateStatus(`✅ Parsed ${nodeCount} states and ${connCount} transitions! Use Auto Layout to organize.`);
                 }
                 
             } catch (error) {
@@ -724,58 +993,142 @@ const colonistStates = {
 
         function getStateDescription(stateName) {
             const descriptions = {
-                'resting': 'Recover fatigue and health inside buildings',
-                'heal': 'Seek medical attention at infirmary',
-                'eat': 'Consume food to reduce hunger',
+                // Critical/Emergency states
                 'flee': 'Escape from danger to safe location',
-                'sleep': 'Go to bed during night time',
-                'goToSleep': 'Seek rest when very tired',
+                'downed': 'Incapacitated, needs rescue',
+                'drafted': 'Under player control',
+                
+                // Medical states
+                'heal': 'Seek medical attention at infirmary',
+                'doctoring': 'Treating another colonist',
+                'beingTreated': 'Receiving medical treatment',
+                
+                // Rest & Basic Needs
+                'resting': 'Recover fatigue and health inside buildings',
+                'sleep': 'Sleeping in bed during night',
+                'goToSleep': 'Seeking bed to sleep',
+                'eat': 'Consume food to reduce hunger',
+                
+                // Work states
                 'seekTask': 'Look for available work assignments',
-                'idle': 'Wander around when no tasks available',
                 'build': 'Construct buildings and structures',
                 'harvest': 'Collect crops from farms or wells',
                 'chop': 'Cut down trees for wood resources',
                 'mine': 'Extract stone from rock deposits',
-                'move': 'Navigate to target location'
+                
+                // Cooking workflow
+                'cooking': 'Converting wheat into bread at oven',
+                'haulBread': 'Transporting bread to storage',
+                'storingBread': 'Placing bread in stockpile',
+                
+                // Movement & Idle
+                'move': 'Navigate to target location',
+                'idle': 'Wander around when no tasks available',
+                'waitingAtDoor': 'Waiting for door to open',
+                
+                // Enemy states (if parsing enemy FSM)
+                'wander': 'Random movement around area',
+                'attack': 'Engaging target',
+                'chase': 'Pursuing target'
             };
             return descriptions[stateName] || `${stateName} state behavior`;
         }
 
         function getStatePriority(stateName) {
             const priorities = {
+                // Critical (90-100)
                 'flee': 100,
+                'drafted': 99,
+                'waitingAtDoor': 98,
+                'downed': 97,
+                'beingTreated': 96,
+                'doctoring': 95,
+                
+                // Medical/High Priority (80-95)
                 'heal': 90,
                 'sleep': 80,
-                'goToSleep': 75,
+                
+                // Basic Needs (60-79)
+                'goToSleep': 55,
                 'eat': 65,
+                
+                // Work states (40-49)
+                'storingBread': 45,
+                'haulBread': 43,
+                'cooking': 42,
                 'build': 40,
                 'chop': 40,
                 'mine': 40,
                 'harvest': 40,
+                
+                // Low priority (20-39)
                 'resting': 35,
                 'move': 25,
+                
+                // Idle states (10-19)
                 'idle': 15,
-                'seekTask': 10
+                'seekTask': 10,
+                'wander': 5
             };
             return priorities[stateName] || 50;
         }
 
         function getTransitionPriority(condition) {
-            if (condition.includes('danger')) return 100;
-            if (condition.includes('health') || condition.includes('heal')) return 90;
-            if (condition.includes('night')) return 80;
-            if (condition.includes('fatigue') || condition.includes('tired')) return 75;
-            if (condition.includes('hunger') || condition.includes('food')) return 65;
-            if (condition.includes('complete') || condition.includes('done')) return 50;
+            const condLower = condition.toLowerCase();
+            
+            // Emergency conditions
+            if (condLower.includes('danger') || condLower.includes('flee')) return 100;
+            if (condLower.includes('downed') || condLower.includes('unconscious')) return 97;
+            if (condLower.includes('drafted') || condLower.includes('player')) return 99;
+            
+            // Medical conditions
+            if (condLower.includes('health') || condLower.includes('heal') || condLower.includes('injur')) return 90;
+            if (condLower.includes('bleed') || condLower.includes('pain')) return 92;
+            
+            // Basic needs
+            if (condLower.includes('night') || condLower.includes('sleep')) return 80;
+            if (condLower.includes('fatigue') || condLower.includes('tired') || condLower.includes('exhaust')) return 75;
+            if (condLower.includes('hunger') || condLower.includes('food') || condLower.includes('starv')) return 65;
+            
+            // Task completion
+            if (condLower.includes('complete') || condLower.includes('done') || condLower.includes('finish')) return 50;
+            if (condLower.includes('arrived') || condLower.includes('reach')) return 45;
+            
+            // Work assignments
+            if (condLower.includes('assign') || condLower.includes('task')) return 40;
+            
             return 30;
         }
 
         function getStateType(stateName) {
             const name = stateName.toLowerCase();
-            if (name.includes('flee') || name.includes('heal') || name.includes('danger')) return 'critical';
-            if (name.includes('build') || name.includes('work') || name.includes('chop') || name.includes('mine') || name.includes('harvest')) return 'work';
-            if (name.includes('sleep') || name.includes('eat') || name.includes('rest')) return 'rest';
-            if (name.includes('move') || name.includes('go')) return 'movement';
+            
+            // Critical states (red)
+            if (name.includes('flee') || name.includes('danger') || name.includes('down') || 
+                name.includes('draft') || name.includes('wait') && name.includes('door')) {
+                return 'critical';
+            }
+            
+            // Work states (green)
+            if (name.includes('build') || name.includes('work') || name.includes('chop') || 
+                name.includes('mine') || name.includes('harvest') || name.includes('cook') ||
+                name.includes('haul') || name.includes('stor')) {
+                return 'work';
+            }
+            
+            // Rest/health states (blue)
+            if (name.includes('sleep') || name.includes('eat') || name.includes('rest') ||
+                name.includes('heal') || name.includes('doctor') || name.includes('treat')) {
+                return 'rest';
+            }
+            
+            // Movement states (yellow)
+            if (name.includes('move') || name.includes('go') || name.includes('chase') ||
+                name.includes('wander')) {
+                return 'movement';
+            }
+            
+            // Management/idle states (purple)
             return 'management';
         }
 
@@ -1130,30 +1483,52 @@ const colonistStates = {
 
         // Layout functions
         function autoLayout() {
-            const nodeTypes = {};
+            const nodesByType = {};
+            const nodesByPriority = {};
             
-            // Group nodes by type
+            // Group nodes by type and priority
             for (const node of Object.values(fsm.nodes)) {
-                if (!nodeTypes[node.type]) nodeTypes[node.type] = [];
-                nodeTypes[node.type].push(node);
+                if (!nodesByType[node.type]) nodesByType[node.type] = [];
+                nodesByType[node.type].push(node);
+                
+                // Also group by priority ranges for better organization
+                const priorityBand = Math.floor(node.priority / 20) * 20;
+                if (!nodesByPriority[priorityBand]) nodesByPriority[priorityBand] = [];
+                nodesByPriority[priorityBand].push(node);
+            }
+            
+            // Sort nodes within each type by priority (high to low)
+            for (const type in nodesByType) {
+                nodesByType[type].sort((a, b) => b.priority - a.priority);
             }
 
-            // Position by type
+            // Position by type in rows
             let yOffset = 50;
-            const typeOrder = ['management', 'work', 'critical', 'rest', 'movement'];
+            const typeOrder = ['critical', 'rest', 'work', 'movement', 'management'];
+            const typeLabels = {
+                'critical': '🆘 Critical',
+                'rest': '🛌 Rest & Health',
+                'work': '🔨 Work',
+                'movement': '🎯 Movement',
+                'management': '⚙️ Management'
+            };
             
             for (const type of typeOrder) {
-                if (nodeTypes[type]) {
-                    nodeTypes[type].forEach((node, index) => {
-                        node.position.x = 50 + index * 250;
+                if (nodesByType[type] && nodesByType[type].length > 0) {
+                    const nodesInType = nodesByType[type];
+                    
+                    // Arrange nodes in this type horizontally
+                    nodesInType.forEach((node, index) => {
+                        node.position.x = 80 + index * 280;
                         node.position.y = yOffset;
                     });
-                    yOffset += 200;
+                    
+                    yOffset += 220; // Space between type rows
                 }
             }
             
             render();
-            updateStatus('🔧 Auto layout applied!');
+            updateStatus('🔧 Auto layout applied! States organized by type and priority.');
         }
 
         function resetView() {
@@ -1176,28 +1551,106 @@ const colonistStates = {
         }
 
         function generateTypeScriptCode() {
-            let code = '// Generated FSM Code\n';
-            code += '// Copy this back into your TypeScript file\n\n';
-            code += 'const fsmStates = {\n';
+            let code = '// ========================================\n';
+            code += '// Generated FSM Code\n';
+            code += '// ========================================\n';
+            code += '// Copy this back into your TypeScript file\n';
+            code += `// Generated: ${new Date().toISOString()}\n`;
+            code += `// States: ${Object.keys(fsm.nodes).length}\n`;
+            code += `// Transitions: ${fsm.connections.length}\n\n`;
             
-            for (const [nodeId, node] of Object.entries(fsm.nodes)) {
-                code += `  ${nodeId}: {\n`;
-                code += `    priority: ${node.priority},\n`;
-                
-                if (Object.keys(node.conditions || {}).length > 0) {
-                    code += `    conditions: {\n`;
-                    for (const [target, condition] of Object.entries(node.conditions)) {
-                        code += `      ${target}: '${condition}',\n`;
-                    }
-                    code += `    },\n`;
-                }
-                
-                code += `  },\n`;
+            // Sort states by priority
+            const sortedStates = Object.entries(fsm.nodes).sort((a, b) => b[1].priority - a[1].priority);
+            
+            code += '// State Priority Map\n';
+            code += 'function getStatePriority(state: string): number {\n';
+            code += '  switch (state) {\n';
+            
+            for (const [nodeId, node] of sortedStates) {
+                const comment = node.priority >= 90 ? ' // Critical' :
+                               node.priority >= 70 ? ' // High priority' :
+                               node.priority >= 50 ? ' // Medium priority' :
+                               node.priority >= 30 ? ' // Work priority' :
+                               ' // Low priority';
+                code += `    case '${nodeId}': return ${node.priority};${comment}\n`;
             }
             
-            code += '};\n\n';
-            code += '// Export for use in your game\n';
-            code += 'export { fsmStates };';
+            code += '    default: return 50;\n';
+            code += '  }\n';
+            code += '}\n\n';
+            
+            // Generate state machine structure
+            code += '// FSM State Machine Structure\n';
+            code += 'switch (state) {\n';
+            
+            for (const [nodeId, node] of sortedStates) {
+                code += `  case '${nodeId}': {\n`;
+                code += `    // ${node.description}\n`;
+                code += `    // Priority: ${node.priority} (${node.type})\n`;
+                
+                // Add transitions
+                const transitions = fsm.connections.filter(c => c.from === nodeId);
+                if (transitions.length > 0) {
+                    code += `    \n`;
+                    code += `    // Possible transitions:\n`;
+                    for (const trans of transitions) {
+                        code += `    // → ${trans.to}: ${trans.condition}\n`;
+                    }
+                    code += `    \n`;
+                    code += `    // TODO: Implement state logic\n`;
+                    for (const trans of transitions) {
+                        code += `    // if (${trans.condition}) changeState('${trans.to}', '${trans.condition}');\n`;
+                    }
+                }
+                
+                code += `    break;\n`;
+                code += `  }\n\n`;
+            }
+            
+            code += '  default: {\n';
+            code += '    console.warn(`Unknown state: ${state}`);\n';
+            code += '    break;\n';
+            code += '  }\n';
+            code += '}\n\n';
+            
+            // Generate state diagram documentation
+            code += '// ========================================\n';
+            code += '// State Diagram Overview\n';
+            code += '// ========================================\n';
+            code += '/*\n';
+            
+            for (const [nodeId, node] of sortedStates) {
+                code += `\n[${nodeId.toUpperCase()}] (Priority: ${node.priority})\n`;
+                code += `  Description: ${node.description}\n`;
+                
+                const outgoing = fsm.connections.filter(c => c.from === nodeId);
+                const incoming = fsm.connections.filter(c => c.to === nodeId);
+                
+                if (outgoing.length > 0) {
+                    code += `  Transitions to:\n`;
+                    for (const trans of outgoing) {
+                        code += `    → ${trans.to} (${trans.condition})\n`;
+                    }
+                }
+                
+                if (incoming.length > 0) {
+                    code += `  Can be reached from:\n`;
+                    for (const trans of incoming) {
+                        code += `    ← ${trans.from} (${trans.condition})\n`;
+                    }
+                }
+            }
+            
+            code += '\n*/\n\n';
+            code += '// Export state definitions\n';
+            code += 'export const FSMStates = {\n';
+            
+            for (const [nodeId, node] of Object.entries(fsm.nodes)) {
+                code += `  ${nodeId}: '${nodeId}',\n`;
+            }
+            
+            code += '} as const;\n\n';
+            code += 'export type FSMState = keyof typeof FSMStates;\n';
             
             return code;
         }
@@ -1361,6 +1814,151 @@ const colonistStates = {
                 minimapCtx.fillStyle = getPriorityColor(node.priority);
                 minimapCtx.fillRect(x, y, 8, 6);
             }
+        }
+
+        // Tree View Functions
+        function toggleTreeView() {
+            const panel = document.getElementById('treeViewPanel');
+            panel.classList.toggle('open');
+            
+            if (panel.classList.contains('open')) {
+                updateTreeView();
+            }
+        }
+        
+        function updateTreeView() {
+            const content = document.getElementById('treeViewContent');
+            
+            if (Object.keys(fsm.nodes).length === 0) {
+                content.innerHTML = '<div class="tree-empty">📥 Parse FSM code to see the state transition tree</div>';
+                return;
+            }
+            
+            // Generate tree view HTML
+            let html = '';
+            
+            // Add statistics
+            html += '<div class="tree-stats">';
+            html += '<div class="tree-stat"><span class="tree-stat-label">Total States:</span><span class="tree-stat-value">' + Object.keys(fsm.nodes).length + '</span></div>';
+            html += '<div class="tree-stat"><span class="tree-stat-label">Transitions:</span><span class="tree-stat-value">' + fsm.connections.length + '</span></div>';
+            
+            // Count states by type
+            const typeCount = {};
+            for (const node of Object.values(fsm.nodes)) {
+                typeCount[node.type] = (typeCount[node.type] || 0) + 1;
+            }
+            html += '<div class="tree-stat"><span class="tree-stat-label">Critical:</span><span class="tree-stat-value">' + (typeCount.critical || 0) + '</span></div>';
+            html += '<div class="tree-stat"><span class="tree-stat-label">Work:</span><span class="tree-stat-value">' + (typeCount.work || 0) + '</span></div>';
+            html += '</div>';
+            
+            // Group states by type and sort by priority
+            const statesByType = {
+                'critical': [],
+                'rest': [],
+                'work': [],
+                'movement': [],
+                'management': []
+            };
+            
+            for (const node of Object.values(fsm.nodes)) {
+                if (!statesByType[node.type]) statesByType[node.type] = [];
+                statesByType[node.type].push(node);
+            }
+            
+            // Sort each type by priority (high to low)
+            for (const type in statesByType) {
+                statesByType[type].sort((a, b) => b.priority - a.priority);
+            }
+            
+            // Type labels with emojis
+            const typeLabels = {
+                'critical': '🆘 Critical States',
+                'rest': '🛌 Rest & Health',
+                'work': '🔨 Work States',
+                'movement': '🎯 Movement',
+                'management': '⚙️ Management'
+            };
+            
+            // Render each type section
+            const typeOrder = ['critical', 'rest', 'work', 'movement', 'management'];
+            for (const type of typeOrder) {
+                const nodes = statesByType[type];
+                if (nodes.length === 0) continue;
+                
+                html += '<div class="tree-section">';
+                html += '<div class="tree-section-title">' + typeLabels[type] + ' (' + nodes.length + ')</div>';
+                
+                for (const node of nodes) {
+                    html += renderTreeNode(node);
+                }
+                
+                html += '</div>';
+            }
+            
+            content.innerHTML = html;
+        }
+        
+        function renderTreeNode(node) {
+            let html = '<div class="tree-node ' + node.type + '">';
+            
+            // Header with name and priority
+            html += '<div class="tree-node-header">';
+            html += '<span class="tree-node-name">' + node.title + '</span>';
+            html += '<span class="tree-node-priority">P' + node.priority + '</span>';
+            html += '</div>';
+            
+            // Description
+            html += '<div class="tree-node-desc">' + node.description + '</div>';
+            
+            // Find all transitions from this state
+            const outgoing = fsm.connections.filter(c => c.from === node.id);
+            const incoming = fsm.connections.filter(c => c.to === node.id);
+            
+            // Outgoing transitions
+            if (outgoing.length > 0) {
+                html += '<div class="tree-transitions">';
+                html += '<div style="font-size: 10px; color: #666; margin-bottom: 4px; font-weight: bold;">TRANSITIONS TO:</div>';
+                
+                // Sort by priority
+                outgoing.sort((a, b) => b.priority - a.priority);
+                
+                for (const trans of outgoing) {
+                    const targetNode = fsm.nodes[trans.to];
+                    if (targetNode) {
+                        html += '<div class="tree-transition">';
+                        html += '<span class="tree-transition-arrow">→</span>';
+                        html += '<div>';
+                        html += '<span class="tree-transition-target">' + targetNode.title + '</span>';
+                        html += '<span class="tree-transition-condition">(' + trans.condition + ')</span>';
+                        html += '</div>';
+                        html += '</div>';
+                    }
+                }
+                html += '</div>';
+            }
+            
+            // Incoming transitions (collapsed by default, shown on hover)
+            if (incoming.length > 0) {
+                html += '<div class="tree-transitions" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">';
+                html += '<div style="font-size: 10px; color: #666; margin-bottom: 4px; font-weight: bold;">CAN BE REACHED FROM:</div>';
+                
+                for (const trans of incoming) {
+                    const sourceNode = fsm.nodes[trans.from];
+                    if (sourceNode) {
+                        html += '<div class="tree-transition" style="opacity: 0.7;">';
+                        html += '<span class="tree-transition-arrow">←</span>';
+                        html += '<div>';
+                        html += '<span class="tree-transition-target">' + sourceNode.title + '</span>';
+                        html += '<span class="tree-transition-condition">(' + trans.condition + ')</span>';
+                        html += '</div>';
+                        html += '</div>';
+                    }
+                }
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            return html;
         }
 
         // Event listeners
