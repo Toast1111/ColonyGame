@@ -73,88 +73,62 @@ export class NavigationManager {
   }
 
   /**
-   * Find the nearest building matching a filter using region-based search
-   * Falls back to global search if regions are disabled
+   * Find the nearest building matching a filter - linear search through all buildings
    */
-  findNearestBuildingByRegion(x: number, y: number, filter: (b: Building) => boolean): Building | null {
+  findNearestBuilding(x: number, y: number, filter: (b: Building) => boolean): Building | null {
     const { game } = this;
     
-    if (!game.regionManager.isEnabled()) {
-      // Fallback to global search if regions disabled
-      let best: Building | null = null;
-      let bestDist = Infinity;
-      for (const b of game.buildings) {
-        if (!filter(b)) continue;
-        const cx = b.x + b.w / 2;
-        const cy = b.y + b.h / 2;
-        const d = Math.hypot(x - cx, y - cy);
-        if (d < bestDist) {
-          bestDist = d;
-          best = b;
-        }
+    let best: Building | null = null;
+    let bestDist = Infinity;
+    for (const b of game.buildings) {
+      if (!filter(b)) continue;
+      const cx = b.x + b.w / 2;
+      const cy = b.y + b.h / 2;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestDist) {
+        bestDist = d;
+        best = b;
       }
-      return best;
     }
-    return game.regionManager.findNearestBuilding(x, y, filter);
+    return best;
   }
 
   /**
-   * Find the nearest tree using region-based search
-   * Falls back to global search if regions are disabled
+   * Find the nearest tree - linear search through all trees
    */
-  findNearestTreeByRegion(x: number, y: number): typeof this.game.trees[0] | null {
+  findNearestTree(x: number, y: number): typeof this.game.trees[0] | null {
     const { game } = this;
     
-    if (!game.regionManager.isEnabled()) {
-      // Fallback to global search
-      let best = null;
-      let bestDist = Infinity;
-      for (const t of game.trees) {
-        if (t.hp <= 0) continue;
-        const d = Math.hypot(x - t.x, y - t.y);
-        if (d < bestDist) {
-          bestDist = d;
-          best = t;
-        }
+    let best = null;
+    let bestDist = Infinity;
+    for (const t of game.trees) {
+      if (t.hp <= 0) continue;
+      const d = Math.hypot(x - t.x, y - t.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = t;
       }
-      return best;
     }
-    const result = game.regionManager.findNearestTree(x, y, game.trees);
-    return result as typeof game.trees[0] | null;
+    return best;
   }
 
   /**
-   * Find the nearest rock using region-based search
-   * Falls back to global search if regions are disabled
+   * Find the nearest rock - linear search through all rocks
    */
-  findNearestRockByRegion(x: number, y: number): typeof this.game.rocks[0] | null {
+  findNearestRock(x: number, y: number): typeof this.game.rocks[0] | null {
     const { game } = this;
     
-    if (!game.regionManager.isEnabled()) {
-      // Fallback to global search
-      let best = null;
-      let bestDist = Infinity;
-      for (const r of game.rocks) {
-        if (r.hp <= 0) continue;
-        const d = Math.hypot(x - r.x, y - r.y);
-        if (d < bestDist) {
-          bestDist = d;
-          best = r;
-        }
+    let best = null;
+    let bestDist = Infinity;
+    for (const r of game.rocks) {
+      if (r.hp <= 0) continue;
+      const d = Math.hypot(x - r.x, y - r.y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = r;
       }
-      return best;
     }
-    const result = game.regionManager.findNearestRock(x, y, game.rocks);
-    return result as typeof game.rocks[0] | null;
-  }
-
-  /**
-   * Check if a destination is reachable from a starting position
-   * (avoids expensive pathfinding for impossible paths)
-   */
-  isReachable(startX: number, startY: number, endX: number, endY: number): boolean {
-    if (!this.game.regionManager.isEnabled()) return true; // Assume reachable if regions disabled
-    return this.game.regionManager.isReachable(startX, startY, endX, endY);
+    return best;
   }
 
   /**

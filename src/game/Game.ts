@@ -1,13 +1,11 @@
 import { clamp, dist2, rand, randi } from "../core/utils";
 import { makeGrid } from "../core/pathfinding";
 import { makeTerrainGrid, type TerrainGrid } from "./terrain";
-import { RegionManager } from "./navigation/regionManager";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
-import { drawRegionDebug } from "./navigation/regionDebugRender";
 import { drawTerrainDebug } from "./terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
@@ -29,8 +27,6 @@ import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
-import { RegionVersionManager } from '../core/RegionVersioning';
-import { PathRequestQueue } from '../core/PathRequestQueue';
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
 import { getInventoryItemCount } from './systems/buildingInventory';
@@ -75,14 +71,11 @@ export class Game {
   simulationClock = SimulationClock.getInstance({ simulationHz: 30 });
   budgetManager = BudgetedExecutionManager.getInstance();
   adaptiveTickRate = new AdaptiveTickRateManager();
-  regionVersionManager = new RegionVersionManager();
-  pathRequestQueue = new PathRequestQueue(this.regionVersionManager);
   
   deferredRebuildSystem = new (class DeferredRebuildSystem {
     private game: Game;
     private rebuildQueued: boolean = false;
     private fullRebuildQueued: boolean = false;
-    private affectedRegions: Set<number> = new Set();
     
     constructor(game: Game) {
       this.game = game;
@@ -96,26 +89,8 @@ export class Game {
     processQueue(): void {
       if (!this.rebuildQueued) return;
       if (this.fullRebuildQueued) {
-        // Before rebuilding, get all current region IDs to invalidate
-        const allRegions = this.game.regionManager.isEnabled() 
-          ? Array.from(this.game.regionManager.getRegions().keys())
-          : [];
-        
         // Rebuild navigation grid
         this.game.navigationManager.rebuildNavGrid();
-        
-        // Increment versions for all affected regions
-        for (const regionId of allRegions) {
-          this.game.regionVersionManager.markRegionChanged(regionId);
-          this.affectedRegions.add(regionId);
-        }
-        
-        // Invalidate path cache for affected regions
-        if (this.affectedRegions.size > 0) {
-          this.game.pathRequestQueue.invalidateCacheForRegions(Array.from(this.affectedRegions));
-          this.affectedRegions.clear();
-        }
-        
         this.fullRebuildQueued = false;
       }
       this.rebuildQueued = false;
@@ -302,7 +277,7 @@ export class Game {
   set lastInputWasTouch(value: boolean) { this.inputManager.setLastInputWasTouch(value); }
   
   // Debug flags (keep as is - not part of managers)
-  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, regions: false, terrain: false, performanceHUD: false };
+  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -324,10 +299,6 @@ export class Game {
     this.syncTerrainToGrid();
     
     this.rebuildNavGridImmediate(); // Use immediate rebuild during initialization
-    
-    // Initialize region system after nav grid is built
-    this.regionManager.initialize(this.buildings);
-    this.regionManager.updateObjectCaches(this.buildings, this.trees, this.rocks);
     
     // Initialize systems with starting resources and time
     this.resourceSystem.reset(); // Sets starting resources
@@ -1811,54 +1782,17 @@ export class Game {
     
     // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
     // c.repath = (c.repath || 0) - dt; // TEMPORARILY DISABLED
-    const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24); // Increased from 12 to 24
-    // if (target && (goalChanged || c.repath == null || c.repath <= 0 || !c.path || c.pathIndex == null)) {
-    if (target && (goalChanged || !c.path || c.pathIndex == null)) { // RE-ENABLED PATHINDEX CHECK, REPATH TIMER STILL DISABLED
-      
-      if (useAsync) {
-        // Async mode: request path, mark as pending
-        (c as any).pendingPath = true;
-        this.requestColonistPath(c, target.x, target.y, (path) => {
-          if (path && path.length > 0) {
-            c.path = path;
-            c.pathIndex = 0;
-            c.pathGoal = { x: target.x, y: target.y };
-            (c as any).pendingPath = false;
-          }
-        });
-        // Continue with old path while waiting (or idle if no path)
-        if (!c.path) return false;
-      } else {
-        // Sync mode: compute immediately (original behavior)
-        const p = this.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
-        if (p && p.length) { 
-          c.path = p; 
-          c.pathIndex = 0; // RE-ENABLED
-          c.pathGoal = { x: target.x, y: target.y }; 
-          // Debug: Log if path goes through low-cost areas
-          if (Math.random() < 0.1) {
-            let pathTiles = 0;
-            for (const node of p) {
-              const gx = Math.floor(node.x / T), gy = Math.floor(node.y / T);
-              if (gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows) {
-                const idx = gy * this.grid.cols + gx;
-                if (this.grid.cost[idx] <= 0.7) pathTiles++;
-              }
-            }
-            if (pathTiles > 0) {
-              console.log(`Computed path with ${pathTiles}/${p.length} low-cost tiles`);
-            }
-          }
-        } else {
-          // Failed to compute path - log this issue
-          if (Math.random() < 0.05) {
-            console.log(`Failed to compute path from (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) to (${target.x.toFixed(1)}, ${target.y.toFixed(1)})`);
-          }
-        }
+    const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24);
+    if (target && (goalChanged || !c.path || c.pathIndex == null)) {
+      // Compute path immediately
+      const p = this.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
+      if (p && p.length) { 
+        c.path = p; 
+        c.pathIndex = 0;
+        c.pathGoal = { x: target.x, y: target.y };
       }
-      // c.repath = 5.0; // seconds between recompute - TEMPORARILY DISABLED
     }
-    // PATHINDEX LOGIC RE-ENABLED
+    
     if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) {
       if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
       return false;
@@ -2095,7 +2029,6 @@ export class Game {
   if (!consoleOpen && this.keyPressed('p')) { toggleWorkPriorityPanel(); this.toast(isWorkPriorityPanelOpen() ? 'Work Priorities Panel opened' : 'Work Priorities Panel closed'); }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
-    if (!consoleOpen && this.keyPressed('r')) { this.debug.regions = !this.debug.regions; this.toast(this.debug.regions ? 'Debug: regions ON' : 'Debug: regions OFF'); }
     if (!consoleOpen && this.keyPressed('t')) { this.debug.terrain = !this.debug.terrain; this.toast(this.debug.terrain ? 'Debug: terrain ON' : 'Debug: terrain OFF'); }
     if (!consoleOpen && this.keyPressed('k')) { 
       this.debug.forceDesktopMode = !this.debug.forceDesktopMode; 
@@ -2301,9 +2234,6 @@ export class Game {
     
     // Process queued navmesh rebuilds at END of frame (deferred rebuild system)
     this.deferredRebuildSystem.processQueue();
-    
-    // Process async pathfinding queue with time budget (2ms per frame)
-    this.processPathQueue(2.0);
   }
 
   /**
@@ -2439,7 +2369,6 @@ export class Game {
   // Pathfinding grid and helpers
   grid = makeGrid();
   terrainGrid: TerrainGrid = makeTerrainGrid(this.grid.cols, this.grid.rows);
-  regionManager = new RegionManager(this.grid);
   
   // Navigation delegation to NavigationManager
   rebuildNavGrid() { 
@@ -2453,189 +2382,29 @@ export class Game {
   syncTerrainToGrid() { this.navigationManager.syncTerrainToGrid(); }
   
   /**
-   * Synchronous pathfinding with caching
-   * Checks cache first, falls back to immediate computation
+   * Synchronous pathfinding - direct computation
    */
   computePath(sx: number, sy: number, tx: number, ty: number) { 
     this.performanceMetrics.startTiming('pathfinding');
-    
-    // Try cache first
-    const cached = this.pathRequestQueue.checkCache(sx, sy, tx, ty);
-    if (cached) {
-      this.performanceMetrics.endTiming('path (cached)');
-      return cached;
-    }
-    
-    // Cache miss - compute immediately
     const result = this.navigationManager.computePath(sx, sy, tx, ty);
-    
-    // Cache the result if we got a valid path
-    if (result && result.length > 0) {
-      // Get regions along the path for cache validation
-      const affectedRegions = this.getRegionsAlongPath(result);
-      const snapshot = this.regionVersionManager.createSnapshot(affectedRegions);
-      this.pathRequestQueue.storePath(sx, sy, tx, ty, result, snapshot);
-    }
-    
-    this.performanceMetrics.endTiming(`path (${sx},${sy})->(${tx},${ty})`);
+    this.performanceMetrics.endTiming('pathfinding');
     return result;
   }
   
   computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) { 
     this.performanceMetrics.startTiming('pathfinding');
-    
-    // Danger avoidance paths aren't cacheable (colonist-specific danger memory)
     const result = this.navigationManager.computePathWithDangerAvoidance(c, sx, sy, tx, ty);
-    
     this.performanceMetrics.endTiming('danger-avoid path');
     return result;
   }
   
-  /**
-   * Helper to determine which regions a path crosses
-   */
-  private getRegionsAlongPath(path: { x: number; y: number }[]): number[] {
-    if (!this.regionManager.isEnabled() || path.length === 0) return [];
-    
-    const regions = new Set<number>();
-    for (const point of path) {
-      const regionId = this.regionManager.getRegionIdAt(point.x, point.y);
-      if (regionId >= 0) regions.add(regionId);
-    }
-    return Array.from(regions);
-  }
   
-  /**
-   * Request a path asynchronously (queued, processed over time)
-   * @param entity - Colonist or enemy requesting the path
-   * @param startX - Start world X coordinate
-   * @param startY - Start world Y coordinate
-   * @param targetX - Target world X coordinate
-   * @param targetY - Target world Y coordinate
-   * @param priority - Priority (0-100, higher = more important)
-   * @param callback - Called when path is computed
-   * @returns Request ID (or null if served from cache)
-   */
-  requestPathAsync(
-    entity: Colonist | Enemy,
-    startX: number,
-    startY: number,
-    targetX: number,
-    targetY: number,
-    priority: number = 50,
-    callback?: (path: any) => void
-  ): string | null {
-    return this.pathRequestQueue.requestPath(
-      entity,
-      startX,
-      startY,
-      targetX,
-      targetY,
-      priority,
-      callback
-    );
-  }
   
-  /**
-   * Request a path for a colonist with automatic priority calculation
-   * Priority based on: combat > medical > hauling > idle
-   */
-  requestColonistPath(
-    colonist: Colonist,
-    targetX: number,
-    targetY: number,
-    callback?: (path: any) => void
-  ): string | null {
-    // Calculate priority based on colonist state and task
-    let priority = 50; // Default
-    
-    // Combat is highest priority
-    if ((colonist as any).inCombat || colonist.state === 'flee') {
-      priority = 90;
-    }
-    // Medical treatment is critical
-    else if (colonist.state === 'doctoring' || colonist.state === 'beingTreated' || colonist.state === 'downed') {
-      priority = 80;
-    }
-    // Eating/sleeping is important for survival
-    else if (colonist.state === 'eat' || colonist.state === 'sleep' || colonist.state === 'goToSleep') {
-      priority = 70;
-    }
-    // Hauling and building are medium priority
-    else if (colonist.state === 'haulBread' || colonist.state === 'haulingWheat' || colonist.state === 'build' || colonist.state === 'cooking' || colonist.state === 'storingBread') {
-      priority = 50;
-    }
-    // Harvesting and gathering resources
-    else if (colonist.state === 'harvest' || colonist.state === 'chop' || colonist.state === 'mine') {
-      priority = 40;
-    }
-    // Idle and other low priority states
-    else if (colonist.state === 'idle' || colonist.state === 'seekTask' || colonist.state === 'move') {
-      priority = 20;
-    }
-    
-    return this.requestPathAsync(
-      colonist,
-      colonist.x,
-      colonist.y,
-      targetX,
-      targetY,
-      priority,
-      callback
-    );
-  }
-  
-  /**
-   * Process queued path requests with time budget
-   * Spreads pathfinding across frames to prevent spikes
-   * @param budgetMs - Maximum milliseconds to spend on pathfinding this frame
-   */
-  processPathQueue(budgetMs: number): void {
-    const startTime = performance.now();
-    let processed = 0;
-    
-    while (performance.now() - startTime < budgetMs) {
-      const request = this.pathRequestQueue.getNextRequest();
-      
-      if (!request) {
-        break; // Queue empty
-      }
-      
-      // Compute the path
-      const path = this.navigationManager.computePath(
-        request.startX,
-        request.startY,
-        request.targetX,
-        request.targetY
-      );
-      
-      // Get affected regions for cache validation
-      const affectedRegions = path && path.length > 0 
-        ? this.getRegionsAlongPath(path)
-        : [];
-      
-      // Complete the request (stores in cache and calls callback)
-      this.pathRequestQueue.completeRequest(request, path, affectedRegions);
-      
-      processed++;
-    }
-    
-    // Track statistics (optional - could add to performance metrics)
-    if (processed > 0 && Math.random() < 0.01) {
-      const elapsed = performance.now() - startTime;
-      console.log(`Processed ${processed} path requests in ${elapsed.toFixed(2)}ms`);
-    }
-  }
-  
+  // Navigation delegation helpers
   private cellIndexAt(x: number, y: number) { return this.navigationManager.cellIndexAt(x, y); }
   isBlocked(x: number, y: number) { return this.navigationManager.isBlocked(x, y); }
-  findNearestBuildingByRegion(x: number, y: number, filter: (b: Building) => boolean) { return this.navigationManager.findNearestBuildingByRegion(x, y, filter); }
-  findNearestTreeByRegion(x: number, y: number) { return this.navigationManager.findNearestTreeByRegion(x, y); }
-                                                                 isReachable(startX: number, startY: number, endX: number, endY: number) { return this.navigationManager.isReachable(startX, startY, endX, endY); }
   isWithinInteractionRange(x: number, y: number, circle: { x: number; y: number; r: number }, interactDistance: number) { return this.navigationManager.isWithinInteractionRange(x, y, circle, interactDistance); }
-  bestApproachToCircle(c: Colonist, circle: { x: number; y: number; r: number }, interact: number) { return this.navigationManager.bestApproachToCircle(c, circle, interact); }
-
-  // UI: colonist profile panel moved to src/game/ui/colonistProfile.ts
+  bestApproachToCircle(c: Colonist, circle: { x: number; y: number; r: number }, interact: number) { return this.navigationManager.bestApproachToCircle(c, circle, interact); }  // UI: colonist profile panel moved to src/game/ui/colonistProfile.ts
 
 
   // Context menu rendering moved to src/game/ui/contextMenu.ts

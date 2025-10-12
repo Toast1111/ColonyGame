@@ -45,15 +45,14 @@ function ensureEnemyPath(game: any, e: Enemy, target: { x: number; y: number }, 
   const pathInvalid = !enemyAny.path || enemyAny.pathIndex == null || enemyAny.pathIndex >= enemyAny.path.length;
 
   if (goalChanged || pathInvalid || (enemyAny.repath ?? 0) <= 0) {
-    // Use the new grid-based pathfinding with region manager optimization
+    // Use the new grid-based pathfinding
     if (!game.grid) return false;
     const newPath = computeEnemyPath(
       game.grid, 
       e.x, 
       e.y, 
       target.x, 
-      target.y,
-      game.regionManager  // Pass region manager for reachability optimization
+      target.y
     );
     
     if (newPath && newPath.length) {

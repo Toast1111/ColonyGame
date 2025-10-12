@@ -255,22 +255,6 @@ export class PerformanceHUD {
       }
     }
     
-    // Path cache stats
-    if (game && game.pathRequestQueue) {
-      const cacheStats = game.pathRequestQueue.getStats();
-      const hitRate = cacheStats.totalRequests > 0 
-        ? ((cacheStats.cacheHits / cacheStats.totalRequests) * 100).toFixed(1)
-        : '0.0';
-      const queueStatus = cacheStats.queuedRequests > 0 ? ` ⚠️${cacheStats.queuedRequests}` : '';
-      lines.push(`📦 Cache: ${hitRate}% hits (${cacheStats.cacheSize} entries${queueStatus})`);
-      
-      if (this.config.showDetails) {
-        const processed = cacheStats.processedRequests;
-        const cancelled = cacheStats.cancelledRequests;
-        lines.push(`  └─ ${cacheStats.cacheHits} hits / ${cacheStats.cacheMisses} miss / ${processed} proc / ${cancelled} cancel`);
-      }
-    }
-
     // Render cache stats
     if (game && game.renderManager) {
       const renderStats = game.renderManager.getPerformanceStats();

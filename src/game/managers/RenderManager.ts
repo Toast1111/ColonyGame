@@ -6,7 +6,6 @@
 import type { Game } from '../Game';
 import { COLORS, T, WORLD } from '../constants';
 import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render';
-import { drawRegionDebug } from '../navigation/regionDebugRender';
 import { drawTerrainDebug } from '../terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/colonistProfile';
@@ -455,11 +454,6 @@ export class RenderManager {
   private renderDebug(): void {
     const { game } = this;
     const { ctx } = game;
-
-    // Region debug
-    if (game.debug.regions) {
-      drawRegionDebug(game);
-    }
 
     // Terrain debug
     if (game.debug.terrain) {

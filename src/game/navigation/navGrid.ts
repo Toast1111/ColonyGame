@@ -70,13 +70,6 @@ export function rebuildNavGridPartial(game: Game, worldX: number, worldY: number
       markCircleSolid(game.grid, rock.x, rock.y, rock.r);
     }
   }
-  
-  // Rebuild regions only for this small area (if region system is enabled)
-  if (game.regionManager.isEnabled()) {
-    // Use rebuildArea instead of full rebuild - much faster!
-    game.regionManager.rebuildArea(minGx, minGy, maxGx, maxGy, game.buildings);
-    game.regionManager.updateObjectCaches(game.buildings, game.trees, game.rocks);
-  }
 }
 
 export function rebuildNavGrid(game: Game) {
@@ -110,12 +103,6 @@ export function rebuildNavGrid(game: Game) {
   // Obstacles
   for (const tree of game.trees) markCircleSolid(game.grid, tree.x, tree.y, tree.r);
   for (const rock of game.rocks) markCircleSolid(game.grid, rock.x, rock.y, rock.r);
-  
-  // Rebuild regions after nav grid is updated
-  if (game.regionManager.isEnabled()) {
-    game.regionManager.onBuildingsChanged(game.buildings);
-    game.regionManager.updateObjectCaches(game.buildings, game.trees, game.rocks);
-  }
 }
 
 export function computePath(game: Game, sx: number, sy: number, tx: number, ty: number) {
