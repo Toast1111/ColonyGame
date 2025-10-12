@@ -794,7 +794,7 @@ export class RenderManager {
     }));
 
     // Main HUD
-    drawHUD(ctx, canvas, {
+    const hotbarRects = drawHUD(ctx, canvas, {
       res: game.RES,
       colonists: game.colonists.filter(c => c.alive).length,
       cap,
@@ -806,6 +806,9 @@ export class RenderManager {
       messages: game.messages,
       storage: { used: storageUsed, max: storageMax }
     }, game);
+    
+    // Store hotbar click regions
+    game.hotbarRects = hotbarRects;
 
     // Colonist profile panel
     if (game.selColonist) {

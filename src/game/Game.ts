@@ -1269,11 +1269,25 @@ export class Game {
     return null;
   }
 
-  msg(text: string, kind: Message["kind"] = 'info') { this.messages.push({ text, t: 4, kind }); this.toast(text, 1600); }
+  msg(text: string, kind: Message["kind"] = 'info') { 
+    this.messages.push({ text, t: 4, kind }); 
+    this.toast(text, 1600); 
+  }
+  
   toast(msg: string, ms = 1400) {
-    const el = document.getElementById('toast') as HTMLDivElement | null; if (!el) return;
-    el.textContent = msg; el.style.opacity = '1';
-    clearTimeout((el as any)._t); (el as any)._t = setTimeout(() => el.style.opacity = '0', ms);
+    // Use the new ToastManager if available (injected by UI bootstrap)
+    const toastManager = (this as any).toastManager;
+    if (toastManager && typeof toastManager.show === 'function') {
+      toastManager.show(msg, ms);
+    } else {
+      // Fallback to old method if ToastManager not yet initialized
+      const el = document.getElementById('toast') as HTMLDivElement | null;
+      if (!el) return;
+      el.textContent = msg;
+      el.style.opacity = '1';
+      clearTimeout((el as any)._t);
+      (el as any)._t = setTimeout(() => el.style.opacity = '0', ms);
+    }
   }
 
   // World setup
