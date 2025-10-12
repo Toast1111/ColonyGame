@@ -6,69 +6,66 @@ import WheatStage3Img from './farm/wheat_stage_three.png';
 
 // Colonist sprite imports
 // Heads
-import MaleAverageNormalEast from './colonist/heads/Male_Average_Normal_east.png';
-import MaleAverageNormalNorth from './colonist/heads/Male_Average_Normal_north.png';
-import MaleAverageNormalSouth from './colonist/heads/Male_Average_Normal_south.png';
+import MaleAverageNormalEast from './things/colonist/human-like/heads/Male_Average_Normal_east.png';
+import MaleAverageNormalNorth from './things/colonist/human-like/heads/Male_Average_Normal_north.png';
+import MaleAverageNormalSouth from './things/colonist/human-like/heads/Male_Average_Normal_south.png';
 
 // Bodies
-import NakedMaleEast from './colonist/bodies/Naked_Male_east.png';
-import NakedMaleNorth from './colonist/bodies/Naked_Male_north.png';
-import NakedMaleSouth from './colonist/bodies/Naked_Male_south.png';
+import NakedMaleEast from './things/colonist/human-like/bodies/Naked_Male_east.png';
+import NakedMaleNorth from './things/colonist/human-like/bodies/Naked_Male_north.png';
+import NakedMaleSouth from './things/colonist/human-like/bodies/Naked_Male_south.png';
 
 // Hair styles
-import AfroEast from './colonist/hair/Afro_east.png';
-import AfroNorth from './colonist/hair/Afro_north.png';
-import AfroSouth from './colonist/hair/Afro_south.png';
-import BobEast from './colonist/hair/Bob_east.png';
-import BobNorth from './colonist/hair/Bob_north.png';
-import BobSouth from './colonist/hair/Bob_south.png';
-import BowlcutEast from './colonist/hair/Bowlcut_east.png';
-import BowlcutNorth from './colonist/hair/Bowlcut_north.png';
-import BowlcutSouth from './colonist/hair/Bowlcut_south.png';
-import BraidbunEast from './colonist/hair/Braidbun_east.png';
-import BraidbunNorth from './colonist/hair/Braidbun_north.png';
-import BraidbunSouth from './colonist/hair/Braidbun_south.png';
-import BravoEast from './colonist/hair/Bravo_east.png';
-import BravoNorth from './colonist/hair/Bravo_north.png';
-import BravoSouth from './colonist/hair/Bravo_south.png';
-import BurgundyEast from './colonist/hair/Burgundy_east.png';
-import BurgundyNorth from './colonist/hair/Burgundy_north.png';
-import BurgundySouth from './colonist/hair/Burgundy_south.png';
-import CleopatraEast from './colonist/hair/Cleopatra_east.png';
-import CleopatraNorth from './colonist/hair/Cleopatra_north.png';
-import CleopatraSouth from './colonist/hair/Cleopatra_south.png';
-import CurlyEast from './colonist/hair/Curly_east.png';
-import CurlyNorth from './colonist/hair/Curly_north.png';
-import CurlySouth from './colonist/hair/Curly_south.png';
-import CuteEast from './colonist/hair/Cute_east.png';
-import CuteNorth from './colonist/hair/Cute_north.png';
-import CuteSouth from './colonist/hair/Cute_south.png';
-import DecentEast from './colonist/hair/Decent_east.png';
-import DecentNorth from './colonist/hair/Decent_north.png';
-import DecentSouth from './colonist/hair/Decent_south.png';
-import ElderEast from './colonist/hair/Elder_east.png';
-import ElderNorth from './colonist/hair/Elder_north.png';
-import ElderSouth from './colonist/hair/Elder_south.png';
-import FancybunEast from './colonist/hair/Fancybun_east.png';
-import FancybunNorth from './colonist/hair/Fancybun_north.png';
-import FancybunSouth from './colonist/hair/Fancybun_south.png';
-import FirestarterEast from './colonist/hair/Firestarter_east.png';
-import FirestarterNorth from './colonist/hair/Firestarter_north.png';
-import FirestarterSouth from './colonist/hair/Firestarter_south.png';
-import FlowyEast from './colonist/hair/Flowy_east.png';
-import FlowyNorth from './colonist/hair/Flowy_north.png';
-import FlowySouth from './colonist/hair/Flowy_south.png';
-import FringeEast from './colonist/hair/Fringe_east.png';
-import FringeNorth from './colonist/hair/Fringe_north.png';
-import FringeSouth from './colonist/hair/Fringe_south.png';
-
-// Missing hair styles - let me check what other ones exist
-// For now, let's work with what we have and add more gradually
+import AfroEast from './things/colonist/human-like/hair/Afro_east.png';
+import AfroNorth from './things/colonist/human-like/hair/Afro_north.png';
+import AfroSouth from './things/colonist/human-like/hair/Afro_south.png';
+import BobEast from './things/colonist/human-like/hair/Bob_east.png';
+import BobNorth from './things/colonist/human-like/hair/Bob_north.png';
+import BobSouth from './things/colonist/human-like/hair/Bob_south.png';
+import BowlcutEast from './things/colonist/human-like/hair/Bowlcut_east.png';
+import BowlcutNorth from './things/colonist/human-like/hair/Bowlcut_north.png';
+import BowlcutSouth from './things/colonist/human-like/hair/Bowlcut_south.png';
+import BraidbunEast from './things/colonist/human-like/hair/Braidbun_east.png';
+import BraidbunNorth from './things/colonist/human-like/hair/Braidbun_north.png';
+import BraidbunSouth from './things/colonist/human-like/hair/Braidbun_south.png';
+import BravoEast from './things/colonist/human-like/hair/Bravo_east.png';
+import BravoNorth from './things/colonist/human-like/hair/Bravo_north.png';
+import BravoSouth from './things/colonist/human-like/hair/Bravo_south.png';
+import BurgundyEast from './things/colonist/human-like/hair/Burgundy_east.png';
+import BurgundyNorth from './things/colonist/human-like/hair/Burgundy_north.png';
+import BurgundySouth from './things/colonist/human-like/hair/Burgundy_south.png';
+import CleopatraEast from './things/colonist/human-like/hair/Cleopatra_east.png';
+import CleopatraNorth from './things/colonist/human-like/hair/Cleopatra_north.png';
+import CleopatraSouth from './things/colonist/human-like/hair/Cleopatra_south.png';
+import CurlyEast from './things/colonist/human-like/hair/Curly_east.png';
+import CurlyNorth from './things/colonist/human-like/hair/Curly_north.png';
+import CurlySouth from './things/colonist/human-like/hair/Curly_south.png';
+import CuteEast from './things/colonist/human-like/hair/Cute_east.png';
+import CuteNorth from './things/colonist/human-like/hair/Cute_north.png';
+import CuteSouth from './things/colonist/human-like/hair/Cute_south.png';
+import DecentEast from './things/colonist/human-like/hair/Decent_east.png';
+import DecentNorth from './things/colonist/human-like/hair/Decent_north.png';
+import DecentSouth from './things/colonist/human-like/hair/Decent_south.png';
+import ElderEast from './things/colonist/human-like/hair/Elder_east.png';
+import ElderNorth from './things/colonist/human-like/hair/Elder_north.png';
+import ElderSouth from './things/colonist/human-like/hair/Elder_south.png';
+import FancybunEast from './things/colonist/human-like/hair/Fancybun_east.png';
+import FancybunNorth from './things/colonist/human-like/hair/Fancybun_north.png';
+import FancybunSouth from './things/colonist/human-like/hair/Fancybun_south.png';
+import FirestarterEast from './things/colonist/human-like/hair/Firestarter_east.png';
+import FirestarterNorth from './things/colonist/human-like/hair/Firestarter_north.png';
+import FirestarterSouth from './things/colonist/human-like/hair/Firestarter_south.png';
+import FlowyEast from './things/colonist/human-like/hair/Flowy_east.png';
+import FlowyNorth from './things/colonist/human-like/hair/Flowy_north.png';
+import FlowySouth from './things/colonist/human-like/hair/Flowy_south.png';
+import FringeEast from './things/colonist/human-like/hair/Fringe_east.png';
+import FringeNorth from './things/colonist/human-like/hair/Fringe_north.png';
+import FringeSouth from './things/colonist/human-like/hair/Fringe_south.png';
 
 // Apparel
-import ShirtBasicMaleEast from './colonist/apperal/ShirtBasic/ShirtBasic_Male_east.png';
-import ShirtBasicMaleNorth from './colonist/apperal/ShirtBasic/ShirtBasic_Male_north.png';
-import ShirtBasicMaleSouth from './colonist/apperal/ShirtBasic/ShirtBasic_Male_south.png';
+import ShirtBasicMaleEast from './things/colonist/human-like/apperal/ShirtBasic/ShirtBasic_Male_east.png';
+import ShirtBasicMaleNorth from './things/colonist/human-like/apperal/ShirtBasic/ShirtBasic_Male_north.png';
+import ShirtBasicMaleSouth from './things/colonist/human-like/apperal/ShirtBasic/ShirtBasic_Male_south.png';
 
 export class ImageAssets {
   private static instance: ImageAssets;

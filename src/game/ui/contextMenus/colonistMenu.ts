@@ -55,7 +55,7 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
   // 1. DRAFT/COMBAT - Most common action first
   items.push({
     id: 'draft',
-    label: colonist.isDrafted ? '⚔️ Undraft' : '🎯 Draft for Combat',
+    label: colonist.isDrafted ? '⚔️ Undraft' : 'Draft for Combat',
     icon: colonist.isDrafted ? '⚔️' : '🎯',
     enabled: true,
   });
@@ -64,21 +64,21 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
   if (isDowned) {
     items.push({ 
       id: 'medical_rescue', 
-      label: '🚑 Rescue to Bed', 
+      label: 'Rescue to Bed', 
       icon: '🚑', 
       enabled: true 
     });
   } else if (hasBleedingInjuries) {
     items.push({ 
       id: 'medical_bandage_all_bleeding', 
-      label: '🩸 Bandage Bleeding', 
+      label: 'Bandage Bleeding', 
       icon: '🩸', 
       enabled: true 
     });
   } else if (hasInjuries) {
     items.push({ 
       id: 'medical_treat_all', 
-      label: '🏥 Treat Injuries', 
+      label: 'Treat Injuries', 
       icon: '🏥', 
       enabled: true 
     });
@@ -86,18 +86,15 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
   
   // 3. QUICK ACTIONS - Common commands
   if (isTired) {
-    items.push({ id: 'force_rest', label: '😴 Rest Now', icon: '😴', enabled: true });
+    items.push({ id: 'force_rest', label: 'Rest Now', icon: '😴', enabled: true });
   }
   if (isHungry) {
-    items.push({ id: 'force_eat', label: '🍽️ Eat Now', icon: '🍽️', enabled: true });
+    items.push({ id: 'force_eat', label: 'Eat Now', icon: '🍽️', enabled: true });
   }
   
-  // 4. MORE OPTIONS - Group less common actions in submenus
-  const moreActions: ContextMenuItem<Colonist>[] = [];
-  
-  // Prioritize submenu (only if useful)
+  // 4. PRIORITY ACTIONS - Set work priorities (only if not downed)
   if (!isDowned) {
-    moreActions.push({
+    items.push({
       id: 'prioritize',
       label: 'Set Priority',
       icon: '⚡',
@@ -111,8 +108,8 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
     });
   }
   
-  // Go to submenu
-  moreActions.push({
+  // 5. GO TO ACTIONS - Send colonist to locations
+  items.push({
     id: 'goto',
     label: 'Send To...',
     icon: '🎯',
@@ -125,25 +122,14 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
     ],
   });
   
-  // Medical submenu (if there are multiple medical options)
+  // 6. ADDITIONAL MEDICAL - More medical options (if there are multiple)
   if (medicalItems.length > 1) {
-    moreActions.push({
+    items.push({
       id: 'medical',
       label: 'More Medical...',
       icon: '🏥',
       enabled: true,
       submenu: medicalItems,
-    });
-  }
-  
-  // Add "More" submenu if we have additional actions
-  if (moreActions.length > 0) {
-    items.push({
-      id: 'more',
-      label: 'More Actions...',
-      icon: '⋯',
-      enabled: true,
-      submenu: moreActions,
     });
   }
   
