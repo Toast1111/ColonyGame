@@ -49,16 +49,57 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
     medicalItems.push({ id: 'medical_treat', label: 'Basic Treatment', icon: '🩹', enabled: true });
   }
 
-  const items: ContextMenuItem<Colonist>[] = [
-    {
-      id: 'draft',
-      label: colonist.isDrafted ? 'Undraft' : 'Draft',
-      icon: colonist.isDrafted ? '⚔️' : '🎯',
-      enabled: true,
-    },
-    {
+  // Build a flatter, more intuitive context menu structure
+  const items: ContextMenuItem<Colonist>[] = [];
+  
+  // 1. DRAFT/COMBAT - Most common action first
+  items.push({
+    id: 'draft',
+    label: colonist.isDrafted ? '⚔️ Undraft' : '🎯 Draft for Combat',
+    icon: colonist.isDrafted ? '⚔️' : '🎯',
+    enabled: true,
+  });
+  
+  // 2. MEDICAL - Show critical medical actions at top level if needed
+  if (isDowned) {
+    items.push({ 
+      id: 'medical_rescue', 
+      label: '🚑 Rescue to Bed', 
+      icon: '🚑', 
+      enabled: true 
+    });
+  } else if (hasBleedingInjuries) {
+    items.push({ 
+      id: 'medical_bandage_all_bleeding', 
+      label: '🩸 Bandage Bleeding', 
+      icon: '🩸', 
+      enabled: true 
+    });
+  } else if (hasInjuries) {
+    items.push({ 
+      id: 'medical_treat_all', 
+      label: '🏥 Treat Injuries', 
+      icon: '🏥', 
+      enabled: true 
+    });
+  }
+  
+  // 3. QUICK ACTIONS - Common commands
+  if (isTired) {
+    items.push({ id: 'force_rest', label: '😴 Rest Now', icon: '😴', enabled: true });
+  }
+  if (isHungry) {
+    items.push({ id: 'force_eat', label: '🍽️ Eat Now', icon: '🍽️', enabled: true });
+  }
+  
+  // 4. MORE OPTIONS - Group less common actions in submenus
+  const moreActions: ContextMenuItem<Colonist>[] = [];
+  
+  // Prioritize submenu (only if useful)
+  if (!isDowned) {
+    moreActions.push({
       id: 'prioritize',
-      label: 'Prioritize',
+      label: 'Set Priority',
       icon: '⚡',
       enabled: true,
       submenu: [
@@ -66,64 +107,56 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
         { id: 'prioritize_work', label: 'Work Tasks', icon: '🔨', enabled: true },
         { id: 'prioritize_build', label: 'Construction', icon: '🏗️', enabled: true },
         { id: 'prioritize_haul', label: 'Hauling', icon: '📦', enabled: true },
-        { id: 'prioritize_research', label: 'Research', icon: '🔬', enabled: true },
-        ...((game.selColonist && game.selColonist !== colonist && (hasInjuries || isInjured))
-          ? (() => {
-              const doctor = game.selColonist;
-              const already = (doctor as any).assignedMedicalPatientId && (doctor as any).assignedMedicalPatientId === (colonist as any).id;
-              return [
-                {
-                  id: already ? 'clear_prioritize_treat' : 'prioritize_treat_patient',
-                  label: already
-                    ? `Clear Treat ${colonist.profile?.name || 'Patient'}`
-                    : `Treat ${colonist.profile?.name || 'Patient'} First`,
-                  icon: '🩺',
-                  enabled: true,
-                },
-              ];
-            })()
-          : []),
       ],
-    },
-    {
-      id: 'force',
-      label: 'Force',
-      icon: '❗',
-      enabled: true,
-      submenu: [
-        { id: 'force_rest', label: 'Rest Now', icon: '😴', enabled: isTired },
-        { id: 'force_eat', label: 'Eat Now', icon: '🍽️', enabled: isHungry },
-        { id: 'force_work', label: 'Work', icon: '⚒️', enabled: isIdle },
-        { id: 'force_guard', label: 'Guard Area', icon: '🛡️', enabled: true },
-      ],
-    },
-    {
-      id: 'goto',
-      label: 'Go To',
-      icon: '🎯',
-      enabled: true,
-      submenu: [
-        { id: 'goto_hq', label: 'HQ', icon: '🏠', enabled: true },
-        { id: 'goto_safety', label: 'Safe Room', icon: '🛡️', enabled: true },
-        { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
-        { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true },
-      ],
-    },
-    {
+    });
+  }
+  
+  // Go to submenu
+  moreActions.push({
+    id: 'goto',
+    label: 'Send To...',
+    icon: '🎯',
+    enabled: true,
+    submenu: [
+      { id: 'goto_bed', label: 'Nearest Bed', icon: '🛏️', enabled: true },
+      { id: 'goto_food', label: 'Food Storage', icon: '🥘', enabled: true },
+      { id: 'goto_hq', label: 'HQ', icon: '🏠', enabled: true },
+      { id: 'goto_safety', label: 'Safe Room', icon: '🛡️', enabled: true },
+    ],
+  });
+  
+  // Medical submenu (if there are multiple medical options)
+  if (medicalItems.length > 1) {
+    moreActions.push({
       id: 'medical',
-      label: 'Medical',
+      label: 'More Medical...',
       icon: '🏥',
-      enabled: hasInjuries || isInjured,
-      submenu: medicalItems,
-    },
-    { id: 'cancel', label: 'Cancel Current Task', icon: '❌', enabled: !!colonist.target },
-    {
-      id: 'follow',
-      label: game.follow && game.selColonist === colonist ? 'Stop Following' : 'Follow',
-      icon: '👁️',
       enabled: true,
-    },
-  ];
+      submenu: medicalItems,
+    });
+  }
+  
+  // Add "More" submenu if we have additional actions
+  if (moreActions.length > 0) {
+    items.push({
+      id: 'more',
+      label: 'More Actions...',
+      icon: '⋯',
+      enabled: true,
+      submenu: moreActions,
+    });
+  }
+  
+  // 5. UTILITY ACTIONS - Always at bottom
+  if (colonist.target) {
+    items.push({ id: 'cancel', label: '❌ Cancel Task', icon: '❌', enabled: true });
+  }
+  items.push({
+    id: 'follow',
+    label: game.follow && game.selColonist === colonist ? '👁️ Stop Following' : '👁️ Follow Camera',
+    icon: '👁️',
+    enabled: true,
+  });
 
   return {
     target: colonist,

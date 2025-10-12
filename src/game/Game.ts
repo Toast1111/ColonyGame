@@ -243,7 +243,10 @@ export class Game {
   set colonistPanelCloseRect(value) { this.uiManager.colonistPanelCloseRect = value; }
   
   get colonistProfileTab() { return this.uiManager.colonistProfileTab; }
-  set colonistProfileTab(value) { this.uiManager.colonistProfileTab = value; }
+  set colonistProfileTab(value) { 
+    this.uiManager.colonistProfileTab = value;
+    this.uiManager.lastProfileTab = value; // Remember last active tab
+  }
   
   get colonistTabRects() { return this.uiManager.colonistTabRects; }
   set colonistTabRects(value) { this.uiManager.colonistTabRects = value; }

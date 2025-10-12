@@ -49,10 +49,10 @@ export function drawContextMenu(game: any) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   ctx.save();
 
-  const itemHeight = game.scale(32);
-  const menuWidth = game.scale(220);
-  const padding = game.scale(8);
-  const iconWidth = game.scale(24);
+  const itemHeight = game.scale(36); // Slightly taller for better touch targets
+  const menuWidth = game.scale(240); // Wider for better readability
+  const padding = game.scale(10);
+  const iconWidth = game.scale(28);
 
   const visibleItems = menu.items ?? [];
   const menuHeight = visibleItems.length * itemHeight + padding * 2;
@@ -66,12 +66,20 @@ export function drawContextMenu(game: any) {
     menuY = game.canvas.height - menuHeight - game.scale(10);
   }
 
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.fillRect(menuX + 3, menuY + 3, menuWidth, menuHeight);
-  ctx.fillStyle = '#1e293b';
+  // Enhanced shadow for better depth
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(menuX + 4, menuY + 4, menuWidth, menuHeight);
+  
+  // Menu background with slight gradient
+  const gradient = ctx.createLinearGradient(menuX, menuY, menuX, menuY + menuHeight);
+  gradient.addColorStop(0, '#1e293b');
+  gradient.addColorStop(1, '#0f172a');
+  ctx.fillStyle = gradient;
   ctx.fillRect(menuX, menuY, menuWidth, menuHeight);
-  ctx.strokeStyle = '#374151';
-  ctx.lineWidth = 1;
+  
+  // Brighter border for better visibility
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 2;
   ctx.strokeRect(menuX + 0.5, menuY + 0.5, menuWidth - 1, menuHeight - 1);
 
   game.contextMenuRects = [];
@@ -91,21 +99,26 @@ export function drawContextMenu(game: any) {
 
     game.contextMenuRects.push(rect);
 
+    // Enhanced hover feedback with subtle gradient
     if (isHovered && enabled) {
-      ctx.fillStyle = '#374151';
-      ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
+      const hoverGradient = ctx.createLinearGradient(menuX, itemY, menuX + menuWidth, itemY);
+      hoverGradient.addColorStop(0, '#475569');
+      hoverGradient.addColorStop(1, '#374151');
+      ctx.fillStyle = hoverGradient;
+      ctx.fillRect(menuX + 2, itemY + 1, menuWidth - 4, itemHeight - 2);
     }
 
     const isOpen = item.submenu && menu.openSubmenu === item.id;
     if (isOpen) {
       ctx.fillStyle = '#475569';
-      ctx.fillRect(menuX + 1, itemY, menuWidth - 2, itemHeight);
+      ctx.fillRect(menuX + 2, itemY + 1, menuWidth - 4, itemHeight - 2);
     }
 
     const icon = item.icon ?? '';
 
+    // Larger, clearer icons and text
     ctx.fillStyle = enabled ? '#f1f5f9' : '#6b7280';
-    ctx.font = game.getScaledFont(16, '400');
+    ctx.font = game.getScaledFont(18, '400'); // Larger icon
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     if (icon) {
@@ -113,7 +126,7 @@ export function drawContextMenu(game: any) {
     }
 
     ctx.fillStyle = enabled ? '#f1f5f9' : '#6b7280';
-    ctx.font = game.getScaledFont(14, '400');
+    ctx.font = game.getScaledFont(15, enabled && isHovered ? '600' : '400'); // Bold on hover
     ctx.fillText(item.label, menuX + padding + (icon ? iconWidth : 0), itemY + itemHeight / 2);
 
     if (item.submenu && item.submenu.length > 0) {

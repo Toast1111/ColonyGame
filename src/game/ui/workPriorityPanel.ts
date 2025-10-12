@@ -200,7 +200,12 @@ export function drawWorkPriorityPanel(
   ctx.fillStyle = '#FFFFFF';
   ctx.font = `bold ${Math.round(headerFontSize * 1.3)}px Arial, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('Work Priorities', panelX + panelWidth / 2, panelY + headerHeight * 0.6);
+  ctx.fillText('Work Priorities', panelX + panelWidth / 2, panelY + headerHeight * 0.4);
+  
+  // Help text - explain how to use the panel
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+  ctx.font = `${Math.round(headerFontSize * 0.75)}px Arial, sans-serif`;
+  ctx.fillText('Click cells to cycle: 1 (highest) → 2 → 3 → 4 (lowest) → disabled', panelX + panelWidth / 2, panelY + headerHeight * 0.75);
   
   // Close button (scaled with panel)
   const closeSize = headerHeight * 0.6;

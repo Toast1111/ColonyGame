@@ -18,6 +18,7 @@ import { drawBuildingInventoryPanel } from '../ui/buildingInventoryPanel';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
 import { drawDebugConsole } from '../ui/debugConsole';
+import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
@@ -228,17 +229,24 @@ export class RenderManager {
       // Use the helper function which handles all the sprite rendering logic
       drawColonistAvatar(ctx, c.x, c.y, c, c.r, isSelected);
       
-      // Draft indicator - draw a shield icon above drafted colonists
+      // Draft indicator - draw a larger, more visible shield icon with label
       if (c.isDrafted) {
         ctx.save();
-        ctx.strokeStyle = '#10b981'; // green
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.3)';
-        ctx.lineWidth = 2;
         
-        // Draw shield-shaped indicator above colonist
+        // Draw green circle background
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+        ctx.beginPath();
+        ctx.arc(c.x, c.y - c.r - 16, 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw shield icon
+        ctx.strokeStyle = '#10b981'; // green
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.5)';
+        ctx.lineWidth = 2.5;
+        
         const shieldX = c.x;
-        const shieldY = c.y - c.r - 12;
-        const shieldSize = 8;
+        const shieldY = c.y - c.r - 16;
+        const shieldSize = 9;
         
         ctx.beginPath();
         ctx.moveTo(shieldX, shieldY - shieldSize);
@@ -249,6 +257,54 @@ export class RenderManager {
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
+        
+        // Add "DRAFTED" label below for clarity
+        ctx.fillStyle = '#10b981';
+        ctx.font = 'bold 10px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('DRAFTED', c.x, c.y + c.r + 4);
+        
+        ctx.restore();
+      }
+      
+      // Medical/Injury indicator - show if colonist is injured
+      const injuries = c.health?.injuries ?? [];
+      const hasInjuries = injuries.length > 0;
+      const hasBleedingInjuries = injuries.some((inj: any) => inj.bleeding > 0);
+      const isDowned = c.state === 'downed';
+      
+      if (isDowned || hasBleedingInjuries || hasInjuries) {
+        ctx.save();
+        
+        // Position indicator to the right of colonist (opposite of draft indicator)
+        const indicatorX = c.x + c.r + 14;
+        const indicatorY = c.y - c.r - 8;
+        
+        // Color based on severity
+        let color = '#f59e0b'; // amber for general injury
+        let icon = '🤕';
+        
+        if (isDowned) {
+          color = '#dc2626'; // red for downed
+          icon = '💀';
+        } else if (hasBleedingInjuries) {
+          color = '#ef4444'; // bright red for bleeding
+          icon = '🩸';
+        }
+        
+        // Draw pulsing background circle for urgency
+        const pulse = Math.sin(Date.now() / 500) * 0.3 + 0.7; // Pulse effect
+        ctx.fillStyle = `rgba(${isDowned ? '220, 38, 38' : hasBleedingInjuries ? '239, 68, 68' : '245, 158, 11'}, ${pulse * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(indicatorX, indicatorY, 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw injury indicator icon
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(icon, indicatorX, indicatorY);
         
         ctx.restore();
       }
@@ -778,6 +834,11 @@ export class RenderManager {
     if (game.contextMenu) {
       drawContextMenuUI(game);
     }
+    
+    // Colonist hover tooltip - show info when mouse hovers over colonist (only if no menu open)
+    if (!game.contextMenu && !game.showBuildMenu && !game.selColonist) {
+      this.drawColonistHoverTooltip(game, ctx, canvas);
+    }
 
     // Work priority panel (modal overlay - renders on top of everything)
     drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
@@ -787,6 +848,88 @@ export class RenderManager {
     
     // Performance HUD (top layer - always visible when enabled)
     drawPerformanceHUD(game);
+  }
+
+  /**
+   * Draw colonist hover tooltip - shows info when mouse is over a colonist
+   */
+  private drawColonistHoverTooltip(game: Game, ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement): void {
+    const mx = game.mouse.x * game.DPR;
+    const my = game.mouse.y * game.DPR;
+    
+    // Convert screen coordinates to world coordinates
+    const worldX = (mx - canvas.width / 2) / game.camera.zoom + game.camera.x;
+    const worldY = (my - canvas.height / 2) / game.camera.zoom + game.camera.y;
+    
+    // Find colonist under mouse
+    let hoveredColonist = null;
+    for (const c of game.colonists) {
+      if (!c.alive) continue;
+      const hiddenInside = c.inside && (c.inside as any).kind !== 'bed';
+      if (hiddenInside) continue;
+      
+      // Check if mouse is within colonist's circle (use larger radius for easier hover)
+      if (isPointInCircle(worldX, worldY, c.x, c.y, c.r + 8)) {
+        hoveredColonist = c;
+        break;
+      }
+    }
+    
+    if (hoveredColonist) {
+      const c = hoveredColonist;
+      const tooltipLines: string[] = [];
+      
+      // Name
+      tooltipLines.push(`👤 ${c.profile?.name || 'Colonist'}`);
+      
+      // Status
+      if (c.state === 'downed') {
+        tooltipLines.push('💀 DOWNED - needs rescue!');
+      } else if (c.isDrafted) {
+        tooltipLines.push('⚔️ Drafted for combat');
+      } else {
+        tooltipLines.push(`📋 ${c.task || 'idle'}`);
+      }
+      
+      // Health
+      const healthPercent = Math.round((c.hp / 100) * 100);
+      const healthIcon = healthPercent > 75 ? '💚' : healthPercent > 50 ? '💛' : healthPercent > 25 ? '🧡' : '❤️';
+      tooltipLines.push(`${healthIcon} Health: ${healthPercent}%`);
+      
+      // Injuries
+      const injuries = c.health?.injuries ?? [];
+      if (injuries.length > 0) {
+        const bleeding = injuries.some((inj: any) => inj.bleeding > 0);
+        if (bleeding) {
+          tooltipLines.push('🩸 Bleeding - needs bandages!');
+        } else {
+          tooltipLines.push(`🤕 ${injuries.length} injur${injuries.length > 1 ? 'ies' : 'y'}`);
+        }
+      }
+      
+      // Needs
+      if (c.hunger && c.hunger > 70) {
+        tooltipLines.push('🍽️ Very hungry');
+      } else if (c.hunger && c.hunger > 50) {
+        tooltipLines.push('🍞 Hungry');
+      }
+      
+      if (c.fatigue && c.fatigue > 70) {
+        tooltipLines.push('😴 Exhausted');
+      } else if (c.fatigue && c.fatigue > 50) {
+        tooltipLines.push('💤 Tired');
+      }
+      
+      // Tip
+      tooltipLines.push('');
+      tooltipLines.push('💡 Click to select, Right-click for menu');
+      
+      drawTooltip(ctx, tooltipLines, mx, my, {
+        maxWidth: 280,
+        padding: 10,
+        fontSize: 13
+      });
+    }
   }
 
   /**
