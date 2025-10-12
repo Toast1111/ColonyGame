@@ -21,6 +21,12 @@ import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
+// Modern UI components
+import { drawModernHUD, updateHUDAnimations } from '../ui/modernHUD';
+import { drawRadialBuildMenu, updateRadialMenuAnimation, isRadialMenuVisible } from '../ui/radialBuildMenu';
+import { drawToasts, updateToasts } from '../ui/toastSystem';
+import { drawMiniMap, isMiniMapVisible } from '../ui/miniMap';
+import { drawContextualPanel } from '../ui/contextualPanel';
 
 export class RenderManager {
   // Performance optimization flags
@@ -30,6 +36,15 @@ export class RenderManager {
   public useParticleSprites = true;  // Toggle particle sprite caching
 
   constructor(private game: Game) {}
+  
+  /**
+   * Update UI animations (called each frame)
+   */
+  public updateUIAnimations(deltaTime: number): void {
+    updateHUDAnimations(deltaTime);
+    updateRadialMenuAnimation(deltaTime);
+    updateToasts(deltaTime);
+  }
 
   /**
    * Toggle world background caching
@@ -781,6 +796,23 @@ export class RenderManager {
     const { game } = this;
     const { ctx, canvas } = game;
 
+    // Check if modern UI mode is enabled (use new UI system)
+    const useModernUI = (game as any).useModernUI !== false; // Default to true
+    
+    if (useModernUI) {
+      this.renderModernUI();
+    } else {
+      this.renderClassicUI();
+    }
+  }
+  
+  /**
+   * Render Classic UI (original system)
+   */
+  private renderClassicUI(): void {
+    const { game } = this;
+    const { ctx, canvas } = game;
+
     // Gather UI data
     const cap = game.getPopulationCap();
     const hiding = game.colonists.filter(c => c.inside && c.inside.kind !== 'bed').length;
@@ -838,6 +870,71 @@ export class RenderManager {
     drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
     
     // Building inventory panel (modal overlay - renders on top of everything except work priority)
+    drawBuildingInventoryPanel(ctx, canvas.width, canvas.height);
+    
+    // Performance HUD (top layer - always visible when enabled)
+    drawPerformanceHUD(game);
+  }
+  
+  /**
+   * Render Modern UI (new system)
+   */
+  private renderModernUI(): void {
+    const { game } = this;
+    const { ctx, canvas } = game;
+    
+    // Gather UI data
+    const cap = game.getPopulationCap();
+    const hiding = game.colonists.filter(c => c.inside && c.inside.kind !== 'bed').length;
+    const storageUsed = game.RES.wood + game.RES.stone + game.RES.food + (game.RES.wheat || 0) + (game.RES.bread || 0);
+    const storageMax = game.getStorageCapacity();
+    
+    // Modern HUD - compact, minimalist design
+    drawModernHUD(ctx, canvas, {
+      resources: game.RES,
+      colonists: game.colonists.filter(c => c.alive).length,
+      cap,
+      hiding,
+      day: game.day,
+      timeOfDay: game.tDay,
+      isNight: game.isNight(),
+      storage: { used: storageUsed, max: storageMax }
+    }, game);
+    
+    // Mini-map in corner
+    if (isMiniMapVisible()) {
+      drawMiniMap(ctx, canvas, game.colonists, game.buildings, game.enemies, game.camera, game);
+    }
+    
+    // Radial build menu (if visible)
+    if (isRadialMenuVisible()) {
+      drawRadialBuildMenu(game);
+    }
+    
+    // Contextual action panel (appears when colonist/building selected)
+    if (!isRadialMenuVisible()) {
+      drawContextualPanel(ctx, canvas, game.selColonist, null, game);
+    }
+    
+    // Toast notifications (slide in from right)
+    drawToasts(ctx, canvas, game);
+    
+    // Colonist profile panel (keep this for detailed info)
+    if (game.selColonist && !isRadialMenuVisible()) {
+      drawColonistProfileUI(game, game.selColonist);
+    } else {
+      game.colonistPanelRect = game.colonistPanelCloseRect = null;
+    }
+    
+    // Placement UI (when placing buildings)
+    if (game.pendingPlacement) {
+      drawPlacementUIUI(game);
+    }
+    
+    // Work priority panel (modal overlay - renders on top of everything)
+    drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
+    
+    // Building inventory panel (modal overlay)
     drawBuildingInventoryPanel(ctx, canvas.width, canvas.height);
     
     // Performance HUD (top layer - always visible when enabled)

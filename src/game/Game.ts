@@ -199,6 +199,9 @@ export class Game {
   get follow() { return this.uiManager.follow; }
   set follow(value) { this.uiManager.follow = value; }
   
+  // Modern UI system toggle (defaults to true for new UI)
+  useModernUI = true;
+  
   get pendingPlacement() { return this.uiManager.pendingPlacement; }
   set pendingPlacement(value) { this.uiManager.pendingPlacement = value; }
   
@@ -649,6 +652,17 @@ export class Game {
       const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
       this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
       
+      // Modern UI hover effects (when modern UI is enabled)
+      if (this.useModernUI) {
+        const mx = this.mouse.x * this.DPR;
+        const my = this.mouse.y * this.DPR;
+        
+        // Update radial menu hover state
+        import('./ui/radialBuildMenu').then(({ updateRadialMenuHover }) => {
+          updateRadialMenuHover(mx, my, this);
+        });
+      }
+      
       // PRIORITY PANEL IS MODAL - Block world interactions when open, but allow hover for tooltips
       if (isWorkPriorityPanelOpen()) {
         handleWorkPriorityPanelHover(this.mouse.x * this.DPR, this.mouse.y * this.DPR, this.colonists, this.canvas.width, this.canvas.height);
@@ -692,6 +706,40 @@ export class Game {
         }
         // If panel is open but click wasn't handled, still block everything else
         return;
+      }
+      
+      // Modern UI handlers (when modern UI is enabled)
+      if (this.useModernUI) {
+        const mx = e.offsetX * this.DPR;
+        const my = e.offsetY * this.DPR;
+        
+        // Check radial build menu
+        import('./ui/radialBuildMenu').then(({ isRadialMenuVisible, handleRadialMenuClick }) => {
+          if (isRadialMenuVisible() && handleRadialMenuClick(mx, my, this)) {
+            return;
+          }
+        });
+        
+        // Check contextual action panel
+        import('./ui/contextualPanel').then(({ handleContextualPanelClick }) => {
+          if (handleContextualPanelClick(mx, my, this.canvas, this.selColonist, null, this)) {
+            return;
+          }
+        });
+        
+        // Check mini-map
+        import('./ui/miniMap').then(({ handleMiniMapClick }) => {
+          if (handleMiniMapClick(mx, my, this.camera, this)) {
+            return;
+          }
+        });
+        
+        // Check toast dismissal
+        import('./ui/toastSystem').then(({ handleToastClick }) => {
+          if (handleToastClick(mx, my, this.canvas, this)) {
+            return;
+          }
+        });
       }
       
       if ((e as MouseEvent).button === 0) {
@@ -1274,6 +1322,14 @@ export class Game {
     const el = document.getElementById('toast') as HTMLDivElement | null; if (!el) return;
     el.textContent = msg; el.style.opacity = '1';
     clearTimeout((el as any)._t); (el as any)._t = setTimeout(() => el.style.opacity = '0', ms);
+  }
+  
+  // Modern UI toast - integration with new toast system
+  showToast(message: string, type: 'info' | 'success' | 'warning' | 'error' = 'info', duration = 3000) {
+    // Dynamic import to avoid circular dependencies
+    import('./ui/toastSystem').then(({ showToast }) => {
+      showToast(message, type, duration);
+    });
   }
 
   // World setup
@@ -2025,8 +2081,26 @@ export class Game {
     // Handle toggles even when paused
     if (!consoleOpen && this.keyPressed(' ')) { this.paused = !this.paused; const btn = document.getElementById('btnPause'); if (btn) btn.textContent = this.paused ? 'Resume' : 'Pause'; }
     if (!consoleOpen && this.keyPressed('h')) { const help = document.getElementById('help'); if (help) help.hidden = !help.hidden; }
-  if (!consoleOpen && this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
-  if (!consoleOpen && this.keyPressed('p')) { toggleWorkPriorityPanel(); this.toast(isWorkPriorityPanelOpen() ? 'Work Priorities Panel opened' : 'Work Priorities Panel closed'); }
+    
+    // Build menu - use radial menu in modern UI mode, classic menu otherwise
+    if (!consoleOpen && this.keyPressed('b')) { 
+      if (this.useModernUI) {
+        // Toggle radial build menu at screen center
+        import('./ui/radialBuildMenu').then(({ isRadialMenuVisible, openRadialBuildMenu, closeRadialBuildMenu }) => {
+          if (isRadialMenuVisible()) {
+            closeRadialBuildMenu();
+          } else {
+            const centerX = this.canvas.width / 2;
+            const centerY = this.canvas.height / 2;
+            openRadialBuildMenu(centerX, centerY);
+          }
+        });
+      } else {
+        this.showBuildMenu = !this.showBuildMenu;
+      }
+    }
+    
+    if (!consoleOpen && this.keyPressed('p')) { toggleWorkPriorityPanel(); this.toast(isWorkPriorityPanelOpen() ? 'Work Priorities Panel opened' : 'Work Priorities Panel closed'); }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
     if (!consoleOpen && this.keyPressed('t')) { this.debug.terrain = !this.debug.terrain; this.toast(this.debug.terrain ? 'Debug: terrain ON' : 'Debug: terrain OFF'); }
@@ -2052,6 +2126,12 @@ export class Game {
     if (!consoleOpen && this.keyPressed('3')) {
       this.renderManager.toggleParticleCache(!this.renderManager.useParticleSprites);
       this.toast(this.renderManager.useParticleSprites ? 'Particle Sprites: ON (optimized)' : 'Particle Sprites: OFF (legacy)');
+    }
+    
+    // Modern UI toggle (key 'U' for UI)
+    if (!consoleOpen && this.keyPressed('u')) {
+      this.useModernUI = !this.useModernUI;
+      this.toast(this.useModernUI ? 'Modern UI: ON ✨' : 'Modern UI: OFF (Classic)');
     }
     
   if (!consoleOpen && this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
@@ -2242,6 +2322,13 @@ export class Game {
   draw() {
     // Mark dirty regions for all moving/changing entities before rendering
     this.markDirtyRegions();
+    
+    // Update UI animations (only if modern UI is enabled)
+    if (this.useModernUI) {
+      const dt = 1 / 60; // Approximate frame time
+      this.renderManager.updateUIAnimations(dt);
+    }
+    
     this.renderManager.render();
   }
   
