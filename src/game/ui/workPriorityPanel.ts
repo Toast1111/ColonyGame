@@ -36,24 +36,28 @@ interface PanelLayout {
 /**
  * Calculate fully responsive panel layout based on canvas dimensions
  * Uses percentages and ratios, NOT fixed pixel values
+ * Panel positioned in bottom-left corner above hotbar (like build menu)
  */
 function calculatePanelLayout(canvasWidth: number, canvasHeight: number, colonistCount: number): PanelLayout {
-  // Panel takes up 90% of screen width and 85% of height (responsive)
-  const panelWidth = canvasWidth * 0.9;
-  const panelHeight = canvasHeight * 0.85;
+  const hotbarHeight = canvasHeight * 0.06; // Hotbar is 6% of screen
   
-  // Center the panel
-  const panelX = (canvasWidth - panelWidth) / 2;
-  const panelY = (canvasHeight - panelHeight) / 2;
+  // Panel is thinner - just enough for the table
+  const panelWidth = canvasWidth * 0.70; // 70% of screen width (narrower)
+  const panelHeight = canvasHeight * 0.35; // 35% of screen height (much thinner!)
   
-  // Calculate padding as 2% of panel width
-  const padding = panelWidth * 0.02;
+  // Position in bottom-left, above hotbar with proper gap to prevent overlap
+  const gap = canvasHeight * 0.02; // 2% gap above hotbar (larger to prevent overlap)
+  const panelX = canvasWidth * 0.02; // 2% from left edge
+  const panelY = canvasHeight - hotbarHeight - panelHeight - gap;
   
-  // Header is 8% of panel height
-  const headerHeight = panelHeight * 0.08;
+  // Calculate padding as 1.5% of panel width (tighter)
+  const padding = panelWidth * 0.015;
   
-  // Footer is 6% of panel height
-  const footerHeight = panelHeight * 0.06;
+  // Header is smaller - 10% of panel height
+  const headerHeight = panelHeight * 0.10;
+  
+  // Footer is 5% of panel height
+  const footerHeight = panelHeight * 0.05;
   
   // Name column is 15% of panel width
   const nameColumnWidth = panelWidth * 0.15;
@@ -73,8 +77,8 @@ function calculatePanelLayout(canvasWidth: number, canvasHeight: number, colonis
   const cellHeight = Math.max(availableHeight / rowCount, panelHeight * 0.04); // Min 4% of panel height
   
   // Font sizes scale with panel size
-  const fontSize = Math.max(10, panelWidth * 0.012); // 1.2% of panel width
-  const headerFontSize = Math.max(12, panelWidth * 0.015); // 1.5% of panel width
+  const fontSize = Math.max(10, panelWidth * 0.011); // Slightly smaller
+  const headerFontSize = Math.max(12, panelWidth * 0.014); // Slightly smaller
   
   return {
     panelX,
@@ -162,9 +166,6 @@ export function drawWorkPriorityPanel(
   // Save canvas state to ensure clean rendering on top of everything
   ctx.save();
   
-  // Reset any transforms or clipping regions from previous draws
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  
   const aliveColonists = colonists.filter(c => c.alive);
   
   // Calculate responsive layout (NO hardcoded pixels!)
@@ -172,66 +173,29 @@ export function drawWorkPriorityPanel(
   const { panelX, panelY, panelWidth, panelHeight, cellWidth, cellHeight, 
           headerHeight, nameColumnWidth, padding, fontSize, headerFontSize, footerHeight } = layout;
   
-  // Semi-transparent backdrop
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-  
-  // Panel background with gradient
-  const gradient = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelHeight);
-  gradient.addColorStop(0, '#2a2a2a');
-  gradient.addColorStop(1, '#1a1a1a');
-  ctx.fillStyle = gradient;
+  // Panel background (no fullscreen backdrop - matches build menu style)
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.96)'; // Dark, almost opaque
   ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
   
-  // Panel border with subtle highlight (shadowBlur is extremely expensive, avoid it)
-  // Instead use a double stroke for depth
-  ctx.strokeStyle = 'rgba(100, 150, 200, 0.5)';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
-  ctx.strokeStyle = '#4a6fa5';
+  // Panel border
+  ctx.strokeStyle = 'rgba(30, 41, 59, 0.8)';
   ctx.lineWidth = 2;
   ctx.strokeRect(panelX, panelY, panelWidth, panelHeight);
   
   // Title bar background
-  ctx.fillStyle = '#1e3a5f';
+  ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
   ctx.fillRect(panelX, panelY, panelWidth, headerHeight);
   
-  // Title (scaled font)
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = `bold ${Math.round(headerFontSize * 1.3)}px Arial, sans-serif`;
+  // Title (scaled font) - using modern styling
+  ctx.fillStyle = 'rgba(148, 163, 184, 1)';
+  ctx.font = `${Math.round(headerHeight * 0.35)}px system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'center';
-  ctx.fillText('Work Priorities', panelX + panelWidth / 2, panelY + headerHeight * 0.4);
+  ctx.textBaseline = 'middle';
+  ctx.fillText('Work Priorities', panelX + panelWidth / 2, panelY + headerHeight / 2);
   
-  // Help text - explain how to use the panel
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.font = `${Math.round(headerFontSize * 0.75)}px Arial, sans-serif`;
-  ctx.fillText('Click cells to cycle: 1 (highest) → 2 → 3 → 4 (lowest) → disabled', panelX + panelWidth / 2, panelY + headerHeight * 0.75);
+  // Help text removed - keeping it simple like build menu
   
-  // Close button (scaled with panel)
-  const closeSize = headerHeight * 0.6;
-  const closeX = panelX + panelWidth - closeSize - padding;
-  const closeY = panelY + (headerHeight - closeSize) / 2;
-  
-  // Close button background
-  ctx.fillStyle = '#d32f2f';
-  ctx.beginPath();
-  ctx.roundRect(closeX, closeY, closeSize, closeSize, closeSize * 0.15);
-  ctx.fill();
-  
-  // Close button border
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  
-  // Close button X
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = Math.max(2, closeSize * 0.08);
-  ctx.beginPath();
-  ctx.moveTo(closeX + closeSize * 0.25, closeY + closeSize * 0.25);
-  ctx.lineTo(closeX + closeSize * 0.75, closeY + closeSize * 0.75);
-  ctx.moveTo(closeX + closeSize * 0.75, closeY + closeSize * 0.25);
-  ctx.lineTo(closeX + closeSize * 0.25, closeY + closeSize * 0.75);
-  ctx.stroke();
+  // Close button removed - can close by clicking tab or ESC
   
   // Table area
   const tableX = panelX + padding;
@@ -505,11 +469,26 @@ export function handleWorkPriorityPanelClick(
 /**
  * Handle mouse wheel for scrolling
  */
-export function handleWorkPriorityPanelScroll(deltaY: number): void {
+export function handleWorkPriorityPanelScroll(
+  deltaY: number,
+  colonists: Colonist[],
+  canvasWidth: number,
+  canvasHeight: number
+): void {
   if (!isPanelOpen) return;
   
-  panelScrollY += deltaY * 0.5;
-  panelScrollY = Math.max(0, panelScrollY);
+  const aliveColonists = colonists.filter(c => c.alive);
+  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const { cellHeight, panelHeight, headerHeight, padding, footerHeight } = layout;
+  
+  const tableHeight = panelHeight - headerHeight - padding * 2 - footerHeight;
+  const maxScrollY = Math.max(0, (aliveColonists.length + 1) * cellHeight - tableHeight);
+  
+  // Only scroll if there's actually content to scroll
+  if (maxScrollY > 0) {
+    panelScrollY += deltaY * 0.5;
+    panelScrollY = Math.max(0, Math.min(maxScrollY, panelScrollY));
+  }
 }
 
 /**
@@ -553,4 +532,26 @@ export function handleWorkPriorityPanelHover(
   
   // Not hovering over a header
   tooltipWorkType = null;
+}
+
+/**
+ * Check if mouse is hovering over the work priority panel
+ */
+export function isMouseOverWorkPanel(
+  mouseX: number,
+  mouseY: number,
+  colonists: Colonist[],
+  canvasWidth: number,
+  canvasHeight: number
+): boolean {
+  if (!isPanelOpen) return false;
+  
+  const aliveColonists = colonists.filter(c => c.alive);
+  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const { panelX, panelY, panelWidth, panelHeight } = layout;
+  
+  return mouseX >= panelX && 
+         mouseX <= panelX + panelWidth && 
+         mouseY >= panelY && 
+         mouseY <= panelY + panelHeight;
 }

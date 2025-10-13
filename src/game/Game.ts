@@ -10,6 +10,8 @@ import { drawTerrainDebug } from "./terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
+import { handleHotbarClick } from "./ui/hud/modernHotbar";
+import { handleBuildMenuClick as handleModernBuildMenuClick } from "./ui/hud/modernBuildMenu";
 import { drawColonistProfile as drawColonistProfileUI } from "./ui/colonistProfile";
 import { drawContextMenu as drawContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
 import { showColonistContextMenu } from "./ui/contextMenus/colonistMenu";
@@ -27,7 +29,7 @@ import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
-import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/workPriorityPanel';
+import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen, isMouseOverWorkPanel } from './ui/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
 import { getInventoryItemCount } from './systems/buildingInventory';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
@@ -756,13 +758,33 @@ export class Game {
           p.x = clamp(gx, 0, WORLD.w - w); p.y = clamp(gy, 0, WORLD.h - h);
           return;
         }
-        // Detect hotbar click before anything else
+        // Detect modern hotbar tab click first
         const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-        for (const r of this.hotbarRects) {
-          if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-            const key = this.hotbar[r.index];
-            if (key) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); }
-            return;
+        const modernHotbarRects = (this as any).modernHotbarRects || [];
+        const clickedTab = handleHotbarClick(mx, my, modernHotbarRects);
+        if (clickedTab) {
+          // Toggle tab or switch to new tab
+          this.uiManager.setHotbarTab(clickedTab);
+          return;
+        }
+        
+        // Check for modern build menu clicks
+        if (this.uiManager.activeHotbarTab === 'build') {
+          const buildMenuRects = (this as any).modernBuildMenuRects;
+          if (buildMenuRects) {
+            const clickResult = handleModernBuildMenuClick(mx, my, buildMenuRects);
+            if (clickResult) {
+              if (clickResult.type === 'category') {
+                // Category clicked - select it
+                this.uiManager.setSelectedBuildCategory(clickResult.value);
+              } else if (clickResult.type === 'building') {
+                // Building clicked - select it and close menus
+                this.selectedBuild = clickResult.value;
+                this.uiManager.setHotbarTab(null); // Close the build menu
+                this.toast('Selected: ' + BUILD_TYPES[clickResult.value].name);
+              }
+              return;
+            }
           }
         }
         
@@ -883,17 +905,19 @@ export class Game {
     c.addEventListener('wheel', (e) => {
       e.preventDefault();
       
-      // PRIORITY PANEL IS MODAL - Use wheel for scrolling panel when open
-      if (isWorkPriorityPanelOpen()) {
-        handleWorkPriorityPanelScroll(e.deltaY);
-        return;
-      }
-      
-      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-      // Zoom around cursor position
+      // Get mouse position for hover detection
       const rect = c.getBoundingClientRect();
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
+      
+      // If work priority panel is open and mouse is over it, scroll the panel (and prevent zoom)
+      if (isWorkPriorityPanelOpen() && isMouseOverWorkPanel(cx, cy, this.colonists, c.width, c.height)) {
+        handleWorkPriorityPanelScroll(e.deltaY, this.colonists, c.width, c.height);
+        return; // Don't zoom when scrolling the panel
+      }
+      
+      // Otherwise, zoom around cursor position
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
       const worldBefore = this.screenToWorld(cx, cy);
       const newZoom = Math.max(0.6, Math.min(2.2, this.camera.zoom * zoomFactor));
       this.camera.zoom = newZoom;
@@ -2021,26 +2045,19 @@ export class Game {
     const dc = (this as any).debugConsole;
     const consoleOpen = !!(dc && dc.open);
     
-    // PRIORITY PANEL IS MODAL - Only allow 'P' and 'Escape' to close it
-    const priorityPanelOpen = isWorkPriorityPanelOpen();
-    if (priorityPanelOpen) {
-      if (!consoleOpen && this.keyPressed('p')) { 
-        toggleWorkPriorityPanel(); 
-        this.toast('Work Priorities Panel closed'); 
-      }
-      if (!consoleOpen && this.keyPressed('escape')) { 
-        toggleWorkPriorityPanel(); 
-        this.toast('Work Priorities Panel closed'); 
-      }
-      // Block ALL other inputs when panel is open
-      return;
-    }
+    // Note: Work priority panel is now non-modal (like build menu), so it doesn't block input
     
     // Handle toggles even when paused
     if (!consoleOpen && this.keyPressed(' ')) { this.paused = !this.paused; const btn = document.getElementById('btnPause'); if (btn) btn.textContent = this.paused ? 'Resume' : 'Pause'; }
     if (!consoleOpen && this.keyPressed('h')) { const help = document.getElementById('help'); if (help) help.hidden = !help.hidden; }
-  if (!consoleOpen && this.keyPressed('b')) { this.showBuildMenu = !this.showBuildMenu; }
-  if (!consoleOpen && this.keyPressed('p')) { toggleWorkPriorityPanel(); this.toast(isWorkPriorityPanelOpen() ? 'Work Priorities Panel opened' : 'Work Priorities Panel closed'); }
+  if (!consoleOpen && this.keyPressed('b')) { 
+    // Toggle build tab
+    this.uiManager.setHotbarTab(this.uiManager.activeHotbarTab === 'build' ? null : 'build');
+  }
+  if (!consoleOpen && this.keyPressed('p')) { 
+    // Toggle work tab - this will automatically sync with the work priority panel
+    this.uiManager.setHotbarTab(this.uiManager.activeHotbarTab === 'work' ? null : 'work');
+  }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
     if (!consoleOpen && this.keyPressed('t')) { this.debug.terrain = !this.debug.terrain; this.toast(this.debug.terrain ? 'Debug: terrain ON' : 'Debug: terrain OFF'); }
@@ -2068,7 +2085,18 @@ export class Game {
       this.toast(this.renderManager.useParticleSprites ? 'Particle Sprites: ON (optimized)' : 'Particle Sprites: OFF (legacy)');
     }
     
-  if (!consoleOpen && this.keyPressed('escape')) { if (this.showBuildMenu) this.showBuildMenu = false; else { this.selectedBuild = null; this.toast('Build canceled'); this.selColonist = null; this.follow = false; } }
+  if (!consoleOpen && this.keyPressed('escape')) { 
+    // Close any open tabs/menus
+    if (this.uiManager.activeHotbarTab) {
+      this.uiManager.setHotbarTab(null); // This will also close the work priority panel if open
+    } else if (this.selectedBuild) {
+      this.selectedBuild = null; 
+      this.toast('Build canceled');
+    } else {
+      this.selColonist = null; 
+      this.follow = false;
+    }
+  }
     if (!consoleOpen && this.keyPressed('f')) { this.fastForward = (this.fastForward === 1 ? 6 : 1); this.toast(this.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF'); }
     
     // Camera movement (works even when paused)
@@ -2081,7 +2109,7 @@ export class Game {
     if (this.keyState['-'] || this.keyState['_']) this.camera.zoom = Math.max(0.6, Math.min(2.2, this.camera.zoom / 1.02));
     
     if (this.paused) return;
-    for (const [i, key] of this.hotbar.entries()) { if (this.keyPressed(String(i + 1))) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); } }
+    
     // camera follow selected colonist
     if (this.follow && this.selColonist) {
       const c = this.selColonist; const vw = this.canvas.width / this.camera.zoom; const vh = this.canvas.height / this.camera.zoom;

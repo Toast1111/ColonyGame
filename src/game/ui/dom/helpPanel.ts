@@ -29,8 +29,8 @@ export class HelpPanel {
       
       <div style="margin-top: 12px;"><b>🎮 Controls:</b></div>
       <div style="margin-left: 16px;">
-        • <b>B</b> - Build menu | <b>P</b> - Work priorities | <b>H</b> - Help (this panel)<br>
-        • <b>1-9</b> - Quick-build hotbar | <b>ESC</b> - Cancel action<br>
+        • <b>B</b> - Build tab | <b>P</b> - Work tab | <b>H</b> - Help (this panel)<br>
+        • <b>ESC</b> - Close menus/Cancel action<br>
         • <b>Space</b> - Pause/Resume | <b>F</b> - Fast forward<br>
         • <b>WASD</b> - Pan camera | <b>+/-</b> - Zoom<br>
         • <b>LMB</b> - Select/Place | <b>RMB</b> - Context menu/Cancel<br>

@@ -14,6 +14,8 @@ import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
 import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
 import { drawWorkPriorityPanel } from '../ui/workPriorityPanel';
 import { drawBuildingInventoryPanel } from '../ui/buildingInventoryPanel';
+import { drawModernHotbar, type HotbarTabRect } from '../ui/hud/modernHotbar';
+import { drawModernBuildMenu, type BuildMenuRects } from '../ui/hud/modernBuildMenu';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
 import { drawDebugConsole } from '../ui/debugConsole';
@@ -786,15 +788,9 @@ export class RenderManager {
     const hiding = game.colonists.filter(c => c.inside && c.inside.kind !== 'bed').length;
     const storageUsed = game.RES.wood + game.RES.stone + game.RES.food;
     const storageMax = game.getStorageCapacity();
-    const hotbar = game.hotbar.map(k => ({
-      key: String(k),
-      name: BUILD_TYPES[k].name,
-      cost: game.costText(BUILD_TYPES[k].cost || {}),
-      selected: game.selectedBuild === k
-    }));
 
-    // Main HUD
-    const hotbarRects = drawHUD(ctx, canvas, {
+    // Main HUD (top bar with resources, day, etc.)
+    drawHUD(ctx, canvas, {
       res: game.RES,
       colonists: game.colonists.filter(c => c.alive).length,
       cap,
@@ -802,24 +798,32 @@ export class RenderManager {
       day: game.day,
       tDay: game.tDay,
       isNight: game.isNight(),
-      hotbar,
+      hotbar: [], // No longer needed - using new hotbar
       messages: game.messages,
       storage: { used: storageUsed, max: storageMax }
     }, game);
+
+    // Modern Hotbar (replaces old building selection hotbar)
+    const hotbarRects = drawModernHotbar(ctx, canvas, game.uiManager.activeHotbarTab, game);
     
-    // Store hotbar click regions
-    game.hotbarRects = hotbarRects;
+    // Store hotbar click regions for the new system
+    (game as any).modernHotbarRects = hotbarRects;
+
+    // Show panel based on active tab
+    if (game.uiManager.activeHotbarTab === 'build') {
+      // Build menu - two-panel category system
+      const buildMenuRects = drawModernBuildMenu(ctx, canvas, game.uiManager.selectedBuildCategory, game);
+      (game as any).modernBuildMenuRects = buildMenuRects;
+    } else if (game.uiManager.activeHotbarTab === 'work') {
+      // Work priority panel - modal overlay, no container needed
+      drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
+    }
 
     // Colonist profile panel
     if (game.selColonist) {
       drawColonistProfileUI(game, game.selColonist);
     } else {
       game.colonistPanelRect = game.colonistPanelCloseRect = null;
-    }
-
-    // Build menu
-    if (game.showBuildMenu) {
-      drawBuildMenuUI(game);
     }
 
     // Placement UI
@@ -833,18 +837,18 @@ export class RenderManager {
     }
     
     // Colonist hover tooltip - show info when mouse hovers over colonist (only if no menu open)
-    if (!game.contextMenu && !game.showBuildMenu && !game.selColonist) {
+    if (!game.contextMenu && !game.uiManager.activeHotbarTab && !game.selColonist) {
       this.drawColonistHoverTooltip(game, ctx, canvas);
     }
-
-    // Work priority panel (modal overlay - renders on top of everything)
-    drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
     
     // Building inventory panel (modal overlay - renders on top of everything except work priority)
     drawBuildingInventoryPanel(ctx, canvas.width, canvas.height);
     
     // Performance HUD (top layer - always visible when enabled)
     drawPerformanceHUD(game);
+    
+    // Debug console (always on top)
+    drawDebugConsole(game);
   }
 
   /**

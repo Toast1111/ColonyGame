@@ -13,8 +13,14 @@
 import type { Colonist, Building } from '../types';
 import type { BUILD_TYPES } from '../buildings';
 import type { ContextMenuDescriptor, ContextMenuItem } from '../ui/contextMenus/types';
+import type { HotbarTab } from '../ui/hud/modernHotbar';
+import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/workPriorityPanel';
 
 export class UIManager {
+  // Modern hotbar system
+  activeHotbarTab: HotbarTab | null = null; // Which tab is active (null = none)
+  selectedBuildCategory: string | null = null; // Selected category in build menu
+  
   // Building selection
   selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
   hotbar: Array<keyof typeof BUILD_TYPES> = [
@@ -247,9 +253,47 @@ export class UIManager {
   }
   
   /**
+   * Set active hotbar tab
+   */
+  setHotbarTab(tab: HotbarTab | null): void {
+    // If clicking the same tab, toggle it off
+    if (this.activeHotbarTab === tab) {
+      this.activeHotbarTab = null;
+      this.selectedBuildCategory = null;
+      
+      // Close work priority panel if we're closing work tab
+      if (tab === 'work') {
+        closeWorkPriorityPanel();
+      }
+    } else {
+      this.activeHotbarTab = tab;
+      // Reset category selection when changing tabs
+      if (tab !== 'build') {
+        this.selectedBuildCategory = null;
+      }
+      
+      // Open work priority panel if we're opening work tab
+      if (tab === 'work') {
+        if (!isWorkPriorityPanelOpen()) {
+          toggleWorkPriorityPanel();
+        }
+      }
+    }
+  }
+  
+  /**
+   * Set selected build category
+   */
+  setSelectedBuildCategory(category: string | null): void {
+    this.selectedBuildCategory = category;
+  }
+  
+  /**
    * Reset all UI state
    */
   reset(): void {
+    this.activeHotbarTab = null;
+    this.selectedBuildCategory = null;
     this.selectedBuild = 'house';
     this.showBuildMenu = false;
     this.selColonist = null;
