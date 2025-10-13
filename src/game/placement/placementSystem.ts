@@ -143,10 +143,14 @@ export function confirmPending(game: Game) {
   const valid = canPlace(game, b as any, b.x, b.y) && hasCost(game.RES, def.cost);
   if (!valid) { game.toast("Can't place here"); return; }
   game.pendingPlacement = null;
+  game.placeUIRects = []; // Clean up placement UI
   tryPlaceNow(game, key, x + 1, y + 1, rot);
 }
 
-export function cancelPending(game: Game) { game.pendingPlacement = null; }
+export function cancelPending(game: Game) { 
+  game.pendingPlacement = null; 
+  game.placeUIRects = []; // Clean up placement UI
+}
 
 export function paintPathAtMouse(game: Game, force = false) {
   const gx = Math.floor(game.mouse.wx / T); 

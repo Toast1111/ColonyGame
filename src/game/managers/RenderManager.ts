@@ -11,6 +11,7 @@ import { drawParticles, toggleParticleSprites } from '../../core/particles/parti
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/colonistProfile';
 import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
+import { drawMobilePlacementUI } from '../ui/mobilePlacement';
 import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
 import { drawWorkPriorityPanel } from '../ui/workPriorityPanel';
 import { drawBuildingInventoryPanel } from '../ui/buildingInventoryPanel';
@@ -828,7 +829,7 @@ export class RenderManager {
 
     // Placement UI
     if (game.pendingPlacement) {
-      drawPlacementUIUI(game);
+      drawMobilePlacementUI(game);
     }
 
     // Context menu

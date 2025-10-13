@@ -17,6 +17,7 @@ import { drawContextMenu as drawContextMenuUI, hideContextMenu as hideContextMen
 import { showColonistContextMenu } from "./ui/contextMenus/colonistMenu";
 import { showBuildingContextMenu } from "./ui/contextMenus/buildings";
 import { drawPlacementUI as drawPlacementUIUI } from "./ui/placement";
+import { handleMobilePlacementClick, isClickOnGhost } from "./ui/mobilePlacement";
 import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { initializeColonistHealth } from "./health/healthSystem";
@@ -726,22 +727,12 @@ export class Game {
         // If precise placement UI active, handle mouse clicks like taps/drag
         if (this.pendingPlacement) {
           const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-          // Buttons first
-          if (this.placeUIRects.length) {
-            for (const r of this.placeUIRects) {
-              if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-                if (r.id === 'up') this.nudgePending(0, -1);
-                else if (r.id === 'down') this.nudgePending(0, 1);
-                else if (r.id === 'left') this.nudgePending(-1, 0);
-                else if (r.id === 'right') this.nudgePending(1, 0);
-                else if (r.id === 'ok') this.confirmPending();
-                else if (r.id === 'cancel') this.cancelPending();
-                else if (r.id === 'rotL') this.rotatePending(-90);
-                else if (r.id === 'rotR') this.rotatePending(90);
-                return;
-              }
-            }
+          
+          // Check for button clicks first (using new mobile placement handler)
+          if (handleMobilePlacementClick(this, mx, my)) {
+            return;
           }
+          
           // Ghost hit = start drag/confirm; else move ghost to clicked tile
           const p = this.pendingPlacement; const def = BUILD_TYPES[p.key];
           const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
@@ -1127,30 +1118,20 @@ export class Game {
     // If precise placement UI is active, handle its buttons or move/confirm by tapping
     if (this.pendingPlacement) {
       const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-      // 1) Button hits (screen-space)
-      if (this.placeUIRects.length) {
-        for (const r of this.placeUIRects) {
-          if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-            if (r.id === 'up') this.nudgePending(0, -1);
-            else if (r.id === 'down') this.nudgePending(0, 1);
-            else if (r.id === 'left') this.nudgePending(-1, 0);
-            else if (r.id === 'right') this.nudgePending(1, 0);
-            else if (r.id === 'ok') this.confirmPending();
-            else if (r.id === 'cancel') this.cancelPending();
-            else if (r.id === 'rotL') this.rotatePending(-90);
-            else if (r.id === 'rotR') this.rotatePending(90);
-            return;
-          }
-        }
+      
+      // 1) Check for button clicks (using new mobile placement handler)
+      if (handleMobilePlacementClick(this, mx, my)) {
+        return;
       }
+      
       // 2) Tap on ghost = confirm, tap elsewhere = move ghost to tapped tile
-      const p = this.pendingPlacement; const def = BUILD_TYPES[p.key];
-      // Compute ghost screen rect
-      const toScreen = (wx: number, wy: number) => ({ x: (wx - this.camera.x) * this.camera.zoom, y: (wy - this.camera.y) * this.camera.zoom });
-      const g = toScreen(p.x, p.y);
-      const gw = def.size.w * T * this.camera.zoom; const gh = def.size.h * T * this.camera.zoom;
-      if (mx >= g.x && mx <= g.x + gw && my >= g.y && my <= g.y + gh) { this.confirmPending(); return; }
+      if (isClickOnGhost(this, mx, my)) {
+        this.confirmPending();
+        return;
+      }
+      
       // Move pending to tapped world position (snap to grid)
+      const p = this.pendingPlacement; const def = BUILD_TYPES[p.key];
       const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
       const w = def.size.w * T, h = def.size.h * T;
       p.x = clamp(gx, 0, WORLD.w - w); p.y = clamp(gy, 0, WORLD.h - h);
