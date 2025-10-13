@@ -256,6 +256,15 @@ export type Colonist = {
   draftedPosition?: { x: number; y: number } | null; // Position to hold/move to while drafted
   // Stagger/stopping power effects
   staggeredUntil?: number;     // Game time until stagger effect ends (speed reduced to 1/6th)
+  
+  // Weapon rendering system - tracks what the colonist is aiming at
+  aimTarget?: { x: number; y: number } | null; // Current aim point (enemy position or last known position)
+  aimAngle?: number;           // Angle in radians the colonist is aiming (used for weapon rotation)
+  isAiming?: boolean;          // True if actively aiming (warmup/firing) or drafted
+  
+  // Melee attack animation system
+  meleeAttackProgress?: number; // 0-1, animation progress for melee attack (0 = start, 1 = complete)
+  meleeAttackType?: 'swing' | 'stab' | null; // Type of melee animation (swing for club, stab for knife)
 };
 
 export type Enemy = { 

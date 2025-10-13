@@ -13,6 +13,7 @@ import { COLORS } from "../constants";
 import { ImageAssets } from "../../assets/images";
 import { getColonistMood } from "../colonist_systems/colonistGenerator";
 import { colonistSpriteCache } from "../../core/RenderCache";
+import { drawWeapon } from "./weaponRenderer";
 
 /**
  * Enhanced colonist avatar with directional sprite rendering
@@ -182,6 +183,13 @@ export function drawColonistAvatar(
       ctx.drawImage(tintedHair, -spriteWidth/2, -offsetY);
     }
   }
+  
+  // WEAPON RENDERING - Draw weapon before UI elements so it appears behind colonist
+  // This makes the weapon look like it's being held by the colonist
+  ctx.save();
+  if (isFlipped) ctx.scale(-1, 1); // Un-flip for weapon so rotation works correctly
+  drawWeapon(ctx, colonist, offsetY, isFlipped);
+  ctx.restore();
   
   // Mood indicator (small colored dot above the head) - not flipped
   ctx.save();

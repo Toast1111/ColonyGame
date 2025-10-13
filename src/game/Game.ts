@@ -2138,6 +2138,15 @@ export class Game {
       // Only throttle AI decision-making (FSM state changes, task selection, pathfinding)
       updateColonistCombat(this, c, dt * this.fastForward);
       
+      // Update melee attack animation progress (always update for smooth animation)
+      if (c.meleeAttackProgress !== undefined && c.meleeAttackProgress < 1) {
+        c.meleeAttackProgress += (dt * this.fastForward) * 4; // Complete animation in ~0.25 seconds
+        if (c.meleeAttackProgress >= 1) {
+          c.meleeAttackProgress = undefined; // Clear when complete
+          c.meleeAttackType = null;
+        }
+      }
+      
       // Check if this colonist should do full AI update this frame
       if (this.adaptiveTickRate.shouldUpdate(colonistId, importance)) {
         // Full AI update: decision making, state transitions, task selection
@@ -2450,6 +2459,18 @@ export class Game {
           colonist.isDrafted = true;
           colonist.draftedTarget = null;
           colonist.draftedPosition = null;
+          
+          // Force clear any existing tasks/paths to allow immediate control
+          colonist.task = null;
+          colonist.target = null;
+          colonist.path = undefined;
+          colonist.pathIndex = undefined;
+          colonist.pathGoal = undefined;
+          
+          // Force state change to drafted (will be picked up by FSM)
+          colonist.state = 'drafted';
+          colonist.stateSince = 0;
+          
           this.msg(`${colonist.profile?.name || 'Colonist'} drafted for combat`, 'info');
         }
         break;

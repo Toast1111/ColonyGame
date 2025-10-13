@@ -367,7 +367,18 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   
   // Only engage in combat if drafted or inCombat flag is set
   const shouldEngage = c.isDrafted || (c as any).inCombat;
-  if (!shouldEngage) return;
+  if (!shouldEngage) {
+    // Clear aim data when not in combat
+    c.aimTarget = null;
+    c.aimAngle = undefined;
+    c.isAiming = false;
+    return;
+  }
+  
+  // Set isAiming flag for drafted colonists (even without target, they're ready to shoot)
+  if (c.isDrafted) {
+    c.isAiming = true;
+  }
   
   const stats = getWeaponStats(c);
 
@@ -408,6 +419,11 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     }
     
     if (target && bestD <= reach) {
+      // Set aim data for weapon rotation and sprite facing
+      c.aimTarget = { x: target.x, y: target.y };
+      c.aimAngle = Math.atan2(target.y - c.y, target.x - c.x);
+      c.isAiming = true;
+      
       // Check if another colonist is already in melee range of this target (prevent stacking)
       const otherColonistInMelee = game.colonists.some((other: Colonist) => {
         if (other === c || !other.alive || other.inside) return false;
@@ -428,6 +444,15 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       if (((c as any).meleeCd || 0) <= 0) {
         const meleeLvl = c.skills ? skillLevel(c, 'Melee') : 0;
         const weaponDef = stats ? itemDatabase.getItemDef((c.inventory?.equipment?.weapon as any)?.defName) : null;
+        
+        // Determine animation type based on weapon
+        const weaponDefName = c.inventory?.equipment?.weapon?.defName;
+        if (weaponDefName === 'Knife') {
+          c.meleeAttackType = 'stab';
+        } else {
+          c.meleeAttackType = 'swing'; // Club and other weapons use swing
+        }
+        c.meleeAttackProgress = 0; // Start animation
         
         // Calculate hit chance based on weapon and skill
         const baseHitChance = weaponDef?.meleeHitChance ?? 0.75; // Default 75% if not specified
@@ -468,6 +493,13 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         if (c.skills) grantSkillXP(c, 'Melee', 18, (c as any).t || 0);
         (c as any).meleeCd = 0.8; // attack every 0.8s
       }
+    } else {
+      // No target in melee range - clear aim data unless drafted
+      if (!c.isDrafted) {
+        c.aimTarget = null;
+        c.aimAngle = undefined;
+        c.isAiming = false;
+      }
     }
     return;
   }
@@ -503,6 +535,23 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     // Start warmup if we acquired a new target
     if (target) (c as any).warmup = stats.warmup;
   }
+  
+  // Update aim tracking for weapon rendering
+  if (target) {
+    c.aimTarget = { x: target.x, y: target.y };
+    c.aimAngle = Math.atan2(target.y - c.y, target.x - c.x);
+    c.isAiming = true;
+  } else {
+    // Clear aim target when no enemy, but keep isAiming true if drafted
+    // This ensures drafted colonists still display their weapons
+    c.aimTarget = null;
+    c.aimAngle = undefined;
+    if (!c.isDrafted) {
+      c.isAiming = false;
+    }
+    // If drafted, isAiming stays true (set earlier at line 380)
+  }
+  
   if (!target) return;
 
   const dist = Math.hypot(target.x - c.x, target.y - c.y);
@@ -512,6 +561,10 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   if (dist <= stats.minRangePx) {
     (c as any).meleeCd = Math.max(0, ((c as any).meleeCd || 0) - dt);
     if (((c as any).meleeCd || 0) <= 0) {
+      // Trigger melee animation for gun bash (always swing)
+      c.meleeAttackType = 'swing';
+      c.meleeAttackProgress = 0;
+      
       const meleeDmg = Math.max(8, Math.round(stats.damage * 0.6));
       
       // Calculate hit chance for gun bash (lower than melee weapon)

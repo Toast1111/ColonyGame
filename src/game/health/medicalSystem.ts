@@ -42,7 +42,7 @@ export const MEDICAL_TREATMENTS: MedicalTreatment[] = [
     duration: 30,
     painReduction: 0.2,
     healingBonus: 1.2,
-    canTreatInjuryTypes: ['cut', 'gunshot'],
+    canTreatInjuryTypes: ['cut', 'gunshot', 'burn'],
     canTreatBodyParts: ['head', 'torso', 'left_arm', 'right_arm', 'left_leg', 'right_leg'],
     surgeryRequired: false,
     riskOfInfection: 0.05,

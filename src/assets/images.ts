@@ -67,6 +67,17 @@ import ShirtBasicMaleEast from './things/colonist/human-like/apperal/ShirtBasic/
 import ShirtBasicMaleNorth from './things/colonist/human-like/apperal/ShirtBasic/ShirtBasic_Male_north.png';
 import ShirtBasicMaleSouth from './things/colonist/human-like/apperal/ShirtBasic/ShirtBasic_Male_south.png';
 
+// Weapons - Ranged
+import AssaultRifle from './things/item/equipment/weapon-ranged/AssaultRifle.png';
+import Autopistol from './things/item/equipment/weapon-ranged/Autopistol.png';
+import Revolver from './things/item/equipment/weapon-ranged/Revolver.png';
+import Shotgun from './things/item/equipment/weapon-ranged/Shotgun.png';
+import SniperRifle from './things/item/equipment/weapon-ranged/SniperRifle.png';
+
+// Weapons - Melee
+import Club from './things/item/equipment/weapon-melee/Club.png';
+import Knife from './things/item/equipment/weapon-melee/Knife.png';
+
 export class ImageAssets {
   private static instance: ImageAssets;
   private images: Map<string, HTMLImageElement> = new Map();
@@ -151,7 +162,20 @@ export class ImageAssets {
       { name: 'apparel_shirt_basic_male_south', path: ShirtBasicMaleSouth }
     ];
 
-    const allAssets = [...buildingAssets, ...colonistAssets];
+    const weaponAssets = [
+      // Ranged weapons
+      { name: 'weapon_assault_rifle', path: AssaultRifle },
+      { name: 'weapon_autopistol', path: Autopistol },
+      { name: 'weapon_revolver', path: Revolver },
+      { name: 'weapon_shotgun', path: Shotgun },
+      { name: 'weapon_sniper_rifle', path: SniperRifle },
+      
+      // Melee weapons
+      { name: 'weapon_club', path: Club },
+      { name: 'weapon_knife', path: Knife }
+    ];
+
+    const allAssets = [...buildingAssets, ...colonistAssets, ...weaponAssets];
     const loadPromises = allAssets.map(asset => this.loadImage(asset.name, asset.path));
     
     try {
@@ -208,6 +232,23 @@ export class ImageAssets {
   // Get all available apparel types
   getAvailableApparelTypes(): string[] {
     return ['shirt_basic_male'];
+  }
+
+  // Get weapon image by defName (matches itemDatabase defName format)
+  getWeaponImage(defName: string): HTMLImageElement | null {
+    // Map defName to asset name
+    const weaponMap: Record<string, string> = {
+      'AssaultRifle': 'weapon_assault_rifle',
+      'Autopistol': 'weapon_autopistol',
+      'Revolver': 'weapon_revolver',
+      'Shotgun': 'weapon_shotgun',
+      'SniperRifle': 'weapon_sniper_rifle',
+      'Club': 'weapon_club',
+      'Knife': 'weapon_knife'
+    };
+    
+    const assetName = weaponMap[defName];
+    return assetName ? this.images.get(assetName) || null : null;
   }
 
   isLoaded(): boolean {

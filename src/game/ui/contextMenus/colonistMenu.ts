@@ -19,7 +19,7 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
   const hasBleedingInjuries = injuries.some((inj) => inj.bleeding > 0);
   const hasInfection = injuries.some((inj) => inj.infected);
   const hasHighPain = (colonist.health?.totalPain || 0) > 0.3;
-  const needsSurgery = injuries.some((inj) => inj.type === 'gunshot' || (inj.type === 'fracture' && inj.severity > 0.6));
+  const needsSurgery = injuries.some((inj) => inj.type === 'gunshot');
 
   const isDowned = colonist.state === 'downed';
 

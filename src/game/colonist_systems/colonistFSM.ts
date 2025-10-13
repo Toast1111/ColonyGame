@@ -553,6 +553,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     if (intent && intent.state !== c.state) {
       const critical = intent.state === 'flee' || intent.state === 'heal' || 
                       intent.state === 'beingTreated' || intent.state === 'doctoring' ||
+                      intent.state === 'drafted' || // Drafted state is critical - immediate control
                       (intent.state === 'sleep' && game.isNight());
       const curPrio = statePriority(c.state as ColonistState);
       const shouldSwitch = critical || (intent.prio > curPrio && canChangeState);
