@@ -150,6 +150,7 @@ export function confirmPending(game: Game) {
 export function cancelPending(game: Game) { 
   game.pendingPlacement = null; 
   game.placeUIRects = []; // Clean up placement UI
+  game.selectedBuild = null; // Clear selected build to fully cancel
 }
 
 export function paintPathAtMouse(game: Game, force = false) {

@@ -196,6 +196,9 @@ export class Game {
   get showBuildMenu() { return this.uiManager.showBuildMenu; }
   set showBuildMenu(value) { this.uiManager.showBuildMenu = value; }
   
+  get eraseMode() { return this.uiManager.eraseMode; }
+  set eraseMode(value) { this.uiManager.eraseMode = value; }
+  
   get selColonist() { return this.uiManager.selColonist; }
   set selColonist(value) { this.uiManager.selColonist = value; }
   
@@ -820,9 +823,8 @@ export class Game {
         
   if (this.showBuildMenu) { handleBuildMenuClickUI(this); return; }
         
-        // Check for erase mode (set by mobile erase button)
-        if ((window as any)._eraseOnce) {
-          (window as any)._eraseOnce = false; // Consume the flag
+        // Check for erase mode (toggled by mobile erase button)
+        if (this.eraseMode) {
           this.cancelOrErase();
           return;
         }
@@ -1215,9 +1217,8 @@ export class Game {
     // Build menu click
   if (this.showBuildMenu) { handleBuildMenuClickUI(this); return; }
 
-    // Check for erase mode (set by mobile erase button)
-    if ((window as any)._eraseOnce) {
-      (window as any)._eraseOnce = false; // Consume the flag
+    // Check for erase mode (toggled by mobile erase button)
+    if (this.eraseMode) {
       this.cancelOrErase();
       return;
     }

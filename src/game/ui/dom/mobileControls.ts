@@ -6,8 +6,6 @@
  */
 
 export interface MobileControlsCallbacks {
-  onBuild: () => void;
-  onCancel: () => void;
   onErase: () => void;
   onPause: () => void;
   onFastForward: () => void;
@@ -18,8 +16,6 @@ export interface MobileControlsCallbacks {
 export class MobileControls {
   private container: HTMLDivElement;
   private buttons: {
-    build: HTMLButtonElement;
-    cancel: HTMLButtonElement;
     erase: HTMLButtonElement;
     pause: HTMLButtonElement;
     fastForward: HTMLButtonElement;
@@ -31,9 +27,7 @@ export class MobileControls {
     this.container = this.createContainer();
     this.buttons = this.createButtons(callbacks);
     
-    // Add buttons to container
-    this.container.appendChild(this.buttons.build);
-    this.container.appendChild(this.buttons.cancel);
+    // Add main control buttons to container
     this.container.appendChild(this.buttons.erase);
     this.container.appendChild(this.buttons.pause);
     this.container.appendChild(this.buttons.fastForward);
@@ -72,10 +66,8 @@ export class MobileControls {
 
   private createButtons(callbacks: MobileControlsCallbacks) {
     return {
-      build: this.createButton('mc-build', '🏗️', 'Build Menu', callbacks.onBuild),
-      cancel: this.createButton('mc-cancel', '✖️', 'Cancel Build', callbacks.onCancel),
-      erase: this.createButton('mc-erase', '🧹', 'Erase Mode', callbacks.onErase),
-      pause: this.createButton('mc-pause', '⏯️', 'Pause/Resume', callbacks.onPause),
+      erase: this.createButton('mc-erase', '🗑️', 'Erase Mode', callbacks.onErase),
+      pause: this.createButton('mc-pause', '⏸️', 'Pause', callbacks.onPause),
       fastForward: this.createButton('mc-ff', '⏩', 'Fast Forward', callbacks.onFastForward),
       zoomIn: this.createButton('mc-zoom-in', '＋', 'Zoom In', callbacks.onZoomIn),
       zoomOut: this.createButton('mc-zoom-out', '－', 'Zoom Out', callbacks.onZoomOut),
@@ -104,20 +96,25 @@ export class MobileControls {
   }
 
   /**
-   * Update pause button text based on game state
+   * Update pause button icon based on game state
    */
   setPauseState(paused: boolean): void {
     this.buttons.pause.textContent = paused ? '▶️' : '⏸️';
+    this.buttons.pause.title = paused ? 'Resume' : 'Pause';
+    this.buttons.pause.classList.toggle('active', paused);
   }
 
   /**
    * Update fast forward button appearance
    */
   setFastForwardState(active: boolean): void {
-    if (active) {
-      this.buttons.fastForward.style.background = '#0078d4';
-    } else {
-      this.buttons.fastForward.style.background = '';
-    }
+    this.buttons.fastForward.classList.toggle('active', active);
+  }
+  
+  /**
+   * Update erase button appearance for toggle state
+   */
+  setEraseState(active: boolean): void {
+    this.buttons.erase.classList.toggle('active', active);
   }
 }

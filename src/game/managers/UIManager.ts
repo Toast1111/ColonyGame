@@ -38,6 +38,9 @@ export class UIManager {
   // UI panel visibility
   showBuildMenu = false;
   
+  // Erase mode toggle (for mobile controls)
+  eraseMode = false;
+  
   // Selection state
   selColonist: Colonist | null = null;
   follow = false; // Camera follow selected colonist

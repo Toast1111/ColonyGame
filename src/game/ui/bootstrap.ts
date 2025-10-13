@@ -20,6 +20,7 @@ export interface UIComponents {
   header: Header;
   canvas: HTMLCanvasElement;
   wrap: HTMLDivElement;
+  gameRef: { current: Game | null };
 }
 
 /**
@@ -36,25 +37,28 @@ export function initializeUI(game: Game | null = null): UIComponents {
   // Create canvas
   const canvas = createCanvas();
   
+  // Use a game reference object that can be updated later
+  const gameRef = { current: game };
+  
   // Setup header callbacks
   const headerCallbacks: HeaderCallbacks = {
     onNewGame: () => {
-      if (game) {
-        game.newGame();
+      if (gameRef.current) {
+        gameRef.current.newGame();
       }
     },
     onHelp: () => {
       helpPanel.toggle();
     },
     onBuildMenu: () => {
-      if (game) {
-        game.showBuildMenu = !game.showBuildMenu;
+      if (gameRef.current) {
+        gameRef.current.showBuildMenu = !gameRef.current.showBuildMenu;
       }
     },
     onToggleMobile: () => {
-      if (game) {
-        game.isTouch = !game.isTouch;
-        game.toast('Mobile mode: ' + (game.isTouch ? 'ON' : 'OFF'));
+      if (gameRef.current) {
+        gameRef.current.isTouch = !gameRef.current.isTouch;
+        gameRef.current.toast('Mobile mode: ' + (gameRef.current.isTouch ? 'ON' : 'OFF'));
       }
     }
   };
@@ -67,43 +71,36 @@ export function initializeUI(game: Game | null = null): UIComponents {
   
   // Setup mobile controls callbacks
   const mobileCallbacks: MobileControlsCallbacks = {
-    onBuild: () => {
-      if (game) {
-        game.showBuildMenu = !game.showBuildMenu;
-      }
-    },
-    onCancel: () => {
-      if (game) {
-        game.selectedBuild = null;
-        game.toast('Build canceled');
-      }
-    },
     onErase: () => {
-      if (game) {
-        // TODO: Implement erase mode
-        game.toast('Erase mode not yet implemented');
+      if (gameRef.current) {
+        // Toggle erase mode
+        gameRef.current.eraseMode = !gameRef.current.eraseMode;
+        mobileControls.setEraseState(gameRef.current.eraseMode);
+        gameRef.current.toast(gameRef.current.eraseMode ? 'Erase mode ON' : 'Erase mode OFF');
       }
     },
     onPause: () => {
-      if (game) {
-        game.paused = !game.paused;
-        game.toast(game.paused ? 'Paused' : 'Resumed');
+      if (gameRef.current) {
+        gameRef.current.paused = !gameRef.current.paused;
+        mobileControls.setPauseState(gameRef.current.paused);
+        gameRef.current.toast(gameRef.current.paused ? 'Paused' : 'Resumed');
       }
     },
     onFastForward: () => {
-      if (game) {
-        game.fastForward = game.fastForward === 1 ? 6 : 1;
-        game.toast(game.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF');
+      if (gameRef.current) {
+        gameRef.current.fastForward = gameRef.current.fastForward === 1 ? 6 : 1;
+        mobileControls.setFastForwardState(gameRef.current.fastForward > 1);
+        gameRef.current.toast(gameRef.current.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF');
       }
     },
     onZoomIn: () => {
-      if (game) {
-        game.camera.zoom = Math.min(2.2, game.camera.zoom * 1.1);
+      if (gameRef.current) {
+        gameRef.current.camera.zoom = Math.min(2.2, gameRef.current.camera.zoom * 1.1);
       }
     },
     onZoomOut: () => {
-      if (game) {
-        game.camera.zoom = Math.max(0.6, game.camera.zoom / 1.1);
+      if (gameRef.current) {
+        gameRef.current.camera.zoom = Math.max(0.6, gameRef.current.camera.zoom / 1.1);
       }
     }
   };
@@ -140,7 +137,8 @@ export function initializeUI(game: Game | null = null): UIComponents {
     mobileControls,
     header,
     canvas,
-    wrap
+    wrap,
+    gameRef
   };
 }
 
@@ -195,11 +193,10 @@ function setupKeyboardBlurring(): void {
  * Update UI components with game reference (called after game is created)
  */
 export function linkGameToUI(components: UIComponents, game: Game): void {
-  // Re-wire callbacks now that game exists
-  // This is a workaround since we create UI before game
-  // In a full rewrite, we'd create game first, then UI
+  // Update the game reference so all callbacks now have access to the game
+  components.gameRef.current = game;
   
-  // Store toast manager in game for easy access
+  // Store UI components in game for easy access
   (game as any).toastManager = components.toast;
   (game as any).helpPanel = components.helpPanel;
   (game as any).mobileControls = components.mobileControls;

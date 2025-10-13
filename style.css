@@ -32,8 +32,11 @@ button:focus{outline:none}
 
 /* Mobile controls overlay */
 #mobileControls{position:fixed;right:12px;bottom:102px;display:flex;flex-direction:column;gap:8px;z-index:10}
-#mobileControls button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.6rem;border-radius:.75rem;cursor:pointer;font-size:18px;min-height:44px;min-width:44px;box-shadow:0 4px 12px #0006;outline:none}
+#mobileControls button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.6rem;border-radius:.75rem;cursor:pointer;font-size:18px;min-height:44px;min-width:44px;box-shadow:0 4px 12px #0006;outline:none;transition:all 0.2s ease}
+#mobileControls button:hover{border-color:#2b3d59;background:#1a2332}
+#mobileControls button:active{transform:scale(0.95)}
 #mobileControls button:focus{outline:none}
+#mobileControls button.active{background:#1a2332;border-color:#2b3d59;color:var(--accent)}
 #mobileControls .zoom{display:flex;gap:8px;justify-content:flex-end}
 #mobileControls .zoom button{min-width:44px}
 
@@ -53,4 +56,6 @@ button:focus{outline:none}
 	.tag { padding: .12rem .5rem; border-radius: .5rem; }
 	#mobileControls { bottom: 100px; right: 10px; gap: 10px; }
 	#mobileControls button { font-size: 20px; padding: .7rem; min-height: 48px; }
+	#mobileControls button:hover { background: #0f1621; }
+	#mobileControls button:active { transform: scale(0.95); }
 }
