@@ -654,6 +654,14 @@ export class RenderManager {
         `Jitter: ${(c as any).jitterScore ?? 0}`,
         `Repath: ${(c as any).repath ? (c as any).repath.toFixed(1) + 's' : 'none'}`
       ];
+      
+      // Add carrying info if colonist is carrying items
+      if (c.carryingWheat && c.carryingWheat > 0) {
+        textLines.push(`Wheat: ${c.carryingWheat}`);
+      }
+      if (c.carryingBread && c.carryingBread > 0) {
+        textLines.push(`Bread: ${c.carryingBread}`);
+      }
 
       if (c.target) {
         const target = c.target as any;
@@ -920,6 +928,14 @@ export class RenderManager {
         tooltipLines.push('😴 Exhausted');
       } else if (c.fatigue && c.fatigue > 50) {
         tooltipLines.push('💤 Tired');
+      }
+      
+      // Inventory/Carrying
+      if (c.carryingWheat && c.carryingWheat > 0) {
+        tooltipLines.push(`🌾 Carrying ${c.carryingWheat} wheat`);
+      }
+      if (c.carryingBread && c.carryingBread > 0) {
+        tooltipLines.push(`🍞 Carrying ${c.carryingBread} bread`);
       }
       
       // Tip
