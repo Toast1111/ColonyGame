@@ -76,7 +76,9 @@ export interface BuildingInventory {
   maxWeight?: number; // Optional weight limit (future feature)
 }
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'haulingWheat' | 'cooking' | 'storingBread' | 'haulBread' | 'drafted';
+export type ColonistCommandIntent = 'goto' | 'rest' | 'medical' | 'seekMedical' | 'guard';
+
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'storingBread' | 'haulBread' | 'guard' | 'drafted';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -194,6 +196,7 @@ export type Colonist = {
   x: number; y: number; r: number; hp: number; speed: number; 
   task: string | null; target: any; carrying: any; hunger: number; 
   alive: boolean; color: string; t: number; 
+  taskData?: any; // auxiliary task context (e.g. haul destination)
   fatigue?: number; fatigueSlow?: number; 
   state?: ColonistState; stateSince?: number; 
   path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; 
@@ -231,7 +234,12 @@ export type Colonist = {
   // Door interaction
   waitingForDoor?: Building | null;  // Door the colonist is waiting to open
   doorWaitStart?: number;            // Game time when started waiting for door
+  doorPassingThrough?: Building | null; // Door currently being traversed (keeps queue alive)
+  doorApproachVector?: { x: number; y: number } | null; // Door-to-colonist vector when queued
   id?: string;                       // Unique identifier for door queue management
+  commandIntent?: ColonistCommandIntent | null; // Current direct command being executed
+  commandData?: any;                // Extra data for current command (anchor, etc.)
+  guardAnchor?: { x: number; y: number } | null; // Guard hold position for guard command
   
   // Work priority system (RimWorld-style job assignments)
   workPriorities?: Record<string, number>; // WorkType -> WorkPriority (1-4, or 0 for disabled)

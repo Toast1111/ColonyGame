@@ -2,7 +2,7 @@ import { clamp, dist2, rand, randi } from "../core/utils";
 import { makeGrid } from "../core/pathfinding";
 import { makeTerrainGrid, type TerrainGrid } from "./terrain";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
-import type { Building, Bullet, Camera, Colonist, Enemy, Message, Resources, Particle } from "./types";
+import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, Message, Resources, Particle } from "./types";
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
@@ -34,7 +34,7 @@ import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriority
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
 import { getInventoryItemCount } from './systems/buildingInventory';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
-import { updateDoor, initializeDoor } from './systems/doorSystem';
+import { updateDoor, initializeDoor, findBlockingDoor, requestDoorOpen, isDoorBlocking, releaseDoorQueue } from './systems/doorSystem';
 import { GameState } from './core/GameState';
 import { TimeSystem } from './systems/TimeSystem';
 import { CameraSystem } from './systems/CameraSystem';
@@ -1540,12 +1540,78 @@ export class Game {
     c.pathIndex = undefined; // RE-ENABLED
     // c.repath = 0; // REPATH TIMER STILL DISABLED
   }
-  setTask(c: Colonist, task: string, target: any, isPlayerCommand = false) {
+  setTask(c: Colonist, task: string, target: any, options?: { isPlayerCommand?: boolean; extraData?: any }) {
+    const isPlayerCommand = options?.isPlayerCommand ?? false;
+    const extraData = options?.extraData;
+
+    // Normalize high level commands into concrete tasks
+    if (task === 'work') {
+      if (target && typeof target === 'object' && 'buildLeft' in target && typeof (target as any).buildLeft === 'number' && !(target as Building).done) {
+        task = 'build';
+      } else {
+        task = 'goto';
+      }
+    }
+
+    let commandIntent: ColonistCommandIntent | null = null;
+    switch (task) {
+      case 'goto':
+      case 'rest':
+      case 'medical':
+      case 'seekMedical':
+      case 'guard':
+        commandIntent = task;
+        break;
+      default:
+        commandIntent = null;
+        break;
+    }
+
     // release old reserved target
     if (c.target && (c.target as any).type && this.assignedTargets.has(c.target)) this.assignedTargets.delete(c.target);
     // release old build reservation if changing away from that building
     if (c.reservedBuildFor && c.reservedBuildFor !== target) this.releaseBuildReservation(c);
-    c.task = task; c.target = target; this.clearPath(c);
+    c.task = task;
+    c.target = target;
+    c.taskData = extraData ?? null;
+    this.clearPath(c);
+
+    // Reset any lingering door interactions when task changes
+    const releaseDoorIfQueued = (door: any) => {
+      if (!door || door.kind !== 'door' || !c.id) return;
+      releaseDoorQueue(door, c.id);
+    };
+    if (c.waitingForDoor) {
+      releaseDoorIfQueued(c.waitingForDoor);
+    }
+    if (c.doorPassingThrough && c.doorPassingThrough !== c.waitingForDoor) {
+      releaseDoorIfQueued(c.doorPassingThrough);
+    }
+    c.waitingForDoor = null;
+    c.doorPassingThrough = null;
+    c.doorApproachVector = null;
+    c.doorWaitStart = undefined;
+
+    // Track direct-command metadata
+    if (commandIntent) {
+      c.commandIntent = commandIntent;
+      c.commandData = extraData ?? null;
+      if (commandIntent === 'guard') {
+        if (target && typeof target === 'object' && 'x' in target && 'y' in target && !('w' in target)) {
+          c.guardAnchor = { x: target.x, y: target.y };
+        } else if (target && typeof target === 'object' && 'x' in target && 'y' in target && 'w' in target && 'h' in target) {
+          c.guardAnchor = { x: (target as Building).x + (target as Building).w / 2, y: (target as Building).y + (target as Building).h / 2 };
+        } else {
+          c.guardAnchor = null;
+        }
+      } else {
+        c.guardAnchor = null;
+      }
+    } else {
+      c.commandIntent = null;
+      c.commandData = null;
+      c.guardAnchor = null;
+    }
     
     // Mark player-issued commands with a timestamp and expiration
     if (isPlayerCommand) {
@@ -1774,7 +1840,7 @@ export class Game {
     
     if (candidates.length > 0) {
       const bestWork = candidates[0];
-      this.setTask(c, bestWork.task, bestWork.target);
+      this.setTask(c, bestWork.task, bestWork.target, { extraData: bestWork.extraData });
       
       // Debug logging
       if (Math.random() < 0.1) {
@@ -1827,6 +1893,58 @@ export class Game {
       return false;
     }
     const dx = node.x - c.x; const dy = node.y - c.y; let L = Math.hypot(dx, dy);
+
+    // Handle door interactions before movement so colonists don't clip through
+    if (c.waitingForDoor) {
+      const door = c.waitingForDoor;
+      const doorValid = door && door.kind === 'door' && door.done;
+      if (!doorValid) {
+        if (door && door.doorQueue && c.id) {
+          releaseDoorQueue(door, c.id);
+        }
+        c.waitingForDoor = null;
+        c.doorWaitStart = undefined;
+        c.doorPassingThrough = null;
+        c.doorApproachVector = null;
+      } else if (isDoorBlocking(door)) {
+        requestDoorOpen(door, c, 'colonist');
+        if (!c.doorWaitStart) {
+          c.doorWaitStart = c.t || 0;
+        }
+        return false;
+      } else {
+        // Door is now passable; waitingAtDoor state will clear flags this frame
+        return false;
+      }
+    }
+
+    if (!c.waitingForDoor && L > 1e-3) {
+      const blockingDoor = findBlockingDoor(this, c);
+      if (blockingDoor && isDoorBlocking(blockingDoor)) {
+        const doorCenterX = blockingDoor.x + blockingDoor.w / 2;
+        const doorCenterY = blockingDoor.y + blockingDoor.h / 2;
+        const toDoorX = doorCenterX - c.x;
+        const toDoorY = doorCenterY - c.y;
+        const doorAheadDot = dx * toDoorX + dy * toDoorY;
+        if (doorAheadDot > 0) {
+          const doorDist = Math.hypot(toDoorX, toDoorY);
+          // Require the door to be reasonably close to the current waypoint direction
+          const dirMag = L || 1;
+          const angleCos = doorDist > 0 ? doorAheadDot / (dirMag * doorDist) : 1;
+          if (doorDist <= L + Math.max(blockingDoor.w, blockingDoor.h) && angleCos >= 0.4) {
+            requestDoorOpen(blockingDoor, c, 'colonist');
+            c.waitingForDoor = blockingDoor;
+            c.doorWaitStart = c.t || 0;
+            c.doorPassingThrough = null;
+            const approachX = c.x - doorCenterX;
+            const approachY = c.y - doorCenterY;
+            c.doorApproachVector = { x: approachX, y: approachY };
+            return false;
+          }
+        }
+      }
+    }
+
     // Hysteresis to avoid oscillation around a node
     const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
     const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
@@ -1916,6 +2034,52 @@ export class Game {
     }
     c.x = Math.max(0, Math.min(c.x + (dx / (L || 1)) * step, WORLD.w));
     c.y = Math.max(0, Math.min(c.y + (dy / (L || 1)) * step, WORLD.h));
+
+    if (c.doorPassingThrough) {
+      const door = c.doorPassingThrough;
+      const doorValid = door && door.kind === 'door' && door.done;
+      if (!doorValid) {
+        if (door && c.id) {
+          releaseDoorQueue(door, c.id);
+        }
+        c.doorPassingThrough = null;
+        c.doorApproachVector = null;
+      } else {
+        const centerX = door.x + door.w / 2;
+        const centerY = door.y + door.h / 2;
+        const relX = c.x - centerX;
+        const relY = c.y - centerY;
+        const relDist = Math.hypot(relX, relY);
+        const approach = c.doorApproachVector;
+        const clearance = Math.max(door.w, door.h) * 0.5;
+        const farThreshold = clearance * 4;
+        let shouldRelease = false;
+
+        if (approach) {
+          const approachMag = Math.hypot(approach.x, approach.y);
+          if (approachMag > 1e-3) {
+            const dot = relX * approach.x + relY * approach.y;
+            const denom = approachMag * Math.max(relDist, 1e-3);
+            const normalizedDot = dot / denom;
+            const crossedPlane = normalizedDot <= -0.15;
+            const overshoot = relDist > approachMag + clearance * 0.6;
+            shouldRelease = (crossedPlane && relDist >= clearance * 0.6) || overshoot || relDist >= farThreshold;
+          } else {
+            shouldRelease = relDist >= clearance;
+          }
+        } else {
+          shouldRelease = relDist >= clearance;
+        }
+
+        if (shouldRelease) {
+          if (door && c.id) {
+            releaseDoorQueue(door, c.id);
+          }
+          c.doorPassingThrough = null;
+          c.doorApproachVector = null;
+        }
+      }
+    }
     return false;
   }
 
@@ -2482,11 +2646,11 @@ export class Game {
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing medical work`, 'info');
         break;
       case 'prioritize_work':
-        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), true);
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), { isPlayerCommand: true });
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing work tasks`, 'info');
         break;
       case 'prioritize_build':
-        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist), true);
+        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist), { isPlayerCommand: true });
         this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing construction`, 'info');
         break;
       case 'prioritize_haul':
@@ -2506,11 +2670,11 @@ export class Game {
         this.forceColonistToEat(colonist, true);
         break;
       case 'force_work':
-        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), true);
+        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), { isPlayerCommand: true });
         this.msg(`${colonist.profile?.name || 'Colonist'} forced to work`, 'info');
         break;
       case 'force_guard':
-        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y }, true);
+        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y }, { isPlayerCommand: true });
         this.msg(`${colonist.profile?.name || 'Colonist'} guarding area`, 'info');
         break;
         
@@ -2707,7 +2871,7 @@ export class Game {
     const restBuilding = this.findBestRestBuilding(colonist, { preferMedical: needsMedical, allowShelterFallback: true });
     
     if (restBuilding) {
-      this.setTask(colonist, 'rest', restBuilding, isPlayerCommand);
+      this.setTask(colonist, 'rest', restBuilding, { isPlayerCommand });
       const targetLabel = restBuilding.kind === 'bed' ? (restBuilding.isMedicalBed ? 'medical bed' : 'bed') : restBuilding.name || restBuilding.kind;
       this.msg(`${colonist.profile?.name || 'Colonist'} going to ${targetLabel}`, needsMedical ? 'info' : 'info');
     } else {

@@ -75,6 +75,32 @@ export function requestDoorOpen(door: Building, entity: Colonist | Enemy, entity
 }
 
 /**
+ * Find a blocking door near the provided entity. Returns the first closed door within the search radius.
+ */
+export function findBlockingDoor(game: any, entity: Colonist | Enemy, radius = 96): Building | null {
+  if (!game || !game.buildings) return null;
+
+  const searchRadius = radius;
+  const searchRadiusSq = searchRadius * searchRadius;
+
+  for (const b of game.buildings as Building[]) {
+    if (b.kind !== 'door' || !b.done) continue;
+    if (!isDoorBlocking(b)) continue;
+
+    const doorCenterX = b.x + b.w / 2;
+    const doorCenterY = b.y + b.h / 2;
+    const dx = entity.x - doorCenterX;
+    const dy = entity.y - doorCenterY;
+
+    if (dx * dx + dy * dy <= searchRadiusSq) {
+      return b;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Remove an entity from the door queue (they passed through or gave up)
  */
 export function releaseDoorQueue(door: Building, entityId: string) {

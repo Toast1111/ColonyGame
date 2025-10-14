@@ -1,33 +1,14 @@
 import { dist2, norm, sub } from "../../core/utils";
-import { WORLD } from "../constants";
+import { T, WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState } from "../types";
 import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "../skills/skills";
 import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
-import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor } from "../systems/doorSystem";
+import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor, findBlockingDoor } from "../systems/doorSystem";
 import { addItemToInventory, removeItemFromInventory, getInventoryItemCount } from "../systems/buildingInventory";
 import { itemDatabase } from "../../data/itemDatabase";
 
-
-// Helper to check if colonist should wait for a door
-function checkDoorInteraction(game: any, c: Colonist): Building | null {
-  // Find any doors near the colonist that are blocking
-  // Increased range to detect doors earlier
-  for (const b of game.buildings) {
-    if (b.kind === 'door' && b.done && isDoorBlocking(b)) {
-      const doorCenterX = b.x + b.w / 2;
-      const doorCenterY = b.y + b.h / 2;
-      const distance = Math.hypot(c.x - doorCenterX, c.y - doorCenterY);
-      
-      // Detect door from further away so colonist stops before reaching it
-      if (distance < 96) { // 3 tiles
-        return b;
-      }
-    }
-  }
-  return null;
-}
 
 // Helper function to check if a position would collide with buildings
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -53,9 +34,9 @@ function wouldCollideWithBuildings(game: any, x: number, y: number, radius: numb
 // Safe movement function that checks for collisions
 function getSpeedMultiplier(game: any, x: number, y: number): number {
   // Check if colonist is on a path tile
-  const T = 24; // tile size
-  const gx = Math.floor(x / T) * T;
-  const gy = Math.floor(y / T) * T;
+  const tileSize = T;
+  const gx = Math.floor(x / tileSize) * tileSize;
+  const gy = Math.floor(y / tileSize) * tileSize;
   
   const path = game.buildings.find((b: any) => 
     b.kind === 'path' && b.done && b.x === gx && b.y === gy
@@ -70,7 +51,7 @@ function getSpeedMultiplier(game: any, x: number, y: number): number {
 
 function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: number, dt: number, speedMultiplier: number = 1): boolean {
   // Check for doors that need to be opened
-  const blockingDoor = checkDoorInteraction(game, c);
+  const blockingDoor = findBlockingDoor(game, c);
   if (blockingDoor) {
     // Request door to open and wait
     requestDoorOpen(blockingDoor, c, 'colonist');
@@ -302,6 +283,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     // If colonist was rescued, clear their current task and let them reassess
     c.task = null;
     c.target = null;
+    c.taskData = null;
+    c.commandIntent = null;
+    c.commandData = null;
+    c.guardAnchor = null;
     game.clearPath && game.clearPath(c);
     changeState('seekTask', 'rescued from stuck');
     return; // Skip rest of FSM this frame to let colonist reorient
@@ -525,6 +510,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'waitingAtDoor': return 98; // High priority - must wait
         case 'beingTreated': return 96; // Very high priority - patient needs care
         case 'doctoring': return 95; // High priority for active medical work
+        case 'guard': return 94; // Hold position command from player
         case 'heal': return 90;
         case 'sleep': return 80; // Sleep in progress (already in bed)
         case 'goToSleep': return 55; // Base priority at 60% fatigue, scales to 95+ at 100% fatigue with night bonus
@@ -549,6 +535,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       changeState('waitingAtDoor', 'encountered closed door');
     }
     
+    const commandActive = c.commandIntent != null;
     const intent = evaluateIntent();
     if (intent && intent.state !== c.state) {
       const critical = intent.state === 'flee' || intent.state === 'heal' || 
@@ -556,7 +543,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
                       intent.state === 'drafted' || // Drafted state is critical - immediate control
                       (intent.state === 'sleep' && game.isNight());
       const curPrio = statePriority(c.state as ColonistState);
-      const shouldSwitch = critical || (intent.prio > curPrio && canChangeState);
+      const shouldSwitch = critical || (!commandActive && intent.prio > curPrio && canChangeState);
       if (shouldSwitch) changeState(intent.state, intent.reason);
     }
   }
@@ -1193,8 +1180,20 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'harvestWell': changeState('harvest', 'assigned well task'); break;
         case 'chop': changeState('chop', 'assigned chop task'); break;
         case 'mine': changeState('mine', 'assigned mine task'); break;
+        case 'haulBread': changeState('haulBread', 'assigned haul task'); break;
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
         case 'storeBread': changeState('storingBread', 'assigned bread storage task'); break;
+        case 'goto':
+        case 'rest':
+        case 'medical':
+        case 'seekMedical':
+        case 'guard': {
+          if (!c.commandIntent) {
+            c.commandIntent = c.task as any;
+          }
+          changeState('move', 'player command task');
+          break;
+        }
         case 'idle': default:
           // Keep moving toward a random idle target if we have one; else assign a new idle target
           if (!c.target) {
@@ -1218,6 +1217,99 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       const dst = c.target; if (!dst) { changeState('seekTask', 'no target'); break; }
       if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'reached target'); }
+      break;
+    }
+    case 'move': {
+      const intent = c.commandIntent;
+      const target = c.target as any;
+      if (!intent || !target) {
+        if (intent !== 'guard') {
+          c.task = null;
+          c.target = null;
+          c.taskData = null;
+          c.commandData = null;
+          c.guardAnchor = null;
+        }
+        if (intent !== 'guard') {
+          c.commandIntent = null;
+        }
+        changeState('seekTask', 'move missing context');
+        break;
+      }
+
+      const targetIsBuilding = typeof target.x === 'number' && typeof target.y === 'number' && target.w != null && target.h != null;
+      const destination = targetIsBuilding
+        ? { x: (target as Building).x + (target as Building).w / 2, y: (target as Building).y + (target as Building).h / 2 }
+        : { x: target.x, y: target.y };
+      const arriveRadius = intent === 'guard'
+        ? 14
+        : targetIsBuilding ? Math.max((target as Building).w, (target as Building).h) / 2 + c.r + 12 : 14;
+
+      if (game.moveAlongPath(c, dt, destination, arriveRadius)) {
+        const clearCommand = () => {
+          c.task = null;
+          c.target = null;
+          c.taskData = null;
+          c.commandIntent = null;
+          c.commandData = null;
+          c.guardAnchor = null;
+          game.clearPath && game.clearPath(c);
+        };
+
+        switch (intent) {
+          case 'goto': {
+            let entered = false;
+            if (targetIsBuilding && game.tryEnterBuilding) {
+              if (!game.buildingHasSpace || game.buildingHasSpace(target, c)) {
+                entered = game.tryEnterBuilding(c, target);
+              }
+            }
+            if (entered) {
+              clearCommand();
+              changeState('resting', 'entered requested building');
+            } else {
+              clearCommand();
+              changeState('seekTask', 'reached ordered location');
+            }
+            break;
+          }
+          case 'rest': {
+            let entered = false;
+            if (targetIsBuilding && game.tryEnterBuilding) {
+              entered = game.tryEnterBuilding(c, target);
+            }
+            clearCommand();
+            changeState('resting', entered ? 'resting in assigned shelter' : 'resting at ordered spot');
+            break;
+          }
+          case 'medical':
+          case 'seekMedical': {
+            let entered = false;
+            if (targetIsBuilding && game.tryEnterBuilding) {
+              entered = game.tryEnterBuilding(c, target);
+            }
+            (c as any).needsMedical = true;
+            clearCommand();
+            changeState('beingTreated', entered ? 'entered medical facility' : 'awaiting treatment');
+            break;
+          }
+          case 'guard': {
+            c.guardAnchor = { x: destination.x, y: destination.y };
+            c.commandIntent = 'guard';
+            c.commandData = c.commandData ?? null;
+            c.target = { x: destination.x, y: destination.y };
+            c.taskData = null;
+            game.clearPath && game.clearPath(c);
+            changeState('guard', 'holding position');
+            break;
+          }
+          default: {
+            clearCommand();
+            changeState('seekTask', 'unknown move intent');
+            break;
+          }
+        }
+      }
       break;
     }
     case 'build': {
@@ -1580,20 +1672,23 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const door = c.waitingForDoor;
       if (!door || door.kind !== 'door' || !door.done) {
         // Door was destroyed or doesn't exist
+        if (door && c.id) {
+          releaseDoorQueue(door, c.id);
+        }
         c.waitingForDoor = null;
         c.doorWaitStart = undefined;
+        c.doorPassingThrough = null;
+        c.doorApproachVector = null;
         changeState('seekTask', 'door no longer exists');
         break;
       }
       
       // Check if door is now passable
       if (isDoorPassable(door)) {
-        // Door is open, can proceed
-        if (c.id) {
-          releaseDoorQueue(door, c.id);
-        }
+        // Door is open, mark for traversal so queue stays alive until we pass through
         c.waitingForDoor = null;
         c.doorWaitStart = undefined;
+        c.doorPassingThrough = door;
         
         // Return to previous task state
         if (c.task === 'build') {
@@ -1605,7 +1700,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         } else if (c.task === 'harvestFarm' || c.task === 'harvestWell') {
           changeState('harvest', 'door opened, resuming harvest');
         } else {
-          changeState('move', 'door opened, resuming movement');
+          changeState('seekTask', 'door opened, resuming movement');
         }
       } else {
         // Still waiting - check for timeout
@@ -1618,6 +1713,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
           c.waitingForDoor = null;
           c.doorWaitStart = undefined;
+          c.doorPassingThrough = null;
+          c.doorApproachVector = null;
           c.task = null;
           c.target = null;
           game.clearPath && game.clearPath(c);
@@ -1818,6 +1915,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Stove was destroyed
         c.task = null;
         c.target = null;
+        c.taskData = null;
         c.carryingBread = 0;
         game.clearPath(c);
         changeState('seekTask', 'stove no longer available');
@@ -1825,11 +1923,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       
       // Get the pantry from the task's extra data
-      const pantry = (c.task as any)?.extraData as Building;
+      const pantry = (c as any).taskData as Building;
       if (!pantry || pantry.kind !== 'pantry' || !pantry.done) {
         // Pantry was destroyed
         c.task = null;
         c.target = null;
+        c.taskData = null;
         c.carryingBread = 0;
         changeState('seekTask', 'pantry no longer available');
         break;
@@ -1864,6 +1963,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // No bread in stove (someone else took it)
           c.task = null;
           c.target = null;
+          c.taskData = null;
           c.cookingSubState = null;
           changeState('seekTask', 'no bread in stove');
         }
@@ -1901,12 +2001,14 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           c.carryingBread = 0;
           c.task = null;
           c.target = null;
+          c.taskData = null;
           c.cookingSubState = null;
           changeState('seekTask', 'bread hauled to pantry');
         } else {
           // Lost the bread somehow
           c.task = null;
           c.target = null;
+          c.taskData = null;
           c.cookingSubState = null;
           changeState('seekTask', 'lost bread during hauling');
         }
@@ -1917,6 +2019,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         console.log(`Haul bread task timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
         c.task = null;
         c.target = null;
+        c.taskData = null;
         c.carryingBread = 0;
         c.cookingSubState = null;
         changeState('seekTask', 'haul bread timeout');
@@ -1934,6 +2037,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
         c.task = null;
         c.target = null;
+        c.taskData = null;
         changeState('seekTask', 'pantry no longer available');
         break;
       }
@@ -1977,12 +2081,47 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.carryingBread = 0;
         c.task = null;
         c.target = null;
+        c.taskData = null;
         changeState('seekTask', 'bread stored');
       } else {
         // No bread to store
         c.task = null;
         c.target = null;
+        c.taskData = null;
         changeState('seekTask', 'no bread to store');
+      }
+      break;
+    }
+
+    case 'guard': {
+      const anchor = c.guardAnchor;
+      if (!anchor) {
+        c.task = null;
+        c.commandIntent = null;
+        c.commandData = null;
+        changeState('seekTask', 'guard anchor missing');
+        break;
+      }
+
+      const distance = Math.hypot(c.x - anchor.x, c.y - anchor.y);
+      if (distance > 18) {
+        game.moveAlongPath(c, dt, anchor, 10);
+      } else {
+        const dx = anchor.x - c.x;
+        const dy = anchor.y - c.y;
+        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+          c.direction = Math.atan2(-dy, -dx);
+        }
+      }
+
+      const commandStillActive = c.playerCommand?.issued && (!c.playerCommand.expires || (c.t || 0) < c.playerCommand.expires);
+      if (!commandStillActive) {
+        c.task = null;
+        c.target = null;
+        c.commandIntent = null;
+        c.commandData = null;
+        c.guardAnchor = null;
+        changeState('seekTask', 'guard command expired');
       }
       break;
     }

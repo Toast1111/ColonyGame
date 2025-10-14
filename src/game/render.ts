@@ -174,27 +174,29 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     
     // Door panels (slide horizontally when opening)
     if (openAmount < 1) {
-      const leftOffset = -openAmount * (b.w / 2 - 4);
-      const rightOffset = openAmount * (b.w / 2 - 4);
+      const panelTravel = b.w / 2 - 3;
+      const panelWidth = b.w / 2 - 6;
+      const leftX = -b.w / 2 + 3 - openAmount * panelTravel;
+      const rightX = 3 + openAmount * panelTravel;
       
       // Left panel
       ctx.fillStyle = b.color;
-      ctx.fillRect(-b.w / 2 + 3 + leftOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      ctx.fillRect(leftX, -b.h / 2 + 3, panelWidth, b.h - 6);
       ctx.strokeStyle = '#2a1a10';
-      ctx.strokeRect(-b.w / 2 + 3 + leftOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      ctx.strokeRect(leftX, -b.h / 2 + 3, panelWidth, b.h - 6);
       
       // Right panel
       ctx.fillStyle = b.color;
-      ctx.fillRect(3 - rightOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      ctx.fillRect(rightX, -b.h / 2 + 3, panelWidth, b.h - 6);
       ctx.strokeStyle = '#2a1a10';
-      ctx.strokeRect(3 - rightOffset, -b.h / 2 + 3, (b.w / 2 - 6), b.h - 6);
+      ctx.strokeRect(rightX, -b.h / 2 + 3, panelWidth, b.h - 6);
       
       // Door details (vertical lines)
       ctx.strokeStyle = '#3a2510';
       ctx.lineWidth = 1;
       for (let i = 1; i < 3; i++) {
-        const x1 = -b.w / 2 + 3 + leftOffset + (b.w / 2 - 6) * i / 3;
-        const x2 = 3 - rightOffset + (b.w / 2 - 6) * i / 3;
+        const x1 = leftX + panelWidth * i / 3;
+        const x2 = rightX + panelWidth * i / 3;
         ctx.beginPath();
         ctx.moveTo(x1, -b.h / 2 + 6);
         ctx.lineTo(x1, b.h / 2 - 6);
