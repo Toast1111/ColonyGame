@@ -214,6 +214,14 @@ export function payCost(res: Resources, cost?: Partial<Resources>) {
   }
 }
 
+export function refundCost(res: Resources, cost?: Partial<Resources>, percentage: number = 1.0) {
+  if (!cost) return;
+  // Refund resources with optional percentage (e.g., 0.75 for 75% refund)
+  for (const k of Object.keys(cost) as (keyof Resources)[]) {
+    res[k] += Math.floor((cost[k] || 0) * percentage);
+  }
+}
+
 export function makeBuilding(kind: keyof typeof BUILD_TYPES, wx: number, wy: number): Building {
   const def = BUILD_TYPES[kind];
   const gx = Math.floor(wx / T) * T;
