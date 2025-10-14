@@ -53,23 +53,27 @@ export function rebuildNavGridPartial(game: Game, worldX: number, worldY: number
     }
   }
   
+  // OPTIMIZATION: Trees and rocks no longer block pathfinding
+  // Colonists can walk through them to eliminate stuttering from constant region rebuilds
+  // They still prevent building placement (checked in placementSystem.ts)
+  
   // Re-mark trees that intersect with this area
-  for (const tree of game.trees) {
-    const tGx = Math.floor(tree.x / T);
-    const tGy = Math.floor(tree.y / T);
-    if (tGx >= minGx && tGx <= maxGx && tGy >= minGy && tGy <= maxGy) {
-      markCircleSolid(game.grid, tree.x, tree.y, tree.r);
-    }
-  }
+  // for (const tree of game.trees) {
+  //   const tGx = Math.floor(tree.x / T);
+  //   const tGy = Math.floor(tree.y / T);
+  //   if (tGx >= minGx && tGx <= maxGx && tGy >= minGy && tGy <= maxGy) {
+  //     markCircleSolid(game.grid, tree.x, tree.y, tree.r);
+  //   }
+  // }
   
   // Re-mark rocks that intersect with this area
-  for (const rock of game.rocks) {
-    const rGx = Math.floor(rock.x / T);
-    const rGy = Math.floor(rock.y / T);
-    if (rGx >= minGx && rGx <= maxGx && rGy >= minGy && rGy <= maxGy) {
-      markCircleSolid(game.grid, rock.x, rock.y, rock.r);
-    }
-  }
+  // for (const rock of game.rocks) {
+  //   const rGx = Math.floor(rock.x / T);
+  //   const rGy = Math.floor(rock.y / T);
+  //   if (rGx >= minGx && rGx <= maxGx && rGy >= minGy && rGy <= maxGy) {
+  //     markCircleSolid(game.grid, rock.x, rock.y, rock.r);
+  //   }
+  // }
 }
 
 export function rebuildNavGrid(game: Game) {
@@ -100,9 +104,11 @@ export function rebuildNavGrid(game: Game) {
       markRoadPath(game.grid, doorX, doorY, T, T, 'FAST_ROAD');
     }
   }
-  // Obstacles
-  for (const tree of game.trees) markCircleSolid(game.grid, tree.x, tree.y, tree.r);
-  for (const rock of game.rocks) markCircleSolid(game.grid, rock.x, rock.y, rock.r);
+  // OPTIMIZATION: Trees and rocks no longer block pathfinding
+  // Colonists can walk through them to eliminate stuttering from constant region rebuilds
+  // They still prevent building placement (checked in placementSystem.ts)
+  // for (const tree of game.trees) markCircleSolid(game.grid, tree.x, tree.y, tree.r);
+  // for (const rock of game.rocks) markCircleSolid(game.grid, rock.x, rock.y, rock.r);
 }
 
 export function computePath(game: Game, sx: number, sy: number, tx: number, ty: number) {

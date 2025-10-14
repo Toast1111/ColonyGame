@@ -337,24 +337,21 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     if (d2 <= range * range) { c.hp = Math.min(100, c.hp + rate * dt); }
   }
 
-  // Danger detection with hysteresis to prevent rapid state flipping
-  // Enter flee mode at 140 pixels, but don't exit until 180 pixels away
-  const dangerEnterDistance = 140 * 140; // squared for performance
-  const dangerExitDistance = 180 * 180;
-  const currentDanger = (game.enemies as Enemy[]).find(e => dist2(e as any, c as any) < dangerEnterDistance);
+  // Danger detection using CombatManager with intelligent threat assessment and hysteresis
+  // Combat manager uses:
+  // - Enter flee at threat level > 50 (based on distance, HP, weapon range)
+  // - Exit flee at threat level < 30 (hysteresis prevents flipping)
+  // - Considers multiple threats, line of sight, and colonist health
+  const dangerState = game.combatManager.getDangerState(c);
+  const danger = dangerState.inDanger ? dangerState.threat : null;
   
-  // Check if currently fleeing and still within exit distance
-  const fleeingFromDanger = c.state === 'flee' && (c as any).lastDanger && 
-                           dist2((c as any).lastDanger as any, c as any) < dangerExitDistance;
-  
-  const danger = currentDanger || (fleeingFromDanger ? (c as any).lastDanger : null);
-  
-  // Remember the danger we're fleeing from for hysteresis
-  if (currentDanger) {
-    (c as any).lastDanger = currentDanger;
-  } else if (!fleeingFromDanger) {
+  // Backward compatibility: store danger info for legacy code
+  if (danger) {
+    (c as any).lastDanger = danger;
+  } else if (!dangerState.inDanger) {
     (c as any).lastDanger = null;
   }
+  
   c.lastHp = c.lastHp ?? c.hp;
   if (c.hp < c.lastHp) { c.hurt = 1.5; }
   c.lastHp = c.hp; c.hurt = Math.max(0, (c.hurt || 0) - dt);
@@ -855,35 +852,74 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'flee': {
-      let dest: { x: number; y: number } | null = null; let buildingDest: Building | null = null;
-      const tgtTurret = danger ? game.findSafeTurret(c, danger) : null;
-      if (tgtTurret) {
-        const range = (tgtTurret as any).range || 120; const tc = game.centerOf(tgtTurret);
-        const house = (game.buildings as Building[]).find(b => b.kind === 'house' && b.done && game.buildingHasSpace(b, c) && dist2(game.centerOf(b) as any, tc as any) < range * range);
-        if (house) { buildingDest = house; dest = game.centerOf(house); }
+      // Use CombatManager for smart retreat
+      const fleeDecision = game.combatManager.shouldFlee(c);
+      
+      if (!fleeDecision.flee) {
+        // Hysteresis: safe enough to return to work
+        changeState('seekTask', 'threat level acceptable');
+        break;
       }
-      if (!dest) { const hq = (game.buildings as Building[]).find((b: Building) => b.kind === 'hq' && game.buildingHasSpace(b, c)); if (hq) { buildingDest = hq; dest = game.centerOf(hq); } }
-      if (!dest && tgtTurret) dest = game.centerOf(tgtTurret);
-  if (dest) {
-        // Use direct movement instead of pathfinding
+      
+      // Determine best retreat destination
+      let dest: { x: number; y: number } | null = null;
+      let buildingDest: Building | null = null;
+      
+      if (fleeDecision.building) {
+        // Combat manager found a safe building (turret range, defensive position)
+        buildingDest = fleeDecision.building;
+        dest = game.centerOf(buildingDest);
+      } else if (fleeDecision.target) {
+        // Combat manager found a safe position (no specific building)
+        dest = fleeDecision.target;
+      }
+      
+      // Fallback to basic flee logic if combat manager didn't provide destination
+      if (!dest && danger) {
+        const tgtTurret = game.findSafeTurret(c, danger);
+        if (tgtTurret) {
+          const range = (tgtTurret as any).range || 120;
+          const tc = game.centerOf(tgtTurret);
+          const house = (game.buildings as Building[]).find(b => 
+            b.kind === 'house' && b.done && 
+            game.buildingHasSpace(b, c) && 
+            dist2(game.centerOf(b) as any, tc as any) < range * range
+          );
+          if (house) { buildingDest = house; dest = game.centerOf(house); }
+        }
+        if (!dest) {
+          const hq = (game.buildings as Building[]).find((b: Building) => 
+            b.kind === 'hq' && game.buildingHasSpace(b, c)
+          );
+          if (hq) { buildingDest = hq; dest = game.centerOf(hq); }
+        }
+        if (!dest && tgtTurret) dest = game.centerOf(tgtTurret);
+      }
+      
+      if (dest) {
         const dx = dest.x - c.x;
         const dy = dest.y - c.y;
         const distance = Math.hypot(dx, dy);
-        const nearRect = buildingDest ? (c.x >= buildingDest.x - 8 && c.x <= buildingDest.x + buildingDest.w + 8 && c.y >= buildingDest.y - 8 && c.y <= buildingDest.y + buildingDest.h + 8) : false;
+        const nearRect = buildingDest ? 
+          (c.x >= buildingDest.x - 8 && c.x <= buildingDest.x + buildingDest.w + 8 && 
+           c.y >= buildingDest.y - 8 && c.y <= buildingDest.y + buildingDest.h + 8) : false;
         
         if (distance <= 20 || nearRect) {
-      if (buildingDest && game.tryEnterBuilding(c, buildingDest)) {
-    c.hideTimer = 3; changeState('resting', 'hid from danger');
+          if (buildingDest && game.tryEnterBuilding(c, buildingDest)) {
+            c.hideTimer = 3;
+            changeState('resting', 'hid from danger');
           } else {
             // Retarget: find closest house with space, else HQ
-            const choices = (game.buildings as Building[]).filter((b: Building) => b.done && game.buildingHasSpace(b, c) && (b.kind === 'house' || b.kind === 'hq'));
+            const choices = (game.buildings as Building[]).filter((b: Building) => 
+              b.done && game.buildingHasSpace(b, c) && (b.kind === 'house' || b.kind === 'hq')
+            );
             if (choices.length) {
-              const next = choices.sort((a: Building, b: Building) => dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any))[0];
+              const next = choices.sort((a: Building, b: Building) => 
+                dist2(c as any, game.centerOf(a) as any) - dist2(c as any, game.centerOf(b) as any)
+              )[0];
               const nc = game.centerOf(next);
-              // Don't clear path immediately - let pathfinding handle retargeting
-              buildingDest = next; dest = nc; // keep fleeing toward next spot
-            } else {
-              // Nowhere to hide; fall through and keep running
+              buildingDest = next;
+              dest = nc;
             }
           }
         } else {
@@ -892,12 +928,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
       } else if (danger) {
         // Move away from danger if it still exists
-        const d = norm(sub(c as any, danger as any) as any); 
-        // Update direction for flee movement
+        const d = norm(sub(c as any, danger as any) as any);
         c.direction = Math.atan2(d.y, d.x);
-        c.x += d.x * (c.speed + 90) * dt; c.y += d.y * (c.speed + 90) * dt;
+        c.x += d.x * (c.speed + 90) * dt;
+        c.y += d.y * (c.speed + 90) * dt;
       }
-      if (!danger) { changeState('seekTask', 'no more danger'); }
+      
       break;
     }
     case 'sleep': {
@@ -2221,7 +2257,23 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break;
       }
       
-      // No specific orders - just hold position and engage enemies automatically
+      // No specific orders - check if should take cover
+      if (game.combatManager.shouldTakeCover(c)) {
+        const dangerState = game.combatManager.getDangerState(c);
+        if (dangerState.inDanger && dangerState.threat) {
+          const coverPos = game.combatManager.findCoverPosition(c, dangerState.threat);
+          if (coverPos) {
+            // Move to cover position
+            const distance = Math.hypot(c.x - coverPos.x, c.y - coverPos.y);
+            if (distance > 10) {
+              game.moveAlongPath(c, dt, coverPos, 10);
+            }
+            break;
+          }
+        }
+      }
+      
+      // No specific orders and no need for cover - just hold position and engage enemies automatically
       // Combat handled by updateColonistCombat
       break;
     }

@@ -346,6 +346,15 @@ function getWeaponStats(c: Colonist) {
 }
 
 function pickTarget(game: Game, c: Colonist, range: number): Enemy | null {
+  // Use CombatManager for intelligent threat prioritization
+  const bestTarget = game.combatManager.getBestTarget(c, range);
+  
+  // Verify line of fire (CombatManager doesn't check this)
+  if (bestTarget && hasLineOfFire(game, c, bestTarget)) {
+    return bestTarget;
+  }
+  
+  // Fallback to old simple distance-based selection if no threat-based target
   let best: Enemy | null = null; let bestD = Infinity;
   for (const e of game.enemies) {
     const d = Math.hypot(e.x - c.x, e.y - c.y);
@@ -638,11 +647,27 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   const baseAcc = Math.min(0.98, weaponAcc * (1 + shootLvl * 0.02));
   const cover = coverPenalty(game, c, target);
   const acc = Math.max(0.1, baseAcc * (1 - cover));
+  
+  // Roll for hit/miss - if miss, the shot goes wild
+  const hitRoll = Math.random();
   const ang = Math.atan2(target.y - c.y, target.x - c.x);
-  const maxSpread = (1 - acc) * 20 * (Math.PI / 180);
-  const aimAng = ang + (Math.random() - 0.5) * maxSpread;
-  const ax = c.x + Math.cos(aimAng) * dist;
-  const ay = c.y + Math.sin(aimAng) * dist;
+  let ax: number, ay: number;
+  
+  if (hitRoll <= acc) {
+    // Hit! Aim directly at target with minor spread
+    const minorSpread = (1 - acc) * 5 * (Math.PI / 180); // Small spread even on hits
+    const aimAng = ang + (Math.random() - 0.5) * minorSpread;
+    ax = c.x + Math.cos(aimAng) * dist;
+    ay = c.y + Math.sin(aimAng) * dist;
+  } else {
+    // Miss! Shot goes wide
+    const missSpread = 35 * (Math.PI / 180); // 35 degree cone for misses
+    const aimAng = ang + (Math.random() - 0.5) * missSpread;
+    // Miss shots travel past the target
+    const missDist = dist * (1.2 + Math.random() * 0.8); // 120-200% of target distance
+    ax = c.x + Math.cos(aimAng) * missDist;
+    ay = c.y + Math.sin(aimAng) * missDist;
+  }
 
   // Simple friendly-fire avoidance: skip shot if a colonist is in the line
   if (willHitFriendly(game, c, { x: ax, y: ay }, c)) {

@@ -27,6 +27,7 @@ import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculate
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
+import { CombatManager } from "./combat/combatManager";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES, getWorkTypeForTask } from './systems/workPriority';
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
@@ -69,6 +70,7 @@ export class Game {
   uiManager = new UIManager();
   renderManager = new RenderManager(this);
   navigationManager = new NavigationManager(this);
+  combatManager = new CombatManager(this);
   audioManager = AudioManager.getInstance();
   
   // Performance systems
@@ -2300,6 +2302,9 @@ export class Game {
   
   // Begin frame for adaptive tick rate system (use performance.now() for high-resolution timing)
   this.adaptiveTickRate.beginFrame(performance.now() / 1000);
+  
+  // Combat manager cleanup - remove dead references and expired cache
+  this.combatManager.cleanup(performance.now() / 1000);
   
   // Colonist AI with adaptive tick rates
   for (const c of this.colonists) { 

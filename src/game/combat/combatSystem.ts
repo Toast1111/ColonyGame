@@ -82,15 +82,30 @@ export function updateTurret(game: Game, b: Building, dt: number) {
     // Accuracy model: closer = more accurate; base 75% at mid-range
     const dist = Math.hypot(target.x - bc.x, target.y - bc.y);
     const accuracy = Math.max(0.35, Math.min(0.95, 0.85 - (dist / range) * 0.3));
-    // Aim point with inaccuracy
+    
+    // Roll for hit/miss
+    const hitRoll = Math.random();
     const ang = Math.atan2(target.y - bc.y, target.x - bc.x);
-    const spread = (1 - accuracy) * 18; // degrees
-    const spreadRad = (spread * Math.PI) / 180;
-    const jitter = (Math.random() - 0.5) * spreadRad;
-    const aimAng = ang + jitter;
-    const aimDist = dist; // aim at current target pos
-    const ax = bc.x + Math.cos(aimAng) * aimDist;
-    const ay = bc.y + Math.sin(aimAng) * aimDist;
+    let ax: number, ay: number;
+    
+    if (hitRoll <= accuracy) {
+      // Hit! Aim at target with minor spread
+      const minorSpread = (1 - accuracy) * 8; // degrees
+      const spreadRad = (minorSpread * Math.PI) / 180;
+      const jitter = (Math.random() - 0.5) * spreadRad;
+      const aimAng = ang + jitter;
+      ax = bc.x + Math.cos(aimAng) * dist;
+      ay = bc.y + Math.sin(aimAng) * dist;
+    } else {
+      // Miss! Shot goes wide
+      const missSpread = 30; // degrees
+      const spreadRad = (missSpread * Math.PI) / 180;
+      const jitter = (Math.random() - 0.5) * spreadRad;
+      const aimAng = ang + jitter;
+      const missDist = dist * (1.2 + Math.random() * 0.6); // 120-180% of target distance
+      ax = bc.x + Math.cos(aimAng) * missDist;
+      ay = bc.y + Math.sin(aimAng) * missDist;
+    }
 
     // Create a fast projectile
     const bullet: Bullet = {
