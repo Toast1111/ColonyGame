@@ -49,6 +49,7 @@ import { BudgetedExecutionManager } from '../core/BudgetedExecution';
 import { initPerformanceHUD, drawPerformanceHUD, togglePerformanceHUD } from './ui/performanceHUD';
 import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
+import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -68,6 +69,7 @@ export class Game {
   uiManager = new UIManager();
   renderManager = new RenderManager(this);
   navigationManager = new NavigationManager(this);
+  audioManager = AudioManager.getInstance();
   
   // Performance systems
   performanceMetrics = PerformanceMetrics.getInstance();
@@ -328,6 +330,10 @@ export class Game {
     (this as any).applyDamageToColonist = (colonist: any, dmg: number, type: any = 'cut') => {
       applyDamageToColonist(this, colonist, dmg, type);
     };
+
+    // Preload a couple of frequently used UI/feedback sounds
+    void this.audioManager.preload('ui.click.primary');
+    void this.audioManager.preload('buildings.placement.confirm');
     
     requestAnimationFrame(this.frame);
   }
@@ -1294,6 +1300,14 @@ export class Game {
       clearTimeout((el as any)._t);
       (el as any)._t = setTimeout(() => el.style.opacity = '0', ms);
     }
+  }
+
+  playAudio(key: AudioKey, options?: PlayAudioOptions) {
+    this.audioManager.play(key, options);
+  }
+
+  stopAudio(key: AudioKey) {
+    this.audioManager.stop(key);
   }
 
   // World setup

@@ -79,6 +79,7 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
     game.buildings.push(floorBuilding);
     game.rebuildNavGrid();
     game.toast(`Placed ${def.name} blueprint`);
+    game.playAudio('buildings.placement.confirm');
     return;
   }
   
@@ -97,7 +98,9 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
       }
     }
   }
-  game.buildings.push(b); game.rebuildNavGrid();
+  game.buildings.push(b);
+  game.rebuildNavGrid();
+  game.playAudio('buildings.placement.confirm');
 }
 
 // Entry point from click/tap
