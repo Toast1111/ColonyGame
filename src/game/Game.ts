@@ -860,8 +860,11 @@ export class Game {
             return;
           }
           
-          // Right-click on ground to move there
-          this.selColonist.draftedPosition = { x: this.mouse.wx, y: this.mouse.wy };
+          // Right-click on ground to move there (snap to grid center for precise control)
+          const T = 32; // Tile size
+          const gridX = Math.floor(this.mouse.wx / T) * T + T / 2;
+          const gridY = Math.floor(this.mouse.wy / T) * T + T / 2;
+          this.selColonist.draftedPosition = { x: gridX, y: gridY };
           this.selColonist.draftedTarget = null; // Clear target order
           this.msg(`${this.selColonist.profile?.name || 'Colonist'} moving to position`, 'info');
           return;
