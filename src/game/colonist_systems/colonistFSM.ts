@@ -1432,7 +1432,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             (game as any).playAudio?.(audioKey, { 
               category: 'buildings',
               volume: 0.75,
-              rng: Math.random() // Random variant selection
+              rng: Math.random // Pass the function, not the result
             });
             c.lastConstructionAudioTime = currentTime;
             c.activeConstructionAudio = audioKey;

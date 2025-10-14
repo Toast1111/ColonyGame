@@ -1308,7 +1308,9 @@ export class Game {
   }
 
   playAudio(key: AudioKey, options?: PlayAudioOptions) {
-    this.audioManager.play(key, options);
+    this.audioManager.play(key, options).catch((err) => {
+      console.warn('[Game] Failed to play audio:', key, err);
+    });
   }
 
   stopAudio(key: AudioKey) {

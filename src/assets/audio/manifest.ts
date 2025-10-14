@@ -311,23 +311,41 @@ export function pickAudioVariant(
   key: AudioKey,
   rng: RandomFn = Math.random
 ): AudioVariant | null {
-  const variants = AUDIO_MANIFEST[key] as readonly AudioVariant[];
-  if (!variants || variants.length === 0) {
+  try {
+    // Direct check before type assertion
+    if (!(key in AUDIO_MANIFEST)) {
+      console.warn(`[AudioManifest] Key "${key}" not found in AUDIO_MANIFEST`);
+      return null;
+    }
+    
+    const variants = AUDIO_MANIFEST[key] as readonly AudioVariant[];
+    
+    if (!variants || variants.length === 0) {
+      console.warn(`[AudioManifest] No variants found for audio key: ${key}`);
+      return null;
+    }
+    if (variants.length === 1) {
+      return variants[0];
+    }
+
+    const totalWeight = variants.reduce((sum, variant) => {
+      const weight = variant?.weight ?? 1;
+      return sum + weight;
+    }, 0);
+    
+    let roll = rng() * totalWeight;
+    for (const variant of variants) {
+      if (!variant) continue; // Skip null/undefined variants
+      roll -= variant.weight ?? 1;
+      if (roll <= 0) {
+        return variant;
+      }
+    }
+    return variants[variants.length - 1];
+  } catch (error) {
+    console.error(`[AudioManifest] Error picking variant for key "${key}":`, error);
     return null;
   }
-  if (variants.length === 1) {
-    return variants[0];
-  }
-
-  const totalWeight = variants.reduce((sum, variant) => sum + (variant.weight ?? 1), 0);
-  let roll = rng() * totalWeight;
-  for (const variant of variants) {
-    roll -= variant.weight ?? 1;
-    if (roll <= 0) {
-      return variant;
-    }
-  }
-  return variants[variants.length - 1];
 }
 
 export function listAudioKeys(prefix: string): AudioKey[] {

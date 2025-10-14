@@ -99,7 +99,7 @@ export class AudioManager {
     }
 
     element.play().catch((err) => {
-      console.warn('[AudioManager] Failed to play clip', key, err);
+      console.warn('[AudioManager] Failed to play HTMLAudioElement:', key, err);
     });
 
     return element;
