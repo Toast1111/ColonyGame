@@ -1167,7 +1167,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     case 'seekTask': {
       if (game.isNight()) { changeState('sleep', 'night time'); break; }
-      if (!c.task || (c.task === 'idle' && Math.random() < 0.05)) {
+      // Always pick a new task when in seekTask state, unless we're executing a command
+      if (!c.task || c.task === 'idle') {
         const oldTask = c.task;
         game.pickTask(c);
         if (oldTask !== c.task && Math.random() < 0.1) {

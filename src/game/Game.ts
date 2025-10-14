@@ -28,7 +28,7 @@ import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";
 import { itemDatabase } from '../data/itemDatabase';
-import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES } from './systems/workPriority';
+import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES, getWorkTypeForTask } from './systems/workPriority';
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen, isMouseOverWorkPanel } from './ui/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
@@ -860,8 +860,11 @@ export class Game {
             return;
           }
           
-          // Right-click on ground to move there
-          this.selColonist.draftedPosition = { x: this.mouse.wx, y: this.mouse.wy };
+          // Right-click on ground to move there (snap to grid center for precise control)
+          const T = 32; // Tile size
+          const gridX = Math.floor(this.mouse.wx / T) * T + T / 2;
+          const gridY = Math.floor(this.mouse.wy / T) * T + T / 2;
+          this.selColonist.draftedPosition = { x: gridX, y: gridY };
           this.selColonist.draftedTarget = null; // Clear target order
           this.msg(`${this.selColonist.profile?.name || 'Colonist'} moving to position`, 'info');
           return;
@@ -1846,9 +1849,23 @@ export class Game {
       }
     }
     
-    // Sort candidates by priority (lower = better), then distance
+    // Sort candidates by priority (lower = better), then by same work type preference, then distance
+    // Get current work type if colonist has an active task
+    const currentWorkType = getWorkTypeForTask(c.task);
+    
     candidates.sort((a, b) => {
+      // First: Sort by priority (lower number = higher priority)
       if (a.priority !== b.priority) return a.priority - b.priority;
+      
+      // Second: Prefer continuing the same work type (work type affinity)
+      // This ensures colonists finish similar tasks before switching to different work
+      if (currentWorkType) {
+        const aIsSameType = a.workType === currentWorkType ? 1 : 0;
+        const bIsSameType = b.workType === currentWorkType ? 1 : 0;
+        if (aIsSameType !== bIsSameType) return bIsSameType - aIsSameType; // Prefer same type
+      }
+      
+      // Third: Sort by distance (closer is better)
       return a.distance - b.distance;
     });
     

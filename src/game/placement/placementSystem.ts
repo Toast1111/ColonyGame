@@ -1,4 +1,4 @@
-import { BUILD_TYPES, hasCost, makeBuilding, payCost } from "../buildings";
+import { BUILD_TYPES, hasCost, makeBuilding, payCost, refundCost } from "../buildings";
 import { T, WORLD } from "../constants";
 import { clamp } from "../../core/utils";
 import { setFloorRect, FloorType, getFloorTypeId, getFloorTypeFromId } from "../terrain";
@@ -269,13 +269,43 @@ export function paintWallAtMouse(game: Game, force = false) {
 
 export function eraseInRect(game: Game, rect: { x: number; y: number; w: number; h: number }) {
   const before = game.buildings.length;
+  let totalRefunded = { wood: 0, stone: 0, food: 0 };
+  
   for (let i = game.buildings.length - 1; i >= 0; i--) {
     const b = game.buildings[i]; if (b.kind === 'hq') continue;
     const overlap = !(rect.x + rect.w <= b.x || rect.x >= b.x + b.w || rect.y + rect.h <= b.y || rect.y >= b.y + b.h);
-    if (overlap) { evictColonistsFrom(game, b); game.buildings.splice(i, 1); game.buildReservations.delete(b); game.insideCounts.delete(b); }
+    if (overlap) { 
+      evictColonistsFrom(game, b); 
+      
+      // Refund resources based on building completion
+      const def = BUILD_TYPES[b.kind];
+      if (def && def.cost) {
+        const completionPercent = b.done ? 1.0 : 1.0 - (b.buildLeft / def.build);
+        const refundPercent = b.done ? 0.75 : Math.max(0.5, 1.0 - completionPercent * 0.5);
+        refundCost(game.RES, def.cost, refundPercent);
+        
+        // Track total refunded
+        if (def.cost.wood) totalRefunded.wood += Math.floor((def.cost.wood || 0) * refundPercent);
+        if (def.cost.stone) totalRefunded.stone += Math.floor((def.cost.stone || 0) * refundPercent);
+        if (def.cost.food) totalRefunded.food += Math.floor((def.cost.food || 0) * refundPercent);
+      }
+      
+      game.buildings.splice(i, 1); 
+      game.buildReservations.delete(b); 
+      game.insideCounts.delete(b); 
+    }
   }
   const removed = before - game.buildings.length;
-  if (removed > 0) { game.msg(`Removed ${removed} structure(s)`); game.rebuildNavGrid(); }
+  if (removed > 0) { 
+    const refundMsg = [
+      totalRefunded.wood > 0 ? `${totalRefunded.wood}w` : '',
+      totalRefunded.stone > 0 ? `${totalRefunded.stone}s` : '',
+      totalRefunded.food > 0 ? `${totalRefunded.food}f` : ''
+    ].filter(s => s).join(' ');
+    
+    game.msg(`Removed ${removed} structure(s)${refundMsg ? ` (refunded: ${refundMsg})` : ''}`); 
+    game.rebuildNavGrid(); 
+  }
 }
 
 export function cancelOrErase(game: Game) {
@@ -284,8 +314,25 @@ export function cancelOrErase(game: Game) {
     const b = game.buildings[i]; if (b.kind === 'hq') continue;
     if (pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h) {
       evictColonistsFrom(game, b);
+      
+      // Refund resources based on building completion
+      const def = BUILD_TYPES[b.kind];
+      if (def && def.cost) {
+        // Full refund if not started (buildLeft === build time), partial if in progress
+        const completionPercent = b.done ? 1.0 : 1.0 - (b.buildLeft / def.build);
+        const refundPercent = b.done ? 0.75 : Math.max(0.5, 1.0 - completionPercent * 0.5);
+        refundCost(game.RES, def.cost, refundPercent);
+        
+        if (refundPercent >= 0.75) {
+          game.msg(`Building removed (${Math.floor(refundPercent * 100)}% refund)`);
+        } else {
+          game.msg(`Building removed (${Math.floor(refundPercent * 100)}% refund)`);
+        }
+      } else {
+        game.msg('Building removed');
+      }
+      
       game.buildings.splice(i, 1);
-      game.msg('Building removed');
       game.rebuildNavGrid();
       return;
     }
