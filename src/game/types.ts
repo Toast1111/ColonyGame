@@ -258,6 +258,10 @@ export type Colonist = {
     expires?: number;          // Optional expiration time (for temporary overrides)
   };
   
+  // Construction audio tracking (for looping work sounds)
+  lastConstructionAudioTime?: number;  // Last time construction audio was played
+  activeConstructionAudio?: string;     // Audio key currently looping for construction
+  
   // Draft system for combat control
   isDrafted?: boolean;         // True if colonist is drafted for combat
   draftedTarget?: Enemy | Colonist | null; // Specific target assigned by player (null = auto-target)

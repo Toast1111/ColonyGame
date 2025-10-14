@@ -3,6 +3,8 @@ import type { Building, Bullet, Enemy } from "../types";
 import { grantSkillXP } from "../skills/skills";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles } from "../../core/particles";
 import { dist2 } from "../../core/utils";
+import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";
+import { itemDatabase } from "../../data/itemDatabase";
 
 // Simple line-rectangle intersection for cover/obstruction checks
 function lineIntersectsRect(x1: number, y1: number, x2: number, y2: number, r: { x: number; y: number; w: number; h: number }): boolean {
@@ -112,6 +114,13 @@ export function updateTurret(game: Game, b: Building, dt: number) {
     const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang);
     game.particles.push(...muzzleFlash);
     (b as any).flashTimer = 0.08;
+    
+    // Play turret fire sound (use default autopistol fire)
+    const turretAudioKey = getWeaponAudioByDefName(itemDatabase, undefined, true);
+    if (turretAudioKey) {
+      game.playAudio(turretAudioKey, { volume: 0.7, rng: Math.random });
+    }
+    
   (b as any).cooldown = fireRate;
   }
 }

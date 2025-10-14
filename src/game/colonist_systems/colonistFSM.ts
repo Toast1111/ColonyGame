@@ -8,6 +8,8 @@ import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor, findBlockingDoor } from "../systems/doorSystem";
 import { addItemToInventory, removeItemFromInventory, getInventoryItemCount } from "../systems/buildingInventory";
 import { itemDatabase } from "../../data/itemDatabase";
+import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
+import { BUILD_TYPES } from "../buildings";
 
 
 // Helper function to check if a position would collide with buildings
@@ -1322,7 +1324,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           game.releaseBuildReservation(c); 
           c.task = null; 
           c.target = null; 
-          game.clearPath(c); 
+          game.clearPath(c);
+          // Clear construction audio tracking
+          c.lastConstructionAudioTime = undefined;
+          c.activeConstructionAudio = undefined;
           changeState('seekTask', 'building complete');
         }
         break; 
@@ -1337,6 +1342,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.task = null;
         c.target = null;
         game.clearPath(c);
+        // Clear construction audio tracking on timeout
+        c.lastConstructionAudioTime = undefined;
+        c.activeConstructionAudio = undefined;
         changeState('seekTask', 'build timeout');
         break;
       }
@@ -1371,13 +1379,53 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const skillMult = skillWorkSpeedMultiplier(lvl);
         const workMult = equipMult * skillMult;
         b.buildLeft -= 25 * dt * workMult;
+        
+        // === CONSTRUCTION AUDIO SYSTEM ===
+        // Play construction work sounds while actively building
+        const buildingDef = BUILD_TYPES[b.kind];
+        if (buildingDef) {
+          const audioKey = getConstructionAudio(b.kind, buildingDef);
+          const currentTime = c.t || 0;
+          
+          // Play construction audio every 1-2 seconds (randomized for natural feel)
+          // Each audio clip plays to completion, then a new one starts
+          const audioInterval = 1.5 + Math.random() * 0.5; // 1.5-2.0 seconds
+          
+          if (!c.lastConstructionAudioTime || (currentTime - c.lastConstructionAudioTime) >= audioInterval) {
+            // Play construction sound (AudioManager will select random variant)
+            (game as any).playAudio?.(audioKey, { 
+              category: 'buildings',
+              volume: 0.75,
+              rng: Math.random() // Random variant selection
+            });
+            c.lastConstructionAudioTime = currentTime;
+            c.activeConstructionAudio = audioKey;
+          }
+        }
+        // === END CONSTRUCTION AUDIO ===
+        
         // Grant construction XP over time while actively building
         if (c.skills) {
           // Base XP per second while building
           grantSkillXP(c, 'Construction', 6 * dt, c.t || 0);
         }
         if (b.buildLeft <= 0) {
-          b.done = true; 
+          b.done = true;
+          
+          // === CONSTRUCTION COMPLETION AUDIO ===
+          // Play completion sound when building finishes
+          if (buildingDef) {
+            const completeAudioKey = getConstructionCompleteAudio(b.kind, buildingDef);
+            (game as any).playAudio?.(completeAudioKey, {
+              category: 'buildings',
+              volume: 0.85
+            });
+          }
+          // Clear construction audio tracking
+          c.lastConstructionAudioTime = undefined;
+          c.activeConstructionAudio = undefined;
+          // === END COMPLETION AUDIO ===
+          
           if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
           if (b.kind === 'door') { initializeDoor(b); }
           

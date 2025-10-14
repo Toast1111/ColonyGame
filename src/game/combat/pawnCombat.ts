@@ -3,6 +3,7 @@ import type { Colonist, Enemy } from "../types";
 import { grantSkillXP, skillLevel } from "../skills/skills";
 import { itemDatabase } from "../../data/itemDatabase";
 import { createMuzzleFlash, createProjectileTrail } from "../../core/particles";
+import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";
 
 // Reuse utility from turret combat via a local copy (keeps decoupled)
 function lineIntersectsRect(x1: number, y1: number, x2: number, y2: number, r: { x: number; y: number; w: number; h: number }): boolean {
@@ -489,6 +490,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
           }
         }
         
+        // Play melee impact sound
+        const impactAudioKey = getWeaponAudioByDefName(itemDatabase, weaponDefName, false);
+        if (impactAudioKey) {
+          game.playAudio(impactAudioKey, { volume: 0.85, rng: Math.random });
+        }
+        
         // XP for landing a melee hit
         if (c.skills) grantSkillXP(c, 'Melee', 18, (c as any).t || 0);
         (c as any).meleeCd = 0.8; // attack every 0.8s
@@ -589,6 +596,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         target.hp -= meleeDmg;
       }
       
+      // Play gun-bash impact sound (blunt impact)
+      const bashAudioKey = getWeaponAudioByDefName(itemDatabase, undefined, false);
+      if (bashAudioKey) {
+        game.playAudio(bashAudioKey, { volume: 0.8, rng: Math.random });
+      }
+      
       (c as any).meleeCd = 0.9;
       // Small cooldown before resuming ranged
       (c as any).fireCooldown = Math.max((c as any).fireCooldown || 0, 0.3);
@@ -656,6 +669,13 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   game.bullets.push(bullet);
   const muzzle = createMuzzleFlash(c.x, c.y, ang);
   game.particles.push(...muzzle);
+
+  // Play weapon fire sound
+  const weaponDefName = c.inventory?.equipment?.weapon?.defName;
+  const fireAudioKey = getWeaponAudioByDefName(itemDatabase, weaponDefName, true);
+  if (fireAudioKey) {
+    game.playAudio(fireAudioKey, { volume: 0.9, rng: Math.random });
+  }
 
   (c as any).burstLeft -= 1;
   (c as any).betweenShots = stats.betweenShots;

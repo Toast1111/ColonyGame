@@ -173,6 +173,46 @@ export function getBuildingAudio(
 }
 
 /**
+ * Get construction loop audio key for a building.
+ * Returns the audio key to play while colonists are actively building.
+ * 
+ * @param buildingKey - The building type key (e.g., 'wall', 'house')
+ * @param buildingDef - The building definition
+ * @returns Audio key for construction work loop
+ * 
+ * @example
+ * const audioKey = getConstructionAudio('wall', BUILD_TYPES['wall']);
+ * // Returns: 'buildings.construct.stone.hammer'
+ */
+export function getConstructionAudio(
+  buildingKey: string,
+  buildingDef: BuildingDef
+): AudioKey {
+  const config = getBuildingAudio(buildingKey, buildingDef);
+  return config.constructionLoop || 'buildings.construct.wood.hammer_nail';
+}
+
+/**
+ * Get construction completion audio key for a building.
+ * Returns the audio key to play when construction finishes.
+ * 
+ * @param buildingKey - The building type key
+ * @param buildingDef - The building definition
+ * @returns Audio key for construction completion
+ * 
+ * @example
+ * const audioKey = getConstructionCompleteAudio('turret', BUILD_TYPES['turret']);
+ * // Returns: 'buildings.construct.stone.drop'
+ */
+export function getConstructionCompleteAudio(
+  buildingKey: string,
+  buildingDef: BuildingDef
+): AudioKey {
+  const config = getBuildingAudio(buildingKey, buildingDef);
+  return config.complete || 'buildings.construct.wood.finish';
+}
+
+/**
  * Get just the placement sound for a building.
  * Convenience function for the most common use case.
  */
