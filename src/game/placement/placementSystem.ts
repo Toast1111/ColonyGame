@@ -5,6 +5,7 @@ import { setFloorRect, FloorType, getFloorTypeId, getFloorTypeFromId } from "../
 import { syncTerrainToGrid } from "../../core/pathfinding";
 import type { Building } from "../types";
 import type { Game } from "../Game";
+import { getBuildingPlacementAudio } from "../audio/buildingAudioMap";
 
 // Placement validation
 export function canPlace(game: Game, def: Building, x: number, y: number) {
@@ -79,7 +80,10 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
     game.buildings.push(floorBuilding);
     game.rebuildNavGrid();
     game.toast(`Placed ${def.name} blueprint`);
-    game.playAudio('buildings.placement.confirm');
+    
+    // Play audio based on building type
+    const audioKey = getBuildingPlacementAudio(t, def);
+    game.playAudio(audioKey);
     return;
   }
   
@@ -100,7 +104,10 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
   }
   game.buildings.push(b);
   game.rebuildNavGrid();
-  game.playAudio('buildings.placement.confirm');
+  
+  // Play audio based on building type
+  const audioKey = getBuildingPlacementAudio(t, def);
+  game.playAudio(audioKey);
 }
 
 // Entry point from click/tap
