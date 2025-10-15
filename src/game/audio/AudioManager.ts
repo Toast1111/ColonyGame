@@ -231,6 +231,10 @@ export class AudioManager {
 
   /** Update listener position for spatial audio calculations */
   setListenerPosition(x: number, y: number): void {
+    // Only update if position changed to avoid GC pressure
+    if (this.listenerPosition.x === x && this.listenerPosition.y === y) {
+      return;
+    }
     this.listenerPosition = Object.freeze({ x, y });
     this.updateSpatialAudio();
   }
