@@ -506,7 +506,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
             volume: 0.85, 
             rng: Math.random,
             position: { x: c.x, y: c.y },
-            listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+            listenerPosition: game.audioManager.getListenerPosition()
           });
         }
         
@@ -617,7 +617,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
           volume: 0.8, 
           rng: Math.random,
           position: { x: c.x, y: c.y },
-          listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+          listenerPosition: game.audioManager.getListenerPosition()
         });
       }
       
@@ -713,7 +713,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       volume: 0.9, 
       rng: Math.random,
       position: { x: c.x, y: c.y },
-      listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+      listenerPosition: game.audioManager.getListenerPosition()
     });
   }
 

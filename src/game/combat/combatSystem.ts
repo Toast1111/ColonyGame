@@ -137,7 +137,7 @@ export function updateTurret(game: Game, b: Building, dt: number) {
         volume: 0.7, 
         rng: Math.random,
         position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
-        listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+        listenerPosition: game.audioManager.getListenerPosition()
       });
     }
     
