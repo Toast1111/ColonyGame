@@ -502,7 +502,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         // Play melee impact sound
         const impactAudioKey = getWeaponAudioByDefName(itemDatabase, weaponDefName, false);
         if (impactAudioKey) {
-          game.playAudio(impactAudioKey, { volume: 0.85, rng: Math.random });
+          game.playAudio(impactAudioKey, { 
+            volume: 0.85, 
+            rng: Math.random,
+            position: { x: c.x, y: c.y },
+            listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+          });
         }
         
         // XP for landing a melee hit
@@ -608,7 +613,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       // Play gun-bash impact sound (blunt impact)
       const bashAudioKey = getWeaponAudioByDefName(itemDatabase, undefined, false);
       if (bashAudioKey) {
-        game.playAudio(bashAudioKey, { volume: 0.8, rng: Math.random });
+        game.playAudio(bashAudioKey, { 
+          volume: 0.8, 
+          rng: Math.random,
+          position: { x: c.x, y: c.y },
+          listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+        });
       }
       
       (c as any).meleeCd = 0.9;
@@ -699,7 +709,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   const weaponDefName = c.inventory?.equipment?.weapon?.defName;
   const fireAudioKey = getWeaponAudioByDefName(itemDatabase, weaponDefName, true);
   if (fireAudioKey) {
-    game.playAudio(fireAudioKey, { volume: 0.9, rng: Math.random });
+    game.playAudio(fireAudioKey, { 
+      volume: 0.9, 
+      rng: Math.random,
+      position: { x: c.x, y: c.y },
+      listenerPosition: { x: game.camera.x + game.canvas.width / (2 * game.camera.zoom), y: game.camera.y + game.canvas.height / (2 * game.camera.zoom) }
+    });
   }
 
   (c as any).burstLeft -= 1;
