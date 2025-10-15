@@ -1385,10 +1385,10 @@ export class Game {
     }
     
     // Post-process: ensure at least one starting colonist has a ranged weapon
-    const hasAnyRanged = this.colonists.some(c => c.inventory?.equipment?.weapon && (c.inventory!.equipment!.weapon!.defName === 'Pistol' || c.inventory!.equipment!.weapon!.defName === 'Rifle'));
+    const hasAnyRanged = this.colonists.some(c => c.inventory?.equipment?.weapon && (c.inventory!.equipment!.weapon!.defName === 'Autopistol' || c.inventory!.equipment!.weapon!.defName === 'AssaultRifle'));
     if (!hasAnyRanged && this.colonists.length) {
       const c = this.colonists[0];
-      const pistol = itemDatabase.createItem('Pistol', 1, 'normal');
+      const pistol = itemDatabase.createItem('Autopistol', 1, 'normal');
       if (pistol) {
         if (!c.inventory) c.inventory = { items: [], equipment: {}, carryCapacity: 50, currentWeight: 0 };
         c.inventory.equipment.weapon = pistol;

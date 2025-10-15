@@ -129,8 +129,8 @@ export class ItemDatabase {
         
         // Weapons
         {
-          defName: 'Pistol',
-          label: 'pistol',
+          defName: 'Autopistol',
+          label: 'autopistol',
           description: 'A reliable sidearm for personal protection.',
           category: 'Weapon',
           equipSlot: 'weapon',
@@ -153,7 +153,7 @@ export class ItemDatabase {
           accuracyLong: 0.35
         },
         {
-          defName: 'Rifle',
+          defName: 'AssaultRifle',
           label: 'assault rifle',
           description: 'Military-grade automatic rifle with high damage output.',
           category: 'Weapon',
@@ -596,7 +596,7 @@ export class ItemDatabase {
         items.push('Hoe', 'WheatSeeds', 'WorkClothes');
         break;
       case 'soldier':
-        items.push('Rifle', 'TacticalArmor', 'TacticalHelmet', 'MedicineKit');
+        items.push('AssaultRifle', 'TacticalArmor', 'TacticalHelmet', 'MedicineKit');
         break;
       case 'doctor':
         items.push('MedicineKit', 'Bandages');

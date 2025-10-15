@@ -8,7 +8,7 @@ import { calculateOptimalDPS, calculateDPSAtRange, getWeaponStatsSummary } from 
 export async function testWeaponStats() {
   await itemDatabase.loadItems();
   
-  const weapons = ['Pistol', 'Rifle', 'SniperRifle', 'SMG', 'Knife'];
+  const weapons = ['Autopistol', 'AssaultRifle', 'SniperRifle', 'SMG', 'Knife'];
   
   console.log('=== WEAPON STATS TEST ===\n');
   
@@ -58,7 +58,7 @@ export async function testWeaponStats() {
   // Test armor penetration calculation
   console.log('=== ARMOR PENETRATION TEST ===');
   console.log('-'.repeat(40));
-  const rifle = itemDatabase.getItemDef('Rifle');
+  const rifle = itemDatabase.getItemDef('AssaultRifle');
   const flakVest = itemDatabase.getItemDef('FlakVest');
   
   if (rifle && flakVest) {

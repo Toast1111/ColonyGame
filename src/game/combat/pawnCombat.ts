@@ -317,10 +317,10 @@ function getWeaponStats(c: Colonist) {
   };
   
   // Use new weapon stats if available, otherwise use legacy values
-  const burst = def.burstCount ?? (def.defName === 'Rifle' ? 3 : 1);
-  const warmup = def.aimTime ?? (def.defName === 'Rifle' ? 0.6 : 0.4);
+  const burst = def.burstCount ?? (def.defName === 'AssaultRifle' ? 3 : 1);
+  const warmup = def.aimTime ?? (def.defName === 'AssaultRifle' ? 0.6 : 0.4);
   const betweenShots = 0.1; // time between burst shots (fixed)
-  const cooldown = def.cooldownTime ?? (def.defName === 'Rifle' ? 0.7 : 0.5);
+  const cooldown = def.cooldownTime ?? (def.defName === 'AssaultRifle' ? 0.7 : 0.5);
   const speed = 680; // bullet speed in px/s
   const minRangePx = 1.25 * T; // too close -> bad for ranged
   const isMelee = (def.range || 0) <= 2;

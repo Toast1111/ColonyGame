@@ -238,11 +238,15 @@ export class ImageAssets {
   getWeaponImage(defName: string): HTMLImageElement | null {
     // Map defName to asset name
     const weaponMap: Record<string, string> = {
-      'AssaultRifle': 'weapon_assault_rifle',
+      // Ranged weapons
       'Autopistol': 'weapon_autopistol',
+      'AssaultRifle': 'weapon_assault_rifle',
+      'SniperRifle': 'weapon_sniper_rifle',
+      'SMG': 'weapon_autopistol',              // SMG uses Autopistol sprite (smaller weapon)
       'Revolver': 'weapon_revolver',
       'Shotgun': 'weapon_shotgun',
-      'SniperRifle': 'weapon_sniper_rifle',
+      
+      // Melee weapons
       'Club': 'weapon_club',
       'Knife': 'weapon_knife'
     };

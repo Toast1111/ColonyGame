@@ -74,7 +74,7 @@ export const BACKGROUNDS: Background[] = [
       discipline: 3,
       strength: 2
     },
-    startingItems: ['rifle', 'armor'],
+    startingItems: ['assault_rifle', 'armor'],
     rarity: 'uncommon'
   },
   {

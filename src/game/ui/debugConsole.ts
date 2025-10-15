@@ -96,13 +96,53 @@ export function initDebugConsole(game: Game) {
     }
     
     // Handle different item types
-    if (what === "pistol" || what === "weapon") {
+    if (what === "pistol" || what === "autopistol" || what === "weapon") {
       for (const c of targets) {
-        const pistol = itemDatabase.createItem('Pistol', 1, 'normal');
+        const pistol = itemDatabase.createItem('Autopistol', 1, 'normal');
         (c as any).inventory.equipment.weapon = pistol;
         g.recalcInventoryWeight(c);
       }
-      return `gave pistol to ${targets.length} colonist(s)`;
+      return `gave autopistol to ${targets.length} colonist(s)`;
+    }
+    else if (what === "rifle" || what === "assaultrifle") {
+      for (const c of targets) {
+        const rifle = itemDatabase.createItem('AssaultRifle', 1, 'normal');
+        (c as any).inventory.equipment.weapon = rifle;
+        g.recalcInventoryWeight(c);
+      }
+      return `gave assault rifle to ${targets.length} colonist(s)`;
+    }
+    else if (what === "sniper" || what === "sniperrifle") {
+      for (const c of targets) {
+        const sniper = itemDatabase.createItem('SniperRifle', 1, 'normal');
+        (c as any).inventory.equipment.weapon = sniper;
+        g.recalcInventoryWeight(c);
+      }
+      return `gave sniper rifle to ${targets.length} colonist(s)`;
+    }
+    else if (what === "smg") {
+      for (const c of targets) {
+        const smg = itemDatabase.createItem('SMG', 1, 'normal');
+        (c as any).inventory.equipment.weapon = smg;
+        g.recalcInventoryWeight(c);
+      }
+      return `gave SMG to ${targets.length} colonist(s)`;
+    }
+    else if (what === "club") {
+      for (const c of targets) {
+        const club = itemDatabase.createItem('Club', 1, 'normal');
+        (c as any).inventory.equipment.weapon = club;
+        g.recalcInventoryWeight(c);
+      }
+      return `gave club to ${targets.length} colonist(s)`;
+    }
+    else if (what === "knife") {
+      for (const c of targets) {
+        const knife = itemDatabase.createItem('Knife', 1, 'normal');
+        (c as any).inventory.equipment.weapon = knife;
+        g.recalcInventoryWeight(c);
+      }
+      return `gave knife to ${targets.length} colonist(s)`;
     } 
     else if (what === "medicine" || what === "medicinekit") {
       for (const c of targets) {
@@ -129,9 +169,9 @@ export function initDebugConsole(game: Game) {
       return `gave 10 bread to ${targets.length} colonist(s)`;
     }
     else {
-      return "usage: give <pistol|medicine|bandage|food> [selected|all|name]";
+      return "usage: give <weapon|item> [selected|all|name]\nWeapons: pistol, rifle, sniper, smg, club, knife\nItems: medicine, bandage, food";
     }
-  }, "give <item> [target] — give items to colonist(s). Items: pistol,medicine,bandage,food. Target: selected,all,name");
+  }, "give <item> [target] — give items to colonist(s). Weapons: pistol,rifle,sniper,smg,club,knife. Items: medicine,bandage,food. Target: selected,all,name");
 
   reg("select", (g, args) => {
     const sub = (args[0] || "").toLowerCase();
