@@ -57,5 +57,5 @@ This fix ensures that `pickAudioVariant()` can call `rng()` multiple times if ne
 ---
 
 **Test Date**: 2025-10-15  
-**Tested By**: Copilot Agent  
+**Verification Method**: Automated testing with runtime verification  
 **Status**: ✅ PASS - All tests successful
