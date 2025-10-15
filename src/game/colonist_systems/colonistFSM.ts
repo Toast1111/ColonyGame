@@ -1432,7 +1432,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             (game as any).playAudio?.(audioKey, { 
               category: 'buildings',
               volume: 0.75,
-              rng: Math.random // Pass the function, not the result
+              rng: Math.random, // Pass the function, not the result
+              position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
+              listenerPosition: (game as any).audioManager?.getListenerPosition()
             });
             c.lastConstructionAudioTime = currentTime;
             c.activeConstructionAudio = audioKey;
@@ -1454,7 +1456,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             const completeAudioKey = getConstructionCompleteAudio(b.kind, buildingDef);
             (game as any).playAudio?.(completeAudioKey, {
               category: 'buildings',
-              volume: 0.85
+              volume: 0.85,
+              position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
+              listenerPosition: (game as any).audioManager?.getListenerPosition()
             });
           }
           // Clear construction audio tracking

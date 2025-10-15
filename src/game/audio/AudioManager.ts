@@ -235,9 +235,9 @@ export class AudioManager {
     this.updateSpatialAudio();
   }
 
-  /** Get current listener position */
+  /** Get current listener position (returns internal reference - do not modify) */
   getListenerPosition(): { x: number; y: number } {
-    return { ...this.listenerPosition };
+    return this.listenerPosition;
   }
 
   private async loadBuffer(file: string): Promise<CachedBuffer | null> {
