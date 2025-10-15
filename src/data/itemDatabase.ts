@@ -162,19 +162,19 @@ export class ItemDatabase {
           stackable: false,
           value: 400,
           weight: 3.8,
-          damage: 15,
-          range: 45,
-          accuracy: 0.8, // Legacy fallback
+          damage: 11,                      // RimWorld: 11 dmg
+          range: 30.9,                     // RimWorld: 30.9 tiles
+          accuracy: 0.65, // Legacy fallback
           ammoType: 'Bullets',
-          armorPenetration: 0.25,
-          stoppingPower: 1.2,
-          burstCount: 3,
-          aimTime: 0.6,
-          cooldownTime: 0.7,
-          accuracyTouch: 0.70,
-          accuracyShort: 0.88,
-          accuracyMedium: 0.75,
-          accuracyLong: 0.50
+          armorPenetration: 0.16,          // RimWorld: 16%
+          stoppingPower: 0.5,              // RimWorld: 0.5
+          burstCount: 3,                   // RimWorld: 3 per burst
+          aimTime: 1.0,                    // RimWorld: 60 ticks = 1.0 sec
+          cooldownTime: 1.7,               // RimWorld: 102 ticks = 1.7 sec
+          accuracyTouch: 0.60,             // RimWorld: 60% (touch - 3 tiles)
+          accuracyShort: 0.70,             // RimWorld: 70% (short - 12 tiles)
+          accuracyMedium: 0.65,            // RimWorld: 65% (medium - 25 tiles)
+          accuracyLong: 0.55               // RimWorld: 55% (long - 40 tiles)
         },
         {
           defName: 'Knife',
