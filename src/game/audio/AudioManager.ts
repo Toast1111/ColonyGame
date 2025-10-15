@@ -54,6 +54,7 @@ export class AudioManager {
   private readonly bufferCache = new Map<string, CachedBuffer>();
   private readonly activeSounds = new Map<AudioKey, ActiveSound[]>();
   private listenerPosition = { x: 0, y: 0 };
+  private frozenListenerPosition: Readonly<{ x: number; y: number }> = Object.freeze({ x: 0, y: 0 });
 
   private constructor() {
     // Sensible category defaults (can be tweaked in the options menu later)
@@ -232,12 +233,13 @@ export class AudioManager {
   /** Update listener position for spatial audio calculations */
   setListenerPosition(x: number, y: number): void {
     this.listenerPosition = { x, y };
+    this.frozenListenerPosition = Object.freeze({ x, y });
     this.updateSpatialAudio();
   }
 
-  /** Get current listener position (returns internal reference - do not modify) */
-  getListenerPosition(): { x: number; y: number } {
-    return this.listenerPosition;
+  /** Get current listener position (returns frozen readonly object - safe to use) */
+  getListenerPosition(): Readonly<{ x: number; y: number }> {
+    return this.frozenListenerPosition;
   }
 
   private async loadBuffer(file: string): Promise<CachedBuffer | null> {
