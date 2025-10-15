@@ -133,7 +133,12 @@ export function updateTurret(game: Game, b: Building, dt: number) {
     // Play turret fire sound (use default autopistol fire)
     const turretAudioKey = getWeaponAudioByDefName(itemDatabase, undefined, true);
     if (turretAudioKey) {
-      game.playAudio(turretAudioKey, { volume: 0.7, rng: Math.random });
+      game.playAudio(turretAudioKey, { 
+        volume: 0.7, 
+        rng: Math.random,
+        position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
+        listenerPosition: game.audioManager.getListenerPosition()
+      });
     }
     
   (b as any).cooldown = fireRate;

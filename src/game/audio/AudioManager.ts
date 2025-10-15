@@ -9,17 +9,26 @@ export interface PlayAudioOptions {
   rng?: RandomFn;
   replaceExisting?: boolean;
   categoryOverride?: string;
+  /** Spatial audio position {x, y} in world coordinates */
+  position?: { x: number; y: number };
+  /** Camera/listener position for spatial audio calculations */
+  listenerPosition?: { x: number; y: number };
 }
 
-interface CachedClip {
-  element: HTMLAudioElement;
+interface CachedBuffer {
+  buffer: AudioBuffer;
   url: string;
 }
 
-interface ActiveLoop {
-  element: HTMLAudioElement;
+interface ActiveSound {
+  source: AudioBufferSourceNode;
+  gainNode: GainNode;
+  panNode: StereoPannerNode;
   baseVolume: number;
   key: AudioKey;
+  isLooping: boolean;
+  /** For spatial audio updates */
+  position?: { x: number; y: number };
 }
 
 function deriveCategory(key: AudioKey, override?: string): string {
@@ -37,11 +46,14 @@ export class AudioManager {
     return AudioManager.instance;
   }
 
+  private audioContext: AudioContext | null = null;
+  private masterGainNode: GainNode | null = null;
   private masterVolume = 1;
   private muted = false;
   private readonly categoryVolumes = new Map<string, number>();
-  private readonly clipCache = new Map<string, CachedClip>();
-  private readonly activeLoops = new Map<AudioKey, ActiveLoop>();
+  private readonly bufferCache = new Map<string, CachedBuffer>();
+  private readonly activeSounds = new Map<AudioKey, ActiveSound[]>();
+  private listenerPosition: Readonly<{ x: number; y: number }> = Object.freeze({ x: 0, y: 0 });
 
   private constructor() {
     // Sensible category defaults (can be tweaked in the options menu later)
@@ -53,12 +65,29 @@ export class AudioManager {
     this.categoryVolumes.set('weapons', 1.0);
   }
 
-  async preload(key: AudioKey): Promise<void> {
-    const variants = AUDIO_MANIFEST[key];
-    await Promise.all(variants.map((variant) => this.prepareClip(variant.file)));
+  private initAudioContext(): void {
+    if (this.audioContext) return;
+    
+    // Create AudioContext on first use (helps with autoplay restrictions)
+    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    this.masterGainNode = this.audioContext.createGain();
+    this.masterGainNode.connect(this.audioContext.destination);
+    this.masterGainNode.gain.value = this.muted ? 0 : this.masterVolume;
   }
 
-  async play(key: AudioKey, options: PlayAudioOptions = {}): Promise<HTMLAudioElement | null> {
+  async preload(key: AudioKey): Promise<void> {
+    this.initAudioContext();
+    const variants = AUDIO_MANIFEST[key];
+    await Promise.all(variants.map((variant) => this.loadBuffer(variant.file)));
+  }
+
+  async play(key: AudioKey, options: PlayAudioOptions = {}): Promise<AudioBufferSourceNode | null> {
+    this.initAudioContext();
+    if (!this.audioContext || !this.masterGainNode) {
+      console.warn('[AudioManager] AudioContext not initialized');
+      return null;
+    }
+
     const variant = pickAudioVariant(key, options.rng ?? Math.random);
     if (!variant) {
       return null;
@@ -68,63 +97,112 @@ export class AudioManager {
       this.stop(key);
     }
 
-    const clip = await this.prepareClip(variant.file);
-    const element = clip.element.cloneNode(true) as HTMLAudioElement;
-    element.src = clip.url;
-    element.preload = 'auto';
-    element.loop = options.loop ?? variant.loop ?? false;
-    if (options.playbackRate) {
-      element.playbackRate = options.playbackRate;
-    }
-    if (options.startAt !== undefined) {
-      element.currentTime = options.startAt;
+    const buffer = await this.loadBuffer(variant.file);
+    if (!buffer) {
+      return null;
     }
 
+    // Create audio source
+    const source = this.audioContext.createBufferSource();
+    source.buffer = buffer.buffer;
+    source.loop = options.loop ?? variant.loop ?? false;
+    if (options.playbackRate) {
+      source.playbackRate.value = options.playbackRate;
+    }
+
+    // Create gain node for volume control
+    const gainNode = this.audioContext.createGain();
     const category = deriveCategory(key, options.categoryOverride);
     const baseVolume = options.volume ?? variant.volume ?? 1;
-    element.volume = this.computeVolume(category, baseVolume);
+    gainNode.gain.value = this.computeVolume(category, baseVolume);
 
-    // Track looped sounds so we can stop or retune their volume later.
-    if (element.loop) {
-      const finalBaseVolume = clamp(baseVolume, 0, 1.5);
-      this.activeLoops.set(key, { element, baseVolume: finalBaseVolume, key });
-      element.addEventListener('ended', () => {
-        // In some browsers looped audio fires ended when explicitly stopped.
-        this.activeLoops.delete(key);
-      });
+    // Create panner node for spatial audio
+    const panNode = this.audioContext.createStereoPanner();
+    
+    // Calculate spatial audio if position is provided
+    if (options.position && options.listenerPosition) {
+      const { pan, volume } = this.calculateSpatialAudio(
+        options.position,
+        options.listenerPosition
+      );
+      panNode.pan.value = clamp(pan, -1, 1);
+      gainNode.gain.value *= volume;
     }
 
-    if (this.muted) {
-      element.volume = 0;
-    }
+    // Connect the audio graph: source -> gain -> pan -> master -> destination
+    source.connect(gainNode);
+    gainNode.connect(panNode);
+    panNode.connect(this.masterGainNode);
 
-    element.play().catch((err) => {
-      console.warn('[AudioManager] Failed to play HTMLAudioElement:', key, err);
+    // Track active sounds
+    const activeSound: ActiveSound = {
+      source,
+      gainNode,
+      panNode,
+      baseVolume: clamp(baseVolume, 0, 1.5),
+      key,
+      isLooping: source.loop,
+      position: options.position
+    };
+
+    if (!this.activeSounds.has(key)) {
+      this.activeSounds.set(key, []);
+    }
+    this.activeSounds.get(key)!.push(activeSound);
+
+    // Clean up when sound ends
+    source.addEventListener('ended', () => {
+      const sounds = this.activeSounds.get(key);
+      if (sounds) {
+        const index = sounds.indexOf(activeSound);
+        if (index !== -1) {
+          sounds.splice(index, 1);
+        }
+        if (sounds.length === 0) {
+          this.activeSounds.delete(key);
+        }
+      }
+      // Disconnect nodes to free resources
+      gainNode.disconnect();
+      panNode.disconnect();
     });
 
-    return element;
+    // Start playback
+    const startTime = options.startAt ?? 0;
+    source.start(0, startTime);
+
+    return source;
   }
 
   stop(key: AudioKey): void {
-    const handle = this.activeLoops.get(key);
-    if (handle) {
-      handle.element.pause();
-      handle.element.currentTime = 0;
-      this.activeLoops.delete(key);
+    const sounds = this.activeSounds.get(key);
+    if (sounds) {
+      // Stop all instances of this sound
+      for (const sound of sounds) {
+        try {
+          sound.source.stop();
+          sound.gainNode.disconnect();
+          sound.panNode.disconnect();
+        } catch (e) {
+          // Source may already be stopped
+        }
+      }
+      this.activeSounds.delete(key);
     }
   }
 
   stopAll(): void {
-    for (const [key, handle] of this.activeLoops) {
-      handle.element.pause();
-      handle.element.currentTime = 0;
-      this.activeLoops.delete(key);
+    for (const [key] of this.activeSounds) {
+      this.stop(key);
     }
   }
 
   setMasterVolume(value: number): void {
     this.masterVolume = clamp(value, 0, 1);
-    this.refreshLoopVolumes();
+    if (this.masterGainNode) {
+      this.masterGainNode.gain.value = this.muted ? 0 : this.masterVolume;
+    }
+    this.refreshSoundVolumes();
   }
 
   getMasterVolume(): number {
@@ -133,7 +211,7 @@ export class AudioManager {
 
   setCategoryVolume(category: string, value: number): void {
     this.categoryVolumes.set(category, clamp(value, 0, 1));
-    this.refreshLoopVolumes();
+    this.refreshSoundVolumes();
   }
 
   getCategoryVolume(category: string): number {
@@ -142,31 +220,54 @@ export class AudioManager {
 
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this.refreshLoopVolumes();
+    if (this.masterGainNode) {
+      this.masterGainNode.gain.value = this.muted ? 0 : this.masterVolume;
+    }
   }
 
   isMuted(): boolean {
     return this.muted;
   }
 
-  private async prepareClip(file: string): Promise<CachedClip> {
-    let cached = this.clipCache.get(file);
+  /** Update listener position for spatial audio calculations */
+  setListenerPosition(x: number, y: number): void {
+    // Only update if position changed to avoid GC pressure
+    if (this.listenerPosition.x === x && this.listenerPosition.y === y) {
+      return;
+    }
+    this.listenerPosition = Object.freeze({ x, y });
+    this.updateSpatialAudio();
+  }
+
+  /** Get current listener position (returns frozen readonly object - safe to use) */
+  getListenerPosition(): Readonly<{ x: number; y: number }> {
+    return this.listenerPosition;
+  }
+
+  private async loadBuffer(file: string): Promise<CachedBuffer | null> {
+    let cached = this.bufferCache.get(file);
     if (cached) {
       return cached;
     }
-    const url = resolveAudioSrc(file);
-    const element = new Audio(url);
-    element.preload = 'auto';
-    try {
-      await element.play();
-      element.pause();
-      element.currentTime = 0;
-    } catch {
-      // Ignore autoplay restrictions during preload; playback will retry later.
+
+    if (!this.audioContext) {
+      console.warn('[AudioManager] AudioContext not initialized');
+      return null;
     }
-    cached = { element, url };
-    this.clipCache.set(file, cached);
-    return cached;
+
+    try {
+      const url = resolveAudioSrc(file);
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      
+      cached = { buffer: audioBuffer, url };
+      this.bufferCache.set(file, cached);
+      return cached;
+    } catch (error) {
+      console.warn('[AudioManager] Failed to load audio buffer:', file, error);
+      return null;
+    }
   }
 
   private computeVolume(category: string, baseVolume: number): number {
@@ -174,13 +275,50 @@ export class AudioManager {
       return 0;
     }
     const catVolume = this.categoryVolumes.get(category) ?? 1;
-    return clamp(baseVolume * catVolume * this.masterVolume, 0, 1);
+    return clamp(baseVolume * catVolume, 0, 1);
   }
 
-  private refreshLoopVolumes(): void {
-    for (const [key, handle] of this.activeLoops) {
+  private refreshSoundVolumes(): void {
+    for (const [key, sounds] of this.activeSounds) {
       const category = deriveCategory(key);
-      handle.element.volume = this.computeVolume(category, handle.baseVolume);
+      for (const sound of sounds) {
+        sound.gainNode.gain.value = this.computeVolume(category, sound.baseVolume);
+      }
+    }
+  }
+
+  private calculateSpatialAudio(
+    soundPos: { x: number; y: number },
+    listenerPos: { x: number; y: number }
+  ): { pan: number; volume: number } {
+    const dx = soundPos.x - listenerPos.x;
+    const dy = soundPos.y - listenerPos.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Pan based on horizontal position (-1 = left, 1 = right)
+    const maxPanDistance = 800; // pixels
+    const pan = clamp(dx / maxPanDistance, -1, 1);
+
+    // Volume falloff based on distance
+    const maxHearingDistance = 1500; // pixels
+    const volume = Math.max(0, 1 - (distance / maxHearingDistance));
+
+    return { pan, volume };
+  }
+
+  private updateSpatialAudio(): void {
+    for (const sounds of this.activeSounds.values()) {
+      for (const sound of sounds) {
+        if (sound.position) {
+          const { pan, volume } = this.calculateSpatialAudio(
+            sound.position,
+            this.listenerPosition
+          );
+          sound.panNode.pan.value = clamp(pan, -1, 1);
+          const category = deriveCategory(sound.key);
+          sound.gainNode.gain.value = this.computeVolume(category, sound.baseVolume) * volume;
+        }
+      }
     }
   }
 }

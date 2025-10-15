@@ -2289,6 +2289,11 @@ export class Game {
     if (this.keyState['+'] || this.keyState['=']) this.camera.zoom = Math.max(0.6, Math.min(2.2, this.camera.zoom * 1.02));
     if (this.keyState['-'] || this.keyState['_']) this.camera.zoom = Math.max(0.6, Math.min(2.2, this.camera.zoom / 1.02));
     
+    // Update audio listener position for spatial audio (camera center)
+    const vw = this.canvas.width / this.camera.zoom;
+    const vh = this.canvas.height / this.camera.zoom;
+    this.audioManager.setListenerPosition(this.camera.x + vw / 2, this.camera.y + vh / 2);
+    
     if (this.paused) return;
     
     // camera follow selected colonist
