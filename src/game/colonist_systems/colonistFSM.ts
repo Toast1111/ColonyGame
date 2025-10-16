@@ -2132,34 +2132,44 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break;
       }
 
-      // Phase 1: go to item position (target may have been cached as FloorItem when assigned)
-      const item = rim.floorItems.getAllItems().find((it: any) => it.id === itemId);
-      if (!item) {
-        // Item already gone
-        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'item missing');
+      // Support a two-phase flow: pickup -> deliver. Preserve phase in taskData.
+      const pickedUp: boolean = !!data.pickedUp;
+
+      if (!pickedUp) {
+        // Phase 1: go to item position (target may have been cached as FloorItem when assigned)
+        const item = rim.floorItems.getAllItems().find((it: any) => it.id === itemId);
+        if (!item) {
+          // Item disappeared before pickup; abort gracefully
+          c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'item missing before pickup');
+          break;
+        }
+
+        const itemPt = { x: item.position.x, y: item.position.y };
+        const dItem = Math.hypot(c.x - itemPt.x, c.y - itemPt.y);
+        if (dItem > 18) {
+          game.moveAlongPath(c, dt, itemPt, 16);
+          break;
+        }
+
+        // At item: pick up whole stack or up to a carry limit
+        const carryLimit = 20; // simple limit for now
+        const takeRes = rim.pickupItems(itemId, carryLimit);
+        const taken = takeRes ? takeRes.taken : 0;
+        if (taken <= 0) {
+          // Nothing to take (race lost)
+          c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'nothing to pick up');
+          break;
+        }
+        // Store temporarily in colonist cargo
+        const itemType = (takeRes.item?.type) ?? data.itemType;
+        (c as any).carryingItem = { type: itemType, qty: taken };
+
+        // Mark phase as picked up so we proceed to destination next tick
+        (c as any).taskData = { ...data, pickedUp: true };
         break;
       }
 
-      const itemPt = { x: item.position.x, y: item.position.y };
-      const dItem = Math.hypot(c.x - itemPt.x, c.y - itemPt.y);
-      if (dItem > 18) {
-        game.moveAlongPath(c, dt, itemPt, 16);
-        break;
-      }
-
-      // At item: pick up whole stack or up to a carry limit
-      const carryLimit = 20; // simple limit for now
-      const takeRes = rim.pickupItems(itemId, carryLimit);
-      const taken = takeRes ? takeRes.taken : 0;
-      if (taken <= 0) {
-        // Nothing to take (race lost)
-        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'nothing to pick up');
-        break;
-      }
-      // Store temporarily in colonist cargo
-      (c as any).carryingItem = { type: item.type, qty: taken };
-
-      // Phase 2: go to destination and drop
+      // Phase 2: go to destination and drop (even if source item was removed already)
       const dDest = Math.hypot(c.x - dest.x, c.y - dest.y);
       if (dDest > 18) {
         game.moveAlongPath(c, dt, dest, 16);
@@ -2169,7 +2179,24 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Drop at destination (floor) and mark task complete
       const payload = (c as any).carryingItem;
       if (payload && payload.qty > 0) {
+        // Physically drop on the floor at the stockpile
         rim.dropItems(payload.type, payload.qty, dest);
+
+        // If dropped into a valid stockpile, also credit tracked resources so HUD counts reflect availability
+        try {
+          const zone = rim.stockpiles?.getZoneAtPosition?.(dest);
+          const accepts = zone && (zone.settings.allowAll || zone.allowedItems.has(payload.type));
+          if (accepts) {
+            const map: Record<string, 'wood'|'stone'|'food'|'medicine'|undefined> = {
+              wood: 'wood', stone: 'stone', food: 'food', medicine: 'medicine'
+            };
+            const resKey = map[payload.type];
+            if (resKey) {
+              // Add to global resources (capacity-checked for wood/stone/food; medicine not capacity-limited)
+              (game as any).addResource(resKey, payload.qty);
+            }
+          }
+        } catch {}
         (c as any).carryingItem = null;
         game.msg(`${c.profile?.name || 'Colonist'} hauled ${payload.qty} ${payload.type}`, 'good');
       }

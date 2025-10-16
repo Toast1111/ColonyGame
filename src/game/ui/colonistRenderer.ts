@@ -233,13 +233,17 @@ export function drawColonistAvatar(
     ctx.fillText('❗', 12, -offsetY + spriteHeight * 0.15);
   }
   
-  // Carrying indicator - show icon if colonist is carrying wheat or bread
+  // Carrying indicator - show icon if colonist is carrying something
   if (colonist.carryingWheat && colonist.carryingWheat > 0) {
     ctx.font = 'bold 12px system-ui';
     ctx.fillText('🌾', 0, -offsetY - 5);
   } else if (colonist.carryingBread && colonist.carryingBread > 0) {
     ctx.font = 'bold 12px system-ui';
     ctx.fillText('🍞', 0, -offsetY - 5);
+  } else if ((colonist as any).carryingItem && (colonist as any).carryingItem.qty > 0) {
+    // Generic package icon for hauled floor items
+    ctx.font = 'bold 12px system-ui';
+    ctx.fillText('📦', 0, -offsetY - 5);
   }
   
   ctx.restore(); // Restore mood indicator transform

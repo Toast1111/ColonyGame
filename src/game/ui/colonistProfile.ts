@@ -539,10 +539,25 @@ function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: numb
       if (textY > y + h - game.scale(20)) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400'); ctx.fillText('...more items', x + game.scale(8), textY); break; }
     }
   }
-  if (c.carrying) {
+  // Show transient hauling payloads so players can see what the pawn is carrying right now
+  const carriedList: { name: string; qty: number }[] = [];
+  const payload = (c as any).carryingItem;
+  if (payload && payload.qty > 0) {
+    const pretty = (payload.type || 'Item').toString();
+    const name = pretty.charAt(0).toUpperCase() + pretty.slice(1);
+    carriedList.push({ name, qty: payload.qty });
+  }
+  if (c.carryingWheat && c.carryingWheat > 0) carriedList.push({ name: 'Wheat', qty: c.carryingWheat });
+  if (c.carryingBread && c.carryingBread > 0) carriedList.push({ name: 'Bread', qty: c.carryingBread });
+  if (carriedList.length > 0) {
     textY += game.scale(12);
     ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Currently Carrying', x, textY); textY += game.scale(18);
-    ctx.fillStyle = '#22c55e'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText(`${c.carrying.type || 'Item'}`, x + game.scale(8), textY);
+    for (const it of carriedList) {
+      ctx.fillStyle = '#22c55e'; ctx.font = game.getScaledFont(12, '400');
+      ctx.fillText(`${it.name} (${it.qty})`, x + game.scale(8), textY);
+      textY += game.scale(16);
+      if (textY > y + h - game.scale(20)) break;
+    }
   }
 }
 
