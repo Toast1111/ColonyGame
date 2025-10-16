@@ -1219,6 +1219,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'harvestWell': changeState('harvest', 'assigned well task'); break;
         case 'chop': changeState('chop', 'assigned chop task'); break;
         case 'mine': changeState('mine', 'assigned mine task'); break;
+        case 'haulFloorItem': changeState('haulFloorItem', 'assigned floor hauling task'); break;
         case 'haulBread': changeState('haulBread', 'assigned haul task'); break;
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
         case 'storeBread': changeState('storingBread', 'assigned bread storage task'); break;
