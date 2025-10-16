@@ -26,7 +26,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, kill, heal, godmode";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, drop, stockpile, kill, heal, godmode";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -299,6 +299,191 @@ export function initDebugConsole(game: Game) {
   }, "health check|init [target] — check health status or initialize health system");
 
   // NEW COMMANDS
+
+  // Drop floor items using RimWorld system
+  reg("drop", (g, args) => {
+    const rim = (g as any).rimWorld;
+    if (!rim) return "RimWorld system not initialized";
+    const itemType = (args[0] || "").toLowerCase();
+    const allowed = ['wood','stone','food','metal','cloth','medicine'];
+    if (!allowed.includes(itemType)) {
+      return `usage: drop <${allowed.join('|')}> [qty] [here|x y]`;
+    }
+
+    // Flexible parsing to support: 
+    // - drop wood here
+    // - drop wood 10 here
+    // - drop wood 100 512 600
+    // - drop wood 512 600 (qty defaults to 10)
+    let qty = 10;
+    let x: number | null = null, y: number | null = null;
+    const tail = args.slice(1); // after type
+
+    // If the last two tokens are numbers, treat as x y
+    if (tail.length >= 2) {
+      const a = parseFloat(tail[tail.length - 2]);
+      const b = parseFloat(tail[tail.length - 1]);
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        x = a; y = b;
+      }
+    }
+
+    // If 'here' is present and x/y not set, use camera center
+    if (!Number.isFinite(x as number) || !Number.isFinite(y as number)) {
+      const hasHere = tail.some(t => (t || '').toLowerCase() === 'here');
+      if (hasHere) {
+        const vw = g.canvas.width / g.camera.zoom;
+        const vh = g.canvas.height / g.camera.zoom;
+        x = g.camera.x + vw / 2;
+        y = g.camera.y + vh / 2;
+      }
+    }
+
+    // Find a numeric token to use as qty (first numeric that isn't part of x y when both are present at end)
+    let qtyCandidate: number | null = null;
+    for (let i = 0; i < tail.length; i++) {
+      const tok = tail[i];
+      const n = parseFloat(tok);
+      if (Number.isFinite(n)) {
+        // If this pair is the trailing x y, skip it for qty
+        const isTrailingPair = (i === tail.length - 2) && Number.isFinite(parseFloat(tail[i+1]));
+        if (isTrailingPair && Number.isFinite(x as number) && Number.isFinite(y as number)) {
+          // skip
+        } else {
+          qtyCandidate = n;
+          break;
+        }
+      }
+    }
+    if (qtyCandidate && qtyCandidate > 0) qty = Math.floor(Math.max(1, qtyCandidate));
+
+    // Default drop position: selected colonist or camera center
+    if (!Number.isFinite(x as number) || !Number.isFinite(y as number)) {
+      if (g.selColonist) { x = g.selColonist.x; y = g.selColonist.y; }
+      else {
+        const vw = g.canvas.width / g.camera.zoom;
+        const vh = g.canvas.height / g.camera.zoom;
+        x = g.camera.x + vw / 2; y = g.camera.y + vh / 2;
+      }
+    }
+
+    rim.dropItems(itemType as any, qty, { x: x!, y: y! });
+    return `dropped ${qty} ${itemType} at (${(x as number).toFixed(0)},${(y as number).toFixed(0)})`;
+  }, "drop <wood|stone|food|metal|cloth|medicine> [qty] [here|x y] — drop floor items");
+
+  // Stockpile zone management
+  reg("stockpile", (g, args) => {
+    const rim = (g as any).rimWorld;
+    if (!rim) return "RimWorld system not initialized";
+    const sub = (args[0] || '').toLowerCase();
+
+    // Helper to resolve zone id or 'last'
+    const resolveZone = (idOrLast: string) => {
+      if (!idOrLast || idOrLast === 'last') {
+        const lastId = (g as any).debugConsole.lastStockpileId as string | undefined;
+        return lastId ? rim.stockpiles.getZone(lastId) : null;
+      }
+      return rim.stockpiles.getZone(idOrLast) || null;
+    };
+
+    if (sub === 'create') {
+      const w = Math.max(24, parseInt(args[1] || '128', 10) || 128);
+      const h = Math.max(24, parseInt(args[2] || '96', 10) || 96);
+      const name = args.slice(3).join(' ') || undefined;
+      // Create centered at camera
+      const vw = g.canvas.width / g.camera.zoom;
+      const vh = g.canvas.height / g.camera.zoom;
+      const cx = g.camera.x + vw / 2;
+      const cy = g.camera.y + vh / 2;
+      const zone = rim.createStockpileZone(Math.floor(cx - w/2), Math.floor(cy - h/2), w, h, name);
+      (g as any).debugConsole.lastStockpileId = zone.id;
+      return `stockpile created ${zone.id} '${zone.name}' at (${zone.x},${zone.y}) ${w}x${h}`;
+    }
+
+    if (sub === 'list') {
+      const zones = rim.stockpiles.getAllZones();
+      if (!zones.length) return 'no stockpiles';
+      return zones.map((z: any) => `${z.id} '${z.name}' @(${z.x},${z.y}) ${z.width}x${z.height} prio:${z.priority} allowAll:${z.settings.allowAll} allowed:[${Array.from(z.allowedItems).join(',')}]`).join('\n');
+    }
+
+    if (sub === 'allow') {
+      const id = (args[1] || 'last');
+      const zone = resolveZone(id);
+      if (!zone) return `zone not found: ${id}`;
+      const typesArg = (args[2] || '').toLowerCase();
+      if (!typesArg) return "usage: stockpile allow <id|last> <all|wood,stone,...>";
+      if (typesArg === 'all') {
+        // Empty array sets allowAll true in manager
+        rim.updateStockpileItems(zone.id, []);
+        return `stockpile ${zone.id} now allows all items`;
+      } else {
+        const parts = typesArg.split(',').map(s => s.trim()).filter(Boolean);
+        const valid = ['wood','stone','food','metal','cloth','medicine'];
+        const bad = parts.filter(p => !valid.includes(p));
+        if (bad.length) return `invalid item(s): ${bad.join(', ')} (valid: ${valid.join(', ')})`;
+        rim.updateStockpileItems(zone.id, parts as any);
+        return `stockpile ${zone.id} allowed: ${parts.join(', ')}`;
+      }
+    }
+
+    if (sub === 'priority') {
+      const id = (args[1] || 'last');
+      const zone = resolveZone(id);
+      if (!zone) return `zone not found: ${id}`;
+      const prio = Math.max(0, parseInt(args[2] || '1', 10) || 1);
+      zone.priority = prio;
+      return `stockpile ${zone.id} priority set to ${prio}`;
+    }
+
+    if (sub === 'remove' || sub === 'delete') {
+      const id = (args[1] || 'last');
+      const zone = resolveZone(id);
+      if (!zone) return `zone not found: ${id}`;
+      const ok = rim.removeStockpileZone(zone.id);
+      return ok ? `removed stockpile ${zone.id}` : `failed to remove stockpile ${zone.id}`;
+    }
+
+    return "usage: stockpile create [w h name] | list | allow <id|last> <all|types> | priority <id|last> <n> | remove <id|last>";
+  }, "stockpile — manage zones. create [w h name], list, allow <id|last> <all|wood,stone,...>, priority <id|last> <n>, remove <id|last>");
+
+  // Floor items debug/info
+  reg("items", (g, args) => {
+    const rim = (g as any).rimWorld;
+    if (!rim) return "RimWorld system not initialized";
+    const sub = (args[0] || 'list').toLowerCase();
+
+    if (sub === 'list') {
+      const items = rim.floorItems.getAllItems();
+      if (!items.length) return 'no floor items';
+      const lines = items.slice(0, 20).map((it: any) => `${it.id}: ${it.type} x${it.quantity} @(${Math.round(it.position.x)},${Math.round(it.position.y)})`);
+      if (items.length > 20) lines.push(`... and ${items.length - 20} more`);
+      return lines.join('\n');
+    }
+
+    if (sub === 'count') {
+      const items = rim.floorItems.getAllItems();
+      const counts = new Map<string, number>();
+      for (const it of items) counts.set(it.type, (counts.get(it.type) || 0) + it.quantity);
+      const parts = Array.from(counts.entries()).map(([k, v]) => `${k}:${v}`);
+      return parts.length ? parts.join(' ') : 'no floor items';
+    }
+
+    if (sub === 'purge' || sub === 'clear') {
+      const items = rim.floorItems.getAllItems();
+      let removed = 0;
+      for (const it of items) { if (rim.floorItems.removeItem(it.id)) removed++; }
+      return `removed ${removed} floor item stack(s)`;
+    }
+
+    if (sub === 'debug') {
+      const onoff = (args[1] || '').toLowerCase();
+      const on = onoff === 'on' || onoff === '1' || onoff === 'true';
+      rim.renderer.setDebugMode(on);
+      return `items debug ${on ? 'enabled' : 'disabled'}`;
+    }
+
+    return "usage: items [list|count|purge|debug on|off]";
+  }, "items — list/count/purge floor items, or 'items debug on' to show item markers");
 
   reg("resources", (g, args) => {
     const action = (args[0] || "").toLowerCase();

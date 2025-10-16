@@ -57,6 +57,7 @@ export class HelpPanel {
    */
   toggle(): void {
     this.element.hidden = !this.element.hidden;
+    try { (window as any).game?.audioManager?.play(this.element.hidden ? 'ui.panel.close' : 'ui.panel.open'); } catch {}
   }
 
   /**
@@ -64,6 +65,7 @@ export class HelpPanel {
    */
   show(): void {
     this.element.hidden = false;
+    try { (window as any).game?.audioManager?.play('ui.panel.open'); } catch {}
   }
 
   /**
@@ -71,6 +73,7 @@ export class HelpPanel {
    */
   hide(): void {
     this.element.hidden = true;
+    try { (window as any).game?.audioManager?.play('ui.panel.close'); } catch {}
   }
 
   /**

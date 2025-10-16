@@ -15,6 +15,7 @@ import type { BUILD_TYPES } from '../buildings';
 import type { ContextMenuDescriptor, ContextMenuItem } from '../ui/contextMenus/types';
 import type { HotbarTab } from '../ui/hud/modernHotbar';
 import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/workPriorityPanel';
+import { AudioManager } from '../audio/AudioManager';
 
 export class UIManager {
   // Modern hotbar system
@@ -71,6 +72,11 @@ export class UIManager {
     w: number; 
     h: number 
   }> = [];
+  // Last hovered hotbar tab to gate hover SFX
+  lastHoveredHotbarTab: HotbarTab | null = null;
+  // Last hovered build menu elements to gate hover SFX
+  lastHoveredBuildCategory: string | null = null;
+  lastHoveredBuildingKey: keyof typeof BUILD_TYPES | null = null;
   
   placeUIRects: Array<{ 
     id: 'up' | 'down' | 'left' | 'right' | 'ok' | 'cancel' | 'rotL' | 'rotR'; 
@@ -134,6 +140,7 @@ export class UIManager {
    */
   toggleBuildMenu(): void {
     this.showBuildMenu = !this.showBuildMenu;
+    try { void AudioManager.getInstance().play(this.showBuildMenu ? 'ui.panel.open' : 'ui.panel.close'); } catch {}
   }
   
   /**
@@ -141,6 +148,7 @@ export class UIManager {
    */
   openBuildMenu(): void {
     this.showBuildMenu = true;
+    try { void AudioManager.getInstance().play('ui.panel.open'); } catch {}
   }
   
   /**
@@ -148,6 +156,7 @@ export class UIManager {
    */
   closeBuildMenu(): void {
     this.showBuildMenu = false;
+    try { void AudioManager.getInstance().play('ui.panel.close'); } catch {}
   }
   
   /**
@@ -239,6 +248,8 @@ export class UIManager {
    * Hide context menu
    */
   hideContextMenu(): void {
+    // Play UI close SFX for context menu
+    try { void AudioManager.getInstance().play('ui.panel.close'); } catch {}
     this.contextMenu = null;
     this.contextMenuRects = [];
   }
@@ -247,6 +258,8 @@ export class UIManager {
    * Show context menu
    */
   showContextMenu(menu: ContextMenuDescriptor<any>, x: number, y: number): void {
+    // Play UI open SFX for context menu
+    try { void AudioManager.getInstance().play('ui.panel.open'); } catch {}
     this.contextMenu = {
       ...menu,
       visible: true,
@@ -259,20 +272,30 @@ export class UIManager {
    * Set active hotbar tab
    */
   setHotbarTab(tab: HotbarTab | null): void {
+    const audio = AudioManager.getInstance();
+    const wasTab = this.activeHotbarTab;
     // If clicking the same tab, toggle it off
     if (this.activeHotbarTab === tab) {
       this.activeHotbarTab = null;
       this.selectedBuildCategory = null;
+      // Reset build menu hover state when closing
+      this.lastHoveredBuildCategory = null;
+      this.lastHoveredBuildingKey = null;
       
       // Close work priority panel if we're closing work tab
       if (tab === 'work') {
         closeWorkPriorityPanel();
       }
+  // UI audio: hotbar close (single-variant)
+  void audio.play('ui.hotbar.close').catch(() => {});
     } else {
       this.activeHotbarTab = tab;
       // Reset category selection when changing tabs
       if (tab !== 'build') {
         this.selectedBuildCategory = null;
+        // Also reset build menu hover track when leaving build tab
+        this.lastHoveredBuildCategory = null;
+        this.lastHoveredBuildingKey = null;
       }
       
       // Open work priority panel if we're opening work tab
@@ -281,6 +304,8 @@ export class UIManager {
           toggleWorkPriorityPanel();
         }
       }
+  // UI audio: hotbar open (single-variant)
+  void audio.play('ui.hotbar.open').catch(() => {});
     }
   }
   

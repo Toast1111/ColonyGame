@@ -6,6 +6,7 @@ import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, 
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
+import { WorkGiverManager } from './systems/workGiverManager';
 import { drawTerrainDebug } from "./terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
@@ -33,7 +34,7 @@ import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES, getWorkTypeForTask }
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen, isMouseOverWorkPanel } from './ui/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/buildingInventoryPanel';
-import { getInventoryItemCount } from './systems/buildingInventory';
+// import { getInventoryItemCount } from './systems/buildingInventory';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor, findBlockingDoor, requestDoorOpen, isDoorBlocking, releaseDoorQueue } from './systems/doorSystem';
 import { GameState } from './core/GameState';
@@ -51,6 +52,7 @@ import { initPerformanceHUD, drawPerformanceHUD, togglePerformanceHUD } from './
 import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
+import { RimWorldSystemManager, type RimWorldSystemConfig } from './rimworld-systems';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -288,12 +290,15 @@ export class Game {
   
   // Debug flags (keep as is - not part of managers)
   debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
+  // Systems
+  private workGiverManager = new WorkGiverManager();
+  public rimWorld: RimWorldSystemManager;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
     this.canvas = canvas; this.ctx = ctx;
     this.DPR = Math.max(1, Math.min(2, (window as any).devicePixelRatio || 1));
-    this.handleResize();
+  this.handleResize();
     
     // Initialize dirty rect tracker with canvas dimensions
     this.dirtyRectTracker = new DirtyRectTracker(canvas.width, canvas.height);
@@ -317,12 +322,20 @@ export class Game {
     // Initialize camera system
     this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
     this.cameraSystem.setZoom(1);
-    this.cameraSystem.centerOn(HQ_POS.x, HQ_POS.y);
+  this.cameraSystem.centerOn(HQ_POS.x, HQ_POS.y);
     
     this.clampCameraToWorld();
     
     // Initialize item database
     itemDatabase.loadItems();
+    
+    // Initialize RimWorld-style floor item + stockpile system (rendered between world and UI)
+    this.rimWorld = new RimWorldSystemManager({
+      canvas: this.canvas,
+      enableAutoHauling: false, // We'll drive hauling via our WorkGiver so it fits FSM
+      defaultStockpileSize: 64,
+      useEnhancedLogistics: false
+    } as RimWorldSystemConfig);
   // Init debug console
   initDebugConsole(this);
     // Init performance HUD
@@ -333,9 +346,18 @@ export class Game {
       applyDamageToColonist(this, colonist, dmg, type);
     };
 
-    // Preload a couple of frequently used UI/feedback sounds
-    void this.audioManager.preload('ui.click.primary');
-    void this.audioManager.preload('buildings.placement.confirm');
+  // Preload common UI and feedback sounds
+  void this.audioManager.preload('ui.click.primary');
+  void this.audioManager.preload('ui.panel.open');
+  void this.audioManager.preload('ui.panel.close');
+  void this.audioManager.preload('ui.hover');
+  // Hotbar-specific UI sounds (single-variant)
+  void this.audioManager.preload('ui.hotbar.open');
+  void this.audioManager.preload('ui.hotbar.hover');
+  void this.audioManager.preload('ui.hotbar.close');
+  void this.audioManager.preload('ui.drag.start');
+  void this.audioManager.preload('ui.drag.end');
+  void this.audioManager.preload('buildings.placement.confirm');
     
     requestAnimationFrame(this.frame);
   }
@@ -669,6 +691,48 @@ export class Game {
         return;
       }
       
+      // Hotbar hover SFX (play when entering a new tab)
+      const hotbarRects = (this as any).modernHotbarRects || [];
+      if (hotbarRects.length) {
+        const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+        let hoveredTab: any = null;
+        for (const r of hotbarRects) {
+          if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { hoveredTab = r.tab; break; }
+        }
+        if (hoveredTab !== (this.uiManager as any).lastHoveredHotbarTab) {
+          (this.uiManager as any).lastHoveredHotbarTab = hoveredTab;
+          if (hoveredTab) {
+            void this.audioManager.play('ui.hotbar.hover').catch(() => {});
+          }
+        }
+      }
+
+      // Build menu hover SFX (categories and building items)
+      if (this.uiManager.activeHotbarTab === 'build') {
+        const buildMenuRects = (this as any).modernBuildMenuRects;
+        if (buildMenuRects) {
+          const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+          // Category hover
+          let hoveredCategory: string | null = null;
+          for (const r of buildMenuRects.categories) {
+            if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { hoveredCategory = r.category; break; }
+          }
+          if (hoveredCategory !== (this.uiManager as any).lastHoveredBuildCategory) {
+            (this.uiManager as any).lastHoveredBuildCategory = hoveredCategory;
+            if (hoveredCategory) { void this.audioManager.play('ui.hover').catch(() => {}); }
+          }
+          // Building item hover
+          let hoveredBuilding: any = null;
+          for (const r of buildMenuRects.buildings) {
+            if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { hoveredBuilding = r.buildingKey; break; }
+          }
+          if (hoveredBuilding !== (this.uiManager as any).lastHoveredBuildingKey) {
+            (this.uiManager as any).lastHoveredBuildingKey = hoveredBuilding;
+            if (hoveredBuilding) { void this.audioManager.play('ui.hover').catch(() => {}); }
+          }
+        }
+      }
+
       // While adjusting a pending placement, drag follows cursor (grid-snap)
       if (this.pendingPlacement && this.mouse.down) {
         const def = BUILD_TYPES[this.pendingPlacement.key];
@@ -686,7 +750,7 @@ export class Game {
         else if (this.selectedBuild === 'wall') this.paintWallAtMouse();
       }
     });
-    c.addEventListener('mousedown', (e) => {
+  c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
       
@@ -752,6 +816,8 @@ export class Game {
           if (mx >= g.x && mx <= g.x + gw && my >= g.y && my <= g.y + gh) { 
             // Begin dragging the ghost instead of instant-confirm; double-click not needed
             this.pendingDragging = true; 
+            // UI drag start SFX
+            void this.audioManager.play('ui.drag.start').catch(() => {});
             return; 
           }
           const rot = p.rot || 0; const rotated = (rot === 90 || rot === 270);
@@ -779,9 +845,11 @@ export class Game {
               if (clickResult.type === 'category') {
                 // Category clicked - select it
                 this.uiManager.setSelectedBuildCategory(clickResult.value);
+                void this.audioManager.play('ui.click.primary').catch(() => {});
               } else if (clickResult.type === 'building') {
                 // Building clicked - select it and close menus
                 this.selectedBuild = clickResult.value;
+                void this.audioManager.play('ui.click.primary').catch(() => {});
                 this.uiManager.setHotbarTab(null); // Close the build menu
                 this.toast('Selected: ' + BUILD_TYPES[clickResult.value].name);
               }
@@ -805,6 +873,7 @@ export class Game {
               if (!rect.isSubmenu && item.submenu && item.submenu.length) {
                 if (enabled) {
                   menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
+                  if (menu.openSubmenu) { void this.audioManager.play('ui.panel.open').catch(() => {}); }
                 }
                 clickedOnMenu = true;
                 return;
@@ -816,6 +885,7 @@ export class Game {
                 } else if (menu.onSelect) {
                   menu.onSelect({ game: this, target: menu.target, item });
                 }
+                void this.audioManager.play('ui.click.primary').catch(() => {});
               }
 
               hideContextMenuUI(this);
@@ -887,10 +957,14 @@ export class Game {
         this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
       }
     });
-    c.addEventListener('mouseup', (e) => {
+  c.addEventListener('mouseup', (e) => {
       e.preventDefault();
       if ((e as MouseEvent).button === 0) { 
         this.mouse.down = false; this.lastPaintCell = null; 
+        if (this.pendingDragging) {
+          // UI drag end SFX
+          void this.audioManager.play('ui.drag.end').catch(() => {});
+        }
         this.pendingDragging = false;
       }
       if ((e as MouseEvent).button === 2) {
@@ -1691,175 +1765,14 @@ export class Game {
       return p !== 0; // Can do if not disabled
     };
     
-    // 1. Construction work
-    if (canDoWork('Construction')) {
-      for (const b of this.buildings) {
-        if (b.done) continue;
-        const cur = this.buildReservations.get(b) || 0;
-        if (cur >= this.getMaxCrew(b)) continue;
-        
-        const distance = Math.hypot(c.x - (b.x + b.w/2), c.y - (b.y + b.h/2));
-        candidates.push({
-          workType: 'Construction',
-          task: 'build',
-          target: b,
-          distance,
-          priority: getWorkPriority('Construction')
-        });
-      }
-    }
-    
-    // 2. Growing work (harvesting)
-    if (canDoWork('Growing')) {
-      const readyFarm = this.buildings.find(b => b.kind === 'farm' && b.done && b.ready);
-      if (readyFarm) {
-        const distance = Math.hypot(c.x - (readyFarm.x + readyFarm.w/2), c.y - (readyFarm.y + readyFarm.h/2));
-        candidates.push({
-          workType: 'Growing',
-          task: 'harvestFarm',
-          target: readyFarm,
-          distance,
-          priority: getWorkPriority('Growing')
-        });
-      }
-      
-      // Well collection - limit frequency to avoid spam
-      if (Math.random() < 0.1) {
-        const availableWell = this.buildings.find(b => b.kind === 'well' && b.done);
-        if (availableWell) {
-          const distance = Math.hypot(c.x - (availableWell.x + availableWell.w/2), c.y - (availableWell.y + availableWell.h/2));
-          candidates.push({
-            workType: 'Growing',
-            task: 'harvestWell',
-            target: availableWell,
-            distance,
-            priority: getWorkPriority('Growing')
-          });
-        }
-      }
-    }
-    
-    // 3. PlantCutting (chopping trees) - prioritize if low food
-    if (canDoWork('PlantCutting')) {
-      const needsFood = this.RES.food < Math.max(4, this.colonists.length * 2);
-      if (needsFood || this.RES.wood < this.RES.stone) {
-        const availableTrees = this.trees.filter(t => !this.assignedTargets.has(t));
-        const nearTree = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableTrees as any);
-        if (nearTree) {
-          const distance = Math.hypot(c.x - nearTree.x, c.y - nearTree.y);
-          candidates.push({
-            workType: 'PlantCutting',
-            task: 'chop',
-            target: nearTree,
-            distance,
-            priority: getWorkPriority('PlantCutting')
-          });
-        }
-      }
-    }
-    
-    // 4. Mining (extracting stone)
-    if (canDoWork('Mining')) {
-      if (this.RES.stone < this.RES.wood || this.RES.stone < 20) {
-        const availableRocks = this.rocks.filter(r => !this.assignedTargets.has(r));
-        const nearRock = this.nearestSafeCircle(c, { x: c.x, y: c.y }, availableRocks as any);
-        if (nearRock) {
-          const distance = Math.hypot(c.x - nearRock.x, c.y - nearRock.y);
-          candidates.push({
-            workType: 'Mining',
-            task: 'mine',
-            target: nearRock,
-            distance,
-            priority: getWorkPriority('Mining')
-          });
-        }
-      }
-    }
-    
-    // 5. Cooking - haul wheat to stove and cook bread
-    if (canDoWork('Cooking')) {
-      const stoves = this.buildings.filter(b => b.kind === 'stove' && b.done);
-      
-      // Check if there's wheat available in farm inventories OR global storage
-      const farms = this.buildings.filter(b => b.kind === 'farm' && b.done);
-      let totalWheatAvailable = this.RES.wheat || 0;
-      
-      // Count wheat in farm inventories
-      for (const farm of farms) {
-        if (farm.inventory) {
-          totalWheatAvailable += getInventoryItemCount(farm, 'wheat');
-        }
-      }
-      
-      // Check if there's wheat to cook and available stoves
-      if (stoves.length > 0 && totalWheatAvailable >= 5) {
-        // Find stove that isn't currently being used for cooking
-        const availableStove = stoves.find(s => !s.cookingColonist || s.cookingColonist === c.id);
-        
-        if (availableStove) {
-          const distance = Math.hypot(c.x - (availableStove.x + availableStove.w/2), c.y - (availableStove.y + availableStove.h/2));
-          candidates.push({
-            workType: 'Cooking',
-            task: 'cookWheat',
-            target: availableStove,
-            distance,
-            priority: getWorkPriority('Cooking')
-          });
-        }
-      }
-      
-      // Also add task to store bread in pantry if colonist has bread
-      if (c.carryingBread && c.carryingBread > 0) {
-        const pantries = this.buildings.filter(b => b.kind === 'pantry' && b.done);
-        if (pantries.length > 0) {
-          const nearestPantry = pantries.reduce((closest, p) => {
-            const dist = Math.hypot(c.x - (p.x + p.w/2), c.y - (p.y + p.h/2));
-            const closestDist = Math.hypot(c.x - (closest.x + closest.w/2), c.y - (closest.y + closest.h/2));
-            return dist < closestDist ? p : closest;
-          });
-          
-          const distance = Math.hypot(c.x - (nearestPantry.x + nearestPantry.w/2), c.y - (nearestPantry.y + nearestPantry.h/2));
-          candidates.push({
-            workType: 'Cooking',
-            task: 'storeBread',
-            target: nearestPantry,
-            distance,
-            priority: getWorkPriority('Cooking') - 1 // Slightly higher priority to finish the job
-          });
-        }
-      }
-    }
-    
-    // 6. Hauling - Move items between buildings (e.g., bread from stove to pantry)
-    if (canDoWork('Hauling')) {
-      // Check stoves for bread that needs to be hauled to pantry
-      const stoves = this.buildings.filter(b => b.kind === 'stove' && b.done && b.inventory);
-      const pantries = this.buildings.filter(b => b.kind === 'pantry' && b.done);
-      
-      if (pantries.length > 0) {
-        for (const stove of stoves) {
-          const breadInStove = getInventoryItemCount(stove, 'bread');
-          if (breadInStove > 0) {
-            // Find nearest pantry with space
-            const nearestPantry = pantries.reduce((closest, p) => {
-              const dist = Math.hypot(c.x - (p.x + p.w/2), c.y - (p.y + p.h/2));
-              const closestDist = Math.hypot(c.x - (closest.x + closest.w/2), c.y - (closest.y + closest.h/2));
-              return dist < closestDist ? p : closest;
-            });
-            
-            const distanceToStove = Math.hypot(c.x - (stove.x + stove.w/2), c.y - (stove.y + stove.h/2));
-            candidates.push({
-              workType: 'Hauling',
-              task: 'haulBread',
-              target: stove, // Will haul from stove to pantry
-              extraData: nearestPantry, // Store pantry reference
-              distance: distanceToStove,
-              priority: getWorkPriority('Hauling')
-            });
-          }
-        }
-      }
-    }
+    // Gather candidates from Work Givers (Construction, Growing, WaterCollection, PlantCutting, Mining, Cooking, Hauling, ...)
+    const produced = this.workGiverManager.getCandidates({
+      game: this,
+      colonist: c,
+      getWorkPriority,
+      canDoWork
+    });
+    if (produced && produced.length) candidates.push(...produced);
     
     // Sort candidates by priority (lower = better), then by same work type preference, then distance
     // Get current work type if colonist has an active task
@@ -1882,12 +1795,53 @@ export class Game {
     });
     
     if (candidates.length > 0) {
-      const bestWork = candidates[0];
-      this.setTask(c, bestWork.task, bestWork.target, { extraData: bestWork.extraData });
-      
-      // Debug logging
-      if (Math.random() < 0.1) {
-        console.log(`Colonist ${c.profile?.name || 'Unknown'} assigned ${bestWork.workType} (priority ${bestWork.priority}): ${bestWork.task}`);
+      // Reachability-gated assignment: ensure we can reach the target before assigning
+      const MAX_REACH_CHECKS = 5; // Budget path checks per assignment
+      let assigned = false;
+      for (let i = 0, checks = 0; i < candidates.length && checks < MAX_REACH_CHECKS; i++) {
+        const cand = candidates[i];
+        
+        // Construction can be built from adjacent tiles; center may be blocked. Skip reachability check for build tasks.
+        const skipCheck = cand.task === 'build';
+        let reachable = true;
+        if (!skipCheck) {
+          // Identify a reasonable approach point (center for most targets)
+          let tx: number | null = null, ty: number | null = null;
+          const tgt: any = cand.target;
+          if (tgt && typeof tgt.x === 'number' && typeof tgt.y === 'number') {
+            if (typeof tgt.w === 'number' && typeof tgt.h === 'number') {
+              tx = tgt.x + tgt.w / 2; ty = tgt.y + tgt.h / 2;
+            } else {
+              tx = tgt.x; ty = tgt.y;
+            }
+          }
+          if (tx != null && ty != null) {
+            checks++;
+            try {
+              const path = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, tx, ty);
+              reachable = !!(path && path.length);
+            } catch {
+              reachable = false;
+            }
+          }
+        }
+        if (reachable) {
+          this.setTask(c, cand.task, cand.target, { extraData: cand.extraData });
+          assigned = true;
+          // Debug logging
+          if (Math.random() < 0.1) {
+            console.log(`Colonist ${c.profile?.name || 'Unknown'} assigned ${cand.workType} (priority ${cand.priority}): ${cand.task}`);
+          }
+          break;
+        }
+      }
+      if (!assigned) {
+        // Fallback: if none validated within budget, assign the top candidate (legacy behavior)
+        const bestWork = candidates[0];
+        this.setTask(c, bestWork.task, bestWork.target, { extraData: bestWork.extraData });
+        if (Math.random() < 0.05) {
+          console.log(`Assigned without reachability validation due to budget: ${bestWork.task}`);
+        }
       }
     } else {
       // No work available - idle
@@ -2477,13 +2431,16 @@ export class Game {
         }
       }
     }
-    // resource respawn
+  // resource respawn
     this.tryRespawn(dt);
     
   updateProjectilesCombat(this, dt);
     
     for (let i = this.messages.length - 1; i >= 0; i--) { const m = this.messages[i]; m.t -= dt; if (m.t <= 0) this.messages.splice(i, 1); }
     
+    // Update RimWorld floor item/stockpile systems
+    if (this.rimWorld) this.rimWorld.update();
+
     // Process queued navmesh rebuilds at END of frame (deferred rebuild system)
     this.deferredRebuildSystem.processQueue();
   }

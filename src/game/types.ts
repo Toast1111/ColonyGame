@@ -78,7 +78,7 @@ export interface BuildingInventory {
 
 export type ColonistCommandIntent = 'goto' | 'rest' | 'medical' | 'seekMedical' | 'guard';
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'storingBread' | 'haulBread' | 'guard' | 'drafted';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted';
 
 // Inventory and equipment types
 export interface InventoryItem {

@@ -2116,6 +2116,66 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     
+    case 'haulFloorItem': {
+      // Haul a ground item from RimWorld floor item system to a stockpile destination
+      const data = (c as any).taskData as any;
+      const rim = (game as any).rimWorld;
+      if (!data || !rim) {
+        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'no hauling data');
+        break;
+      }
+      const itemId: string = data.itemId;
+      const dest = data.destination as { x: number; y: number };
+      if (!itemId || !dest) {
+        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'invalid hauling data');
+        break;
+      }
+
+      // Phase 1: go to item position (target may have been cached as FloorItem when assigned)
+      const item = rim.floorItems.getAllItems().find((it: any) => it.id === itemId);
+      if (!item) {
+        // Item already gone
+        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'item missing');
+        break;
+      }
+
+      const itemPt = { x: item.position.x, y: item.position.y };
+      const dItem = Math.hypot(c.x - itemPt.x, c.y - itemPt.y);
+      if (dItem > 18) {
+        game.moveAlongPath(c, dt, itemPt, 16);
+        break;
+      }
+
+      // At item: pick up whole stack or up to a carry limit
+      const carryLimit = 20; // simple limit for now
+      const takeRes = rim.pickupItems(itemId, carryLimit);
+      const taken = takeRes ? takeRes.taken : 0;
+      if (taken <= 0) {
+        // Nothing to take (race lost)
+        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'nothing to pick up');
+        break;
+      }
+      // Store temporarily in colonist cargo
+      (c as any).carryingItem = { type: item.type, qty: taken };
+
+      // Phase 2: go to destination and drop
+      const dDest = Math.hypot(c.x - dest.x, c.y - dest.y);
+      if (dDest > 18) {
+        game.moveAlongPath(c, dt, dest, 16);
+        break;
+      }
+
+      // Drop at destination (floor) and mark task complete
+      const payload = (c as any).carryingItem;
+      if (payload && payload.qty > 0) {
+        rim.dropItems(payload.type, payload.qty, dest);
+        (c as any).carryingItem = null;
+        game.msg(`${c.profile?.name || 'Colonist'} hauled ${payload.qty} ${payload.type}`, 'good');
+      }
+      c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'floor item hauled');
+      break;
+    }
+    
     case 'storingBread': {
       const pantry = c.target as Building;
       if (!pantry || pantry.kind !== 'pantry' || !pantry.done) {

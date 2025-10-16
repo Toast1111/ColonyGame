@@ -129,6 +129,15 @@ export class RenderManager {
       drawGround(ctx, game.camera);
       drawFloors(ctx, game.terrainGrid, game.camera);
     }
+
+    // Render RimWorld stockpile zones and floor items between terrain and entities
+    if ((game as any).rimWorld) {
+      // We are already in world space (applyWorldTransform active)
+      const zones = (game as any).rimWorld.stockpiles.getAllZones();
+      (game as any).rimWorld.renderer.renderStockpileZones(zones, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
+      const stacks = (game as any).rimWorld.floorItems.getVisualStacks();
+      (game as any).rimWorld.renderer.renderFloorItems(stacks, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
+    }
   }
 
   /**

@@ -321,6 +321,7 @@ export function getWorkTypeForTask(task: string | null): WorkType | null {
     case 'doctor': return 'Doctor';
     case 'cooking': return 'Cooking';
     case 'haul': return 'Hauling';
+    case 'haulFloorItem': return 'Hauling';
     case 'research': return 'Research';
     default: return null;
   }

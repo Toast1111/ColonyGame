@@ -60,7 +60,10 @@ export class MobileControls {
     btn.id = id;
     btn.textContent = emoji;
     btn.title = title;
-    btn.onclick = onClick;
+    btn.onclick = () => {
+      try { (window as any).game?.audioManager?.play('ui.click.primary'); } catch {}
+      onClick();
+    };
     return btn;
   }
 

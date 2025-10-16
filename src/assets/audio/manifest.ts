@@ -219,6 +219,17 @@ export const AUDIO_MANIFEST = {
     { name: 'InfoCard_Close', volume: 0.55 }
   ]),
 
+  // Hotbar specific (single-variant each to avoid shuffling)
+  'ui.hotbar.open': variants('ui', [
+    { name: 'TabOpen', volume: 0.6 }
+  ]),
+  'ui.hotbar.hover': variants('ui', [
+    { name: 'OptionMouseoverThump', volume: 0.5 }
+  ]),
+  'ui.hotbar.close': variants('ui', [
+    { name: 'TabClose', volume: 0.6 }
+  ]),
+
   'ui.drag.start': variants('ui', [
     { name: 'DragElement', volume: 0.5 }
   ]),

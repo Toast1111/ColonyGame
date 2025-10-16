@@ -4,25 +4,49 @@ import type { StockpileZone } from "../stockpiles/stockpileZones";
 export class RimWorldRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private debug = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
   }
 
+  setDebugMode(on: boolean) { this.debug = on; }
+
   // Render stockpile zones
-  renderStockpileZones(zones: StockpileZone[], cameraX: number = 0, cameraY: number = 0): void {
+  // If rendering with world transform already applied, pass options { isWorldTransformed: true, zoom }
+  renderStockpileZones(
+    zones: StockpileZone[],
+    cameraX: number = 0,
+    cameraY: number = 0,
+    options?: { isWorldTransformed?: boolean; zoom?: number }
+  ): void {
     this.ctx.save();
+    const isWorld = !!options?.isWorldTransformed;
+    const zoom = options?.zoom ?? 1;
     
     for (const zone of zones) {
-      // Translate for camera
-      const screenX = zone.x - cameraX;
-      const screenY = zone.y - cameraY;
+      // Compute drawing coords
+      const screenX = isWorld ? zone.x : (zone.x - cameraX);
+      const screenY = isWorld ? zone.y : (zone.y - cameraY);
 
       // Skip if zone is off-screen
-      if (screenX + zone.width < 0 || screenX > this.canvas.width || 
-          screenY + zone.height < 0 || screenY > this.canvas.height) {
-        continue;
+      if (isWorld) {
+        // Compute view bounds in world units
+        const viewW = this.canvas.width / zoom;
+        const viewH = this.canvas.height / zoom;
+        const minX = cameraX;
+        const minY = cameraY;
+        const maxX = cameraX + viewW;
+        const maxY = cameraY + viewH;
+        if (zone.x + zone.width < minX || zone.x > maxX || zone.y + zone.height < minY || zone.y > maxY) {
+          continue;
+        }
+      } else {
+        if (screenX + zone.width < 0 || screenX > this.canvas.width || 
+            screenY + zone.height < 0 || screenY > this.canvas.height) {
+          continue;
+        }
       }
 
       // Draw zone background
@@ -53,17 +77,37 @@ export class RimWorldRenderer {
   }
 
   // Render floor items as visual stacks
-  renderFloorItems(stacks: ItemStack[], cameraX: number = 0, cameraY: number = 0): void {
+  // If rendering with world transform already applied, pass options { isWorldTransformed: true, zoom }
+  renderFloorItems(
+    stacks: ItemStack[],
+    cameraX: number = 0,
+    cameraY: number = 0,
+    options?: { isWorldTransformed?: boolean; zoom?: number }
+  ): void {
     this.ctx.save();
+    const isWorld = !!options?.isWorldTransformed;
+    const zoom = options?.zoom ?? 1;
 
     for (const stack of stacks) {
-      const screenX = stack.centerX - cameraX;
-      const screenY = stack.centerY - cameraY;
+      const screenX = isWorld ? stack.centerX : (stack.centerX - cameraX);
+      const screenY = isWorld ? stack.centerY : (stack.centerY - cameraY);
 
       // Skip if off-screen
-      if (screenX < -32 || screenX > this.canvas.width + 32 || 
-          screenY < -32 || screenY > this.canvas.height + 32) {
-        continue;
+      if (isWorld) {
+        const viewW = this.canvas.width / zoom;
+        const viewH = this.canvas.height / zoom;
+        const minX = cameraX - 32;
+        const minY = cameraY - 32;
+        const maxX = cameraX + viewW + 32;
+        const maxY = cameraY + viewH + 32;
+        if (stack.centerX < minX || stack.centerX > maxX || stack.centerY < minY || stack.centerY > maxY) {
+          continue;
+        }
+      } else {
+        if (screenX < -32 || screenX > this.canvas.width + 32 || 
+            screenY < -32 || screenY > this.canvas.height + 32) {
+          continue;
+        }
       }
 
       // Get the primary item type for this stack
@@ -72,6 +116,15 @@ export class RimWorldRenderer {
 
       // Draw item representation
       this.drawItemStack(screenX, screenY, primaryItem.type, stack.totalQuantity, stack.items.length > 1);
+
+      // Optional debug marker
+      if (this.debug) {
+        this.ctx.strokeStyle = 'yellow';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.arc(screenX, screenY, 10, 0, Math.PI * 2);
+        this.ctx.stroke();
+      }
     }
 
     this.ctx.restore();

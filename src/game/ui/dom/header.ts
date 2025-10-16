@@ -77,6 +77,8 @@ export class Header {
     btn.id = id;
     btn.textContent = text;
     btn.onclick = () => {
+      // Play UI click for header actions
+      try { (window as any).game?.audioManager?.play('ui.click.primary'); } catch {}
       onClick();
       this.hideDropdown();
     };
@@ -89,6 +91,9 @@ export class Header {
   toggleDropdown(): void {
     if (this.dropdown) {
       this.dropdown.hidden = !this.dropdown.hidden;
+      try {
+        (window as any).game?.audioManager?.play(this.dropdown.hidden ? 'ui.panel.close' : 'ui.panel.open');
+      } catch {}
     }
   }
 
@@ -98,6 +103,7 @@ export class Header {
   showDropdown(): void {
     if (this.dropdown) {
       this.dropdown.hidden = false;
+      try { (window as any).game?.audioManager?.play('ui.panel.open'); } catch {}
     }
   }
 
@@ -107,6 +113,7 @@ export class Header {
   hideDropdown(): void {
     if (this.dropdown) {
       this.dropdown.hidden = true;
+      try { (window as any).game?.audioManager?.play('ui.panel.close'); } catch {}
     }
   }
 

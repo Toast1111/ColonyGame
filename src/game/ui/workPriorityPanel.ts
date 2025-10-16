@@ -102,6 +102,7 @@ function calculatePanelLayout(canvasWidth: number, canvasHeight: number, colonis
 export function toggleWorkPriorityPanel(): void {
   isPanelOpen = !isPanelOpen;
   panelScrollY = 0; // Reset scroll when opening
+  try { (window as any).game?.audioManager?.play(isPanelOpen ? 'ui.panel.open' : 'ui.panel.close'); } catch {}
   
   // Hide/show mobile controls (HTML buttons) to prevent z-index overlay
   const mobileControls = document.getElementById('mobileControls');
@@ -122,6 +123,7 @@ export function isWorkPriorityPanelOpen(): boolean {
  */
 export function closeWorkPriorityPanel(): void {
   isPanelOpen = false;
+  try { (window as any).game?.audioManager?.play('ui.panel.close'); } catch {}
   
   // Restore mobile controls visibility
   const mobileControls = document.getElementById('mobileControls');
