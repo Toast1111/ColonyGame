@@ -277,6 +277,23 @@ export const AUDIO_MANIFEST = {
     { name: 'AssultRifle_Fire_1d', volume: 1.0 }
   ]),
 
+  // SMG: currently reuses Autopistol pool; unique key allows swapping later
+  'weapons.ranged.smg.fire': variants('weapons/ranged/autopistol', [
+    { file: 'weapons/ranged/autopistol/AutoPistol_Fire1a.ogg', volume: 0.95 },
+    { name: 'AutoPistol_Fire_1b', volume: 0.95 },
+    { name: 'AutoPistol_Fire_1c', volume: 0.95 },
+    { name: 'AutoPistol_Fire_1d', volume: 0.95 },
+    { name: 'AutoPistol_Fire_1e', volume: 0.95 }
+  ]),
+
+  // Sniper: currently reuses Assault Rifle pool; unique key allows swapping later
+  'weapons.ranged.sniper_rifle.fire': variants('weapons/ranged/assultrifle', [
+    { name: 'AssultRifle_Fire_1a', volume: 1.0 },
+    { name: 'AssultRifle_Fire_1b', volume: 1.0 },
+    { name: 'AssultRifle_Fire_1c', volume: 1.0 },
+    { name: 'AssultRifle_Fire_1d', volume: 1.0 }
+  ]),
+
   'weapons.melee.club.impact': variants('weapons/melee/club', [
     { name: 'MeleeHit_Metal_Blunt_1a', volume: 0.85 },
     { name: 'MeleeHit_Metal_Blunt_1b', volume: 0.85 },

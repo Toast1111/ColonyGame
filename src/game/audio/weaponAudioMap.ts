@@ -21,14 +21,15 @@ export interface WeaponAudioContext {
   damageType?: string;       // From ItemDef.damageType ('blunt', 'cut', etc.)
   weaponCategory?: string;   // From ItemDef.category (optional)
   weaponLabel?: string;      // From ItemDef.label (for debug logging)
+  weaponDefName?: string;    // From ItemDef.defName (allows specific mappings)
 }
 
 /**
  * Get the appropriate fire sound for a ranged weapon.
  * 
- * Strategy: All ranged weapons use the same gunfire sound pool.
- * This is intentional - different guns can be distinguished by
- * volume, pitch, or reverb settings rather than completely different sounds.
+ * Strategy: Use specific audio where available; otherwise fall back.
+ * - Assault rifle → assault rifle fire pool
+ * - All other ranged → autopistol fire pool (default)
  * 
  * Future: Could use weapon.damage or weapon.burstCount to vary between
  * autopistol (light) and assault_rifle (heavy) sounds.
@@ -42,8 +43,18 @@ export function getWeaponFireAudio(context: WeaponAudioContext): AudioKey | null
     return null; // Melee weapon, no fire sound
   }
   
-  // All ranged weapons use autopistol fire sound
-  // This is maintainable - adding new guns requires no code changes
+  // Prefer specific weapon mappings when available
+  if (context.weaponDefName === 'AssaultRifle') {
+    return 'weapons.ranged.assault_rifle.fire';
+  }
+  if (context.weaponDefName === 'SMG') {
+    return 'weapons.ranged.smg.fire';
+  }
+  if (context.weaponDefName === 'SniperRifle') {
+    return 'weapons.ranged.sniper_rifle.fire';
+  }
+
+  // Fallback: use autopistol for general/light firearms (pistols, SMG, etc.)
   return 'weapons.ranged.autopistol.fire';
 }
 
@@ -116,7 +127,8 @@ export function getWeaponAudioContext(weaponDef: any): WeaponAudioContext {
     weaponRange: weaponDef?.range,
     damageType: weaponDef?.damageType,
     weaponCategory: weaponDef?.category,
-    weaponLabel: weaponDef?.label
+    weaponLabel: weaponDef?.label,
+    weaponDefName: weaponDef?.defName
   };
 }
 
