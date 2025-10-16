@@ -1,7 +1,8 @@
 // RimWorld-Style Job Assignment Integration Example
 // This shows how to integrate the enhanced job system based on actual RimWorld code
 
-import { RimWorldSystemManager, type ColonistWorkSettings, type WorkType } from './index';
+import { RimWorldSystemManager } from './index';
+import type { ColonistWorkSettings, WorkType } from './logistics/enhancedHaulManager';
 
 // Example integration for Game.ts using RimWorld-style job assignment
 export class EnhancedGame {

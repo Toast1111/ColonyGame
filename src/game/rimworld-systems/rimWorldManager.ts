@@ -247,19 +247,20 @@ export class RimWorldSystemManager {
    */
   renderDebugInfo(cameraX: number = 0, cameraY: number = 0): void {
     // TODO: Render hauling paths, job indicators, etc.
-    const availableJobs = this.logistics.getAvailableJobs();
-    
+    // Prefer legacy logistics jobs for debug until enhanced is fully wired to renderer
+    const availableJobs = this.logistics?.getAvailableJobs?.() || [];
+    if (!availableJobs.length) return;
+
     for (const job of availableJobs) {
-      if (job.destination) {
-        this.renderer.renderHaulingPath(
-          job.targetItem.position.x, 
-          job.targetItem.position.y,
-          job.destination.x,
-          job.destination.y,
-          cameraX,
-          cameraY
-        );
-      }
+      if (!job?.destination || !job?.targetItem) continue;
+      this.renderer.renderHaulingPath(
+        job.targetItem.position.x, 
+        job.targetItem.position.y,
+        job.destination.x,
+        job.destination.y,
+        cameraX,
+        cameraY
+      );
     }
   }
 

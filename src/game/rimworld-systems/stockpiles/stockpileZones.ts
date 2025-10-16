@@ -1,5 +1,6 @@
 import type { Vec2 } from "../../../core/utils";
 import type { ItemType } from "../items/floorItems";
+import { T } from "../../constants";
 
 export interface StockpileZone {
   id: string;
@@ -31,11 +32,14 @@ export class StockpileManager {
       y,
       width,
       height,
-      allowedItems: new Set(['wood', 'stone', 'food']), // Allow all by default
+      // When allowAll is true, allowedItems is ignored; start empty for clarity
+      allowedItems: new Set<ItemType>(),
       priority: 1,
       settings: {
+        // Allow all item types by default; specific filters can be applied later
         allowAll: true,
-        maxStacks: Math.floor((width * height) / (24 * 24)), // Rough estimate based on area
+        // One potential stack per tile by default
+        maxStacks: Math.max(1, Math.floor((width * height) / (T * T))),
         organized: false
       }
     };
@@ -101,8 +105,8 @@ export class StockpileManager {
 
   // Find a good position within a zone to place an item
   findStoragePositionInZone(zone: StockpileZone, itemType: ItemType): Vec2 | null {
-    // For now, use a simple grid-based approach
-    const gridSize = 24; // 24 pixel grid
+    // For now, use a simple grid-based approach aligned to tile size
+    const gridSize = T;
     const cols = Math.floor(zone.width / gridSize);
     const rows = Math.floor(zone.height / gridSize);
 

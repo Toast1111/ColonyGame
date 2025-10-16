@@ -954,7 +954,12 @@ export class Game {
           return;
         }
 
-        this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
+        // If stockpile designator selected, start a zone drag
+        if (this.selectedBuild === 'stock') {
+          this.uiManager.zoneDragStart = { x: this.mouse.wx, y: this.mouse.wy };
+        } else {
+          this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
+        }
       }
     });
   c.addEventListener('mouseup', (e) => {
@@ -968,7 +973,23 @@ export class Game {
         this.pendingDragging = false;
       }
       if ((e as MouseEvent).button === 2) {
-        if (this.eraseDragStart) {
+        if (this.uiManager.zoneDragStart && this.selectedBuild === 'stock') {
+          // Create a stockpile zone based on drag rectangle
+          const x0 = Math.min(this.uiManager.zoneDragStart.x, this.mouse.wx);
+          const y0 = Math.min(this.uiManager.zoneDragStart.y, this.mouse.wy);
+          const x1 = Math.max(this.uiManager.zoneDragStart.x, this.mouse.wx);
+          const y1 = Math.max(this.uiManager.zoneDragStart.y, this.mouse.wy);
+          const w = Math.max(0, Math.floor(x1 - x0));
+          const h = Math.max(0, Math.floor(y1 - y0));
+          if (w >= T && h >= T) {
+            const gx = Math.floor(x0 / T) * T;
+            const gy = Math.floor(y0 / T) * T;
+            const gw = Math.ceil(w / T) * T;
+            const gh = Math.ceil(h / T) * T;
+            (this as any).rimWorld?.createStockpileZone(gx, gy, gw, gh, 'Stockpile');
+            this.msg('Stockpile created', 'good');
+          }
+        } else if (this.eraseDragStart) {
           const x0 = Math.min(this.eraseDragStart.x, this.mouse.wx);
           const y0 = Math.min(this.eraseDragStart.y, this.mouse.wy);
           const x1 = Math.max(this.eraseDragStart.x, this.mouse.wx);
@@ -976,7 +997,7 @@ export class Game {
           const area = (x1 - x0) * (y1 - y0);
           if (area < 12 * 12) this.cancelOrErase(); else this.eraseInRect({ x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
         }
-        this.mouse.rdown = false; this.eraseDragStart = null;
+        this.mouse.rdown = false; this.eraseDragStart = null; this.uiManager.zoneDragStart = null;
       }
     });
     c.addEventListener('contextmenu', (e) => e.preventDefault());

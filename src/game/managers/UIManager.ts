@@ -127,6 +127,9 @@ export class UIManager {
   // Drag state for building placement
   lastPaintCell: { gx: number; gy: number } | null = null;
   eraseDragStart: { x: number; y: number } | null = null;
+
+  // Zone designator (e.g., stockpiles)
+  zoneDragStart: { x: number; y: number } | null = null;
   
   /**
    * Select a building type for placement

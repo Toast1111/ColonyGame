@@ -8,8 +8,11 @@ export { FloorItemManager, type FloorItem, type ItemType, type ItemStack } from 
 export { StockpileManager, type StockpileZone, type StockpileSettings } from './stockpiles/stockpileZones';
 
 // Logistics system
+// Note: We export the stable LogisticsManager types. EnhancedLogistics is experimental
+// and its internal types intentionally aren't re-exported to avoid type collisions
+// with HaulingJob, WorkGiver, etc. Import directly from the file if you need them.
 export { LogisticsManager, type HaulingJob, type ConstructionMaterialRequest } from './logistics/haulManager';
-export { EnhancedLogisticsManager, type ColonistWorkSettings, type WorkType, type WorkGiver } from './logistics/enhancedHaulManager';
+export { EnhancedLogisticsManager } from './logistics/enhancedHaulManager';
 
 // AI system
 export { 

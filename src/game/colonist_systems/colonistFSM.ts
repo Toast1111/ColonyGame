@@ -1585,20 +1585,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               game.msg(`Farm harvested (+${added} wheat stored in farm)`, 'good');
             }
             
-            // If farm inventory is full, add remainder to global resources
+            // If farm inventory is full, drop remainder on the ground at the farm
             if (added < wheatAmount) {
               const remainder = wheatAmount - added;
-              const addedToGlobal = game.addResource('wheat', remainder);
-              if (addedToGlobal > 0) {
-                game.msg(`Farm full! +${addedToGlobal} wheat to storage`, 'info');
-              }
+              const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
+              (game as any).rimWorld?.dropItems('wheat', remainder, dropAt);
+              game.msg(`Farm full! Dropped ${remainder} wheat`, 'info');
             }
           } else {
-            // Fallback: no inventory, add directly to global resources
-            const harvested = game.addResource('wheat', wheatAmount);
-            if (harvested > 0) {
-              game.msg(`Farm harvested (+${harvested} wheat)`, 'good');
-            }
+            // Fallback: no inventory, drop wheat on the ground at the farm
+            const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
+            (game as any).rimWorld?.dropItems('wheat', wheatAmount, dropAt);
+            game.msg(`Farm harvested (dropped ${wheatAmount} wheat)`, 'good');
           }
           
           if (c.skills) grantSkillXP(c, 'Plants', 20, c.t || 0); // big tick on harvest
@@ -1644,12 +1642,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (c.skills) grantSkillXP(c, 'Plants', 4 * dt, c.t || 0); // trickle while chopping
         if (t.hp <= 0) {
           const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02);
-          const collected = game.addResource('wood', Math.round(6 * yieldMult));
+          const amount = Math.round(6 * yieldMult);
+          // Drop wood on the ground at the tree position
+          const dropAt = { x: t.x, y: t.y };
+          (game as any).rimWorld?.dropItems('wood', amount, dropAt);
           (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
           if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
-          if (collected > 0) {
-            game.msg(`+${collected} wood`, 'good');
-          }
+          game.msg(`Dropped ${amount} wood`, 'good');
           // OPTIMIZATION: No nav grid rebuild needed - trees don't block pathfinding anymore!
           // This eliminates stuttering from region rebuilds when harvesting
           
@@ -1723,12 +1722,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (c.skills) grantSkillXP(c, 'Mining', 4 * dt, c.t || 0); // trickle while mining
         if (r.hp <= 0) {
           const yieldMult = 1 + Math.min(0.5, miningLvl * 0.02);
-          const collected = game.addResource('stone', Math.round(5 * yieldMult));
+          const amount = Math.round(5 * yieldMult);
+          // Drop stone on the ground at the rock position
+          const dropAt = { x: r.x, y: r.y };
+          (game as any).rimWorld?.dropItems('stone', amount, dropAt);
           (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
           if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
-          if (collected > 0) {
-            game.msg(`+${collected} stone`, 'good');
-          }
+          game.msg(`Dropped ${amount} stone`, 'good');
           // OPTIMIZATION: No nav grid rebuild needed - rocks don't block pathfinding anymore!
           // This eliminates stuttering from region rebuilds when harvesting
           
