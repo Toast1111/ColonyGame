@@ -250,8 +250,8 @@ export class ItemDatabase {
           armorPenetration: 0.5,
           stoppingPower: 2.0,
           burstCount: 1,
-          aimTimeTicks: 72,          // 72 RimWorld ticks = 1.2 sec in RimWorld = 2.4 sec in game
-          cooldownTicks: 90,         // 90 RimWorld ticks = 1.5 sec in RimWorld = 3.0 sec in game
+          aimTimeTicks: 125,          // 125 RimWorld ticks = 2.0 sec in RimWorld = 4.0 sec in game
+          cooldownTicks: 45,         // 45 RimWorld ticks = 3.0 sec in RimWorld = 1.5 sec in game
           accuracyTouch: 0.30,
           accuracyShort: 0.70,
           accuracyMedium: 0.92,
@@ -274,8 +274,8 @@ export class ItemDatabase {
           armorPenetration: 0.1,
           stoppingPower: 0.7,
           burstCount: 5,
-          aimTimeTicks: 18,          // 18 RimWorld ticks = 0.3 sec in RimWorld = 0.6 sec in game
-          cooldownTicks: 24,         // 24 RimWorld ticks = 0.4 sec in RimWorld = 0.8 sec in game
+          aimTimeTicks: 50,          // 50 RimWorld ticks = 0.8 sec in RimWorld = 1.6 sec in game
+          cooldownTicks: 30,         // 30 RimWorld ticks = 0.5 sec in RimWorld = 1.0 sec in game
           accuracyTouch: 0.98,
           accuracyShort: 0.75,
           accuracyMedium: 0.45,
@@ -510,9 +510,9 @@ export class ItemDatabase {
           category: 'Valuable',
           equipSlot: 'none',
           stackable: true,
-          maxStack: 25,
-          value: 20,
-          weight: 0.6
+          maxStack: 500,
+          value: 1,
+          weight: 0.008
         }
       ];
 
