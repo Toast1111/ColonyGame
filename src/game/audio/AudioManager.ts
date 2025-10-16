@@ -13,6 +13,8 @@ export interface PlayAudioOptions {
   position?: { x: number; y: number };
   /** Camera/listener position for spatial audio calculations */
   listenerPosition?: { x: number; y: number };
+  /** Optional listener zoom override for spatial falloff */
+  listenerZoom?: number;
 }
 
 interface CachedBuffer {
@@ -23,7 +25,7 @@ interface CachedBuffer {
 interface ActiveSound {
   source: AudioBufferSourceNode;
   gainNode: GainNode;
-  panNode: StereoPannerNode;
+  pannerNode: PannerNode;
   baseVolume: number;
   key: AudioKey;
   isLooping: boolean;
@@ -38,6 +40,16 @@ function deriveCategory(key: AudioKey, override?: string): string {
 
 export class AudioManager {
   private static instance: AudioManager | null = null;
+
+  // Spatial audio constants based on game scale
+  private static readonly T = 32;                          // tile size (px)
+  private static readonly REF_DIST = 6 * AudioManager.T;   // ~6 tiles feels "near" (192px)
+  private static readonly ROLLOFF = 0.95;                  // 0.85–1.1 tweak here for taste
+  private static readonly MAX_DIST_HARD = 100 * AudioManager.T; // cull beyond ~100 tiles (~3200px)
+  private static readonly PAN_NEAR_PAD = 3 * AudioManager.T;     // avoids hard L/R near center (~96px)
+  private static readonly PAN_MAX_AT = 12 * AudioManager.T;      // reach full pan by ~12 tiles (~384px)
+  private static readonly ALT_DENOM = 20 * AudioManager.T;       // pan dampening scale for zoom Z (~640px)
+  private static readonly SMOOTH_TAU = 0.03;                     // ~30ms smoothing for gain/pan
 
   static getInstance(): AudioManager {
     if (!AudioManager.instance) {
@@ -54,6 +66,7 @@ export class AudioManager {
   private readonly bufferCache = new Map<string, CachedBuffer>();
   private readonly activeSounds = new Map<AudioKey, ActiveSound[]>();
   private listenerPosition: Readonly<{ x: number; y: number }> = Object.freeze({ x: 0, y: 0 });
+  private listenerZoom = 1;
 
   private constructor() {
     // Sensible category defaults (can be tweaked in the options menu later)
@@ -111,34 +124,42 @@ export class AudioManager {
     }
 
     // Create gain node for volume control
-    const gainNode = this.audioContext.createGain();
-    const category = deriveCategory(key, options.categoryOverride);
-    const baseVolume = options.volume ?? variant.volume ?? 1;
-    gainNode.gain.value = this.computeVolume(category, baseVolume);
+  const gainNode = this.audioContext.createGain();
+  const category = deriveCategory(key, options.categoryOverride);
+  const baseVolume = options.volume ?? variant.volume ?? 1;
+  const baseGain = this.computeVolume(category, baseVolume);
+  gainNode.gain.value = baseGain;
 
     // Create panner node for spatial audio
-    const panNode = this.audioContext.createStereoPanner();
+    const pannerNode = new PannerNode(this.audioContext, {
+      panningModel: 'HRTF',
+      distanceModel: 'exponential',
+      refDistance: AudioManager.REF_DIST,
+      rolloffFactor: AudioManager.ROLLOFF,
+      maxDistance: AudioManager.MAX_DIST_HARD,
+    });
     
     // Calculate spatial audio if position is provided
-    if (options.position && options.listenerPosition) {
-      const { pan, volume } = this.calculateSpatialAudio(
-        options.position,
-        options.listenerPosition
-      );
-      panNode.pan.value = clamp(pan, -1, 1);
-      gainNode.gain.value *= volume;
+    if (options.position) {
+      const listenerPosition = options.listenerPosition ?? this.listenerPosition;
+      const listenerZoom = options.listenerZoom ?? this.listenerZoom;
+      const altitude = this.zoomToAltitude(listenerZoom);
+      pannerNode.positionX.value = options.position.x;
+      pannerNode.positionY.value = options.position.y;
+      pannerNode.positionZ.value = 0;
+      // Listener position and orientation will be set in updateSpatialAudio
     }
 
-    // Connect the audio graph: source -> gain -> pan -> master -> destination
-    source.connect(gainNode);
-    gainNode.connect(panNode);
-    panNode.connect(this.masterGainNode);
+    // Connect the audio graph: source -> panner -> gain -> master -> destination
+    source.connect(pannerNode);
+    pannerNode.connect(gainNode);
+    gainNode.connect(this.masterGainNode);
 
     // Track active sounds
     const activeSound: ActiveSound = {
       source,
       gainNode,
-      panNode,
+      pannerNode,
       baseVolume: clamp(baseVolume, 0, 1.5),
       key,
       isLooping: source.loop,
@@ -164,7 +185,7 @@ export class AudioManager {
       }
       // Disconnect nodes to free resources
       gainNode.disconnect();
-      panNode.disconnect();
+      pannerNode.disconnect();
     });
 
     // Start playback
@@ -182,7 +203,7 @@ export class AudioManager {
         try {
           sound.source.stop();
           sound.gainNode.disconnect();
-          sound.panNode.disconnect();
+          sound.pannerNode.disconnect();
         } catch (e) {
           // Source may already be stopped
         }
@@ -230,18 +251,28 @@ export class AudioManager {
   }
 
   /** Update listener position for spatial audio calculations */
-  setListenerPosition(x: number, y: number): void {
-    // Only update if position changed to avoid GC pressure
-    if (this.listenerPosition.x === x && this.listenerPosition.y === y) {
+  setListenerPosition(x: number, y: number, zoom = this.listenerZoom): void {
+    // Only update if transform changed to avoid redundant work
+    if (
+      this.listenerPosition.x === x &&
+      this.listenerPosition.y === y &&
+      this.listenerZoom === zoom
+    ) {
       return;
     }
     this.listenerPosition = Object.freeze({ x, y });
+    this.listenerZoom = zoom;
     this.updateSpatialAudio();
   }
 
   /** Get current listener position (returns frozen readonly object - safe to use) */
   getListenerPosition(): Readonly<{ x: number; y: number }> {
     return this.listenerPosition;
+  }
+
+  /** Get current listener zoom (used for spatial falloff calculations) */
+  getListenerZoom(): number {
+    return this.listenerZoom;
   }
 
   private async loadBuffer(file: string): Promise<CachedBuffer | null> {
@@ -287,37 +318,56 @@ export class AudioManager {
     }
   }
 
-  private calculateSpatialAudio(
-    soundPos: { x: number; y: number },
-    listenerPos: { x: number; y: number }
-  ): { pan: number; volume: number } {
-    const dx = soundPos.x - listenerPos.x;
-    const dy = soundPos.y - listenerPos.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-
-    // Pan based on horizontal position (-1 = left, 1 = right)
-    const maxPanDistance = 800; // pixels
-    const pan = clamp(dx / maxPanDistance, -1, 1);
-
-    // Volume falloff based on distance
-    const maxHearingDistance = 1500; // pixels
-    const volume = Math.max(0, 1 - (distance / maxHearingDistance));
-
-    return { pan, volume };
+  private zoomToAltitude(zoom: number): number {
+    // zoom=1 -> 0; zoom=0.6 -> ~ (1/0.6-1)=0.666... * 600 ≈ 400px
+    // only adds "Z" when zoomed OUT (<=1), so zooming IN keeps spatial detail lively
+    const z = clamp(zoom, 0.6, 2.2);
+    const normalized = Math.max(0, (1 / z) - 1);
+    const altitudeScale = 600; // feel free to try 500–700
+    return normalized * altitudeScale;
   }
 
   private updateSpatialAudio(): void {
+    if (!this.audioContext) return;
+    const t = this.audioContext.currentTime;
+
+    // Update listener position and orientation
+    const altitude = this.zoomToAltitude(this.listenerZoom);
+    this.audioContext.listener.positionX.setValueAtTime(this.listenerPosition.x, t);
+    this.audioContext.listener.positionY.setValueAtTime(this.listenerPosition.y, t);
+    this.audioContext.listener.positionZ.setValueAtTime(altitude, t);
+    this.audioContext.listener.forwardX.setValueAtTime(0, t);
+    this.audioContext.listener.forwardY.setValueAtTime(1, t);
+    this.audioContext.listener.forwardZ.setValueAtTime(0, t);
+    this.audioContext.listener.upX.setValueAtTime(0, t);
+    this.audioContext.listener.upY.setValueAtTime(0, t);
+    this.audioContext.listener.upZ.setValueAtTime(1, t);
+
     for (const sounds of this.activeSounds.values()) {
       for (const sound of sounds) {
-        if (sound.position) {
-          const { pan, volume } = this.calculateSpatialAudio(
-            sound.position,
-            this.listenerPosition
-          );
-          sound.panNode.pan.value = clamp(pan, -1, 1);
-          const category = deriveCategory(sound.key);
-          sound.gainNode.gain.value = this.computeVolume(category, sound.baseVolume) * volume;
+        if (!sound.position) {
+          continue;
         }
+
+        // early out hard-cull (optional)
+        const dx = sound.position.x - this.listenerPosition.x;
+        const dy = sound.position.y - this.listenerPosition.y;
+        if (Math.hypot(dx, dy) > AudioManager.MAX_DIST_HARD) {
+          sound.gainNode.gain.setTargetAtTime(0, t, AudioManager.SMOOTH_TAU);
+          continue;
+        }
+
+        // Update sound position
+        sound.pannerNode.positionX.setValueAtTime(sound.position.x, t);
+        sound.pannerNode.positionY.setValueAtTime(sound.position.y, t);
+        sound.pannerNode.positionZ.setValueAtTime(0, t);
+
+        // Ensure gain is set (for category volume and floor)
+        const category = deriveCategory(sound.key);
+        const base = this.computeVolume(category, sound.baseVolume);
+        const floor = 0.02;
+        const finalGain = base < floor ? 0 : base;
+        sound.gainNode.gain.setTargetAtTime(finalGain, t, AudioManager.SMOOTH_TAU);
       }
     }
   }

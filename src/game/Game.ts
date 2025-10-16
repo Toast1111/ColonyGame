@@ -1308,7 +1308,15 @@ export class Game {
   }
 
   playAudio(key: AudioKey, options?: PlayAudioOptions) {
-    this.audioManager.play(key, options).catch((err) => {
+  const resolvedOptions: PlayAudioOptions = options ? { ...options } : {};
+    if (resolvedOptions.position) {
+      resolvedOptions.listenerPosition = resolvedOptions.listenerPosition ?? this.audioManager.getListenerPosition();
+      if (resolvedOptions.listenerZoom === undefined) {
+        resolvedOptions.listenerZoom = this.audioManager.getListenerZoom();
+      }
+    }
+
+    this.audioManager.play(key, resolvedOptions).catch((err) => {
       console.warn('[Game] Failed to play audio:', key, err);
     });
   }
@@ -2292,7 +2300,11 @@ export class Game {
     // Update audio listener position for spatial audio (camera center)
     const vw = this.canvas.width / this.camera.zoom;
     const vh = this.canvas.height / this.camera.zoom;
-    this.audioManager.setListenerPosition(this.camera.x + vw / 2, this.camera.y + vh / 2);
+    this.audioManager.setListenerPosition(
+      this.camera.x + vw / 2,
+      this.camera.y + vh / 2,
+      this.camera.zoom
+    );
     
     if (this.paused) return;
     
