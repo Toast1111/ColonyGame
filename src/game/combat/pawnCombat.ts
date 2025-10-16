@@ -318,9 +318,9 @@ function getWeaponStats(c: Colonist) {
   
   // Use new weapon stats if available, otherwise use legacy values
   const burst = def.burstCount ?? (def.defName === 'AssaultRifle' ? 3 : 1);
-  const warmup = def.aimTime ?? (def.defName === 'AssaultRifle' ? 0.6 : 0.4);
+  const warmup = def.aimTimeTicks ? (def.aimTimeTicks / 30) : (def.defName === 'AssaultRifle' ? 2.0 : 0.8); // Convert RimWorld ticks to game seconds
   const betweenShots = 0.1; // time between burst shots (fixed)
-  const cooldown = def.cooldownTime ?? (def.defName === 'AssaultRifle' ? 0.7 : 0.5);
+  const cooldown = def.cooldownTicks ? (def.cooldownTicks / 30) : (def.defName === 'AssaultRifle' ? 3.4 : 1.0); // Convert RimWorld ticks to game seconds
   const speed = 680; // bullet speed in px/s
   const minRangePx = 1.25 * T; // too close -> bad for ranged
   const isMelee = (def.range || 0) <= 2;

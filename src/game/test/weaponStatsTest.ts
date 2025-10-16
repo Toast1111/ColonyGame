@@ -1,5 +1,6 @@
 import { itemDatabase } from '../../data/itemDatabase';
 import { calculateOptimalDPS, calculateDPSAtRange, getWeaponStatsSummary } from '../combat/weaponStats';
+import { GAME_TICKS_PER_SECOND } from '../constants';
 
 /**
  * Test and display weapon stats
@@ -20,14 +21,16 @@ export async function testWeaponStats() {
     }
     
     const stats = getWeaponStatsSummary(def);
+    const aimTime = def.aimTimeTicks ? (def.aimTimeTicks / GAME_TICKS_PER_SECOND) : 0.8;
+    const cooldownTime = def.cooldownTicks ? (def.cooldownTicks / GAME_TICKS_PER_SECOND) : 1.0;
     
     console.log(`${def.label.toUpperCase()}`);
     console.log('-'.repeat(40));
     console.log(`Damage: ${def.damage}`);
     console.log(`Range: ${def.range} tiles`);
     console.log(`Burst Count: ${def.burstCount || 1}`);
-    console.log(`Aim Time: ${def.aimTime || 0.4}s`);
-    console.log(`Cooldown Time: ${def.cooldownTime || 0.5}s`);
+    console.log(`Aim Time: ${aimTime.toFixed(2)}s (${def.aimTimeTicks || 24} RimWorld ticks)`);
+    console.log(`Cooldown Time: ${cooldownTime.toFixed(2)}s (${def.cooldownTicks || 30} RimWorld ticks)`);
     console.log(`Armor Penetration: ${((def.armorPenetration || 0) * 100).toFixed(0)}%`);
     console.log(`Stopping Power: ${def.stoppingPower || 0}`);
     console.log('');

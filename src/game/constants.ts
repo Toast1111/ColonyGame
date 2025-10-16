@@ -12,3 +12,25 @@ export const COLORS: Colors = {
 };
 
 export const NIGHT_SPAN = { start: 0.72, end: 0.07 };
+
+// Time conversion constants for RimWorld compatibility
+// RimWorld runs at 60 ticks/second, this game runs at 30 ticks/second
+export const RIMWORLD_TICKS_PER_SECOND = 60;
+export const GAME_TICKS_PER_SECOND = 30; // Matches SimulationClock default Hz
+
+/**
+ * Convert RimWorld ticks to game seconds
+ * Example: 60 RimWorld ticks = 60/60 = 1 second in RimWorld
+ *          But our game runs at 30 ticks/sec, so 1 second = 30 ticks
+ *          Therefore: 60 RimWorld ticks = 2 game seconds (60 / 30 = 2)
+ */
+export function rimworldTicksToSeconds(ticks: number): number {
+  return ticks / GAME_TICKS_PER_SECOND;
+}
+
+/**
+ * Convert game seconds to simulation ticks
+ */
+export function secondsToTicks(seconds: number): number {
+  return seconds * GAME_TICKS_PER_SECOND;
+}

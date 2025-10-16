@@ -1,4 +1,5 @@
 import type { ItemDef } from '../../data/itemDatabase';
+import { GAME_TICKS_PER_SECOND } from '../constants';
 
 /**
  * Calculate optimal DPS (damage per second) for a weapon
@@ -7,8 +8,9 @@ import type { ItemDef } from '../../data/itemDatabase';
 export function calculateOptimalDPS(weaponDef: ItemDef): number {
   const damage = weaponDef.damage || 0;
   const burstCount = weaponDef.burstCount || 1;
-  const aimTime = weaponDef.aimTime || 0.4;
-  const cooldownTime = weaponDef.cooldownTime || 0.5;
+  // Convert RimWorld ticks to game seconds
+  const aimTime = weaponDef.aimTimeTicks ? (weaponDef.aimTimeTicks / GAME_TICKS_PER_SECOND) : 0.8;
+  const cooldownTime = weaponDef.cooldownTicks ? (weaponDef.cooldownTicks / GAME_TICKS_PER_SECOND) : 1.0;
   const betweenShots = 0.1; // Fixed time between burst shots
   
   // Total damage per burst

@@ -1,4 +1,5 @@
 import type { InventoryItem } from '../game/types';
+import { rimworldTicksToSeconds } from '../game/constants';
 
 export interface ItemDef {
   defName: string;
@@ -19,11 +20,13 @@ export interface ItemDef {
   ammoType?: string;
   
   // Advanced weapon stats (RimWorld-style)
+  // NOTE: aimTimeTicks and cooldownTicks are in RimWorld ticks (60 ticks/sec)
+  // Use getAimTimeSeconds() and getCooldownSeconds() to get game seconds
   armorPenetration?: number; // 0-1, ability to ignore armor (AP directly subtracts from armor rating)
   stoppingPower?: number; // >= 1 can stagger humans, reducing speed to 1/6th for 95 ticks (1.58s)
   burstCount?: number; // How many bullets are fired at a time
-  aimTime?: number; // Seconds before shooting (warmup)
-  cooldownTime?: number; // Seconds after shooting (cooldown)
+  aimTimeTicks?: number; // RimWorld ticks before shooting (60 ticks/sec)
+  cooldownTicks?: number; // RimWorld ticks after shooting (60 ticks/sec)
   meleeHitChance?: number; // Base hit chance for melee weapons (0-1), modified by Melee skill
   damageType?: 'cut' | 'blunt'; // Type of damage for melee weapons (blunt = bruise, cut = cut)
   stunChance?: number; // Chance to stun on hit (only for blunt weapons)
@@ -52,6 +55,17 @@ export interface ItemDef {
   // Agriculture
   cropType?: string;
   growthTime?: number; // Days to grow
+}
+
+/**
+ * Helper functions for weapon timing conversions
+ */
+export function getAimTimeSeconds(def: ItemDef): number {
+  return def.aimTimeTicks ? rimworldTicksToSeconds(def.aimTimeTicks) : 0.4;
+}
+
+export function getCooldownSeconds(def: ItemDef): number {
+  return def.cooldownTicks ? rimworldTicksToSeconds(def.cooldownTicks) : 0.5;
 }
 
 export class ItemDatabase {
@@ -145,8 +159,8 @@ export class ItemDatabase {
           armorPenetration: 0.15,
           stoppingPower: 0.8,
           burstCount: 1,
-          aimTime: 0.4,
-          cooldownTime: 0.5,
+          aimTimeTicks: 24,          // 24 RimWorld ticks = 0.4 sec in RimWorld = 0.8 sec in game
+          cooldownTicks: 30,         // 30 RimWorld ticks = 0.5 sec in RimWorld = 1.0 sec in game
           accuracyTouch: 0.95,
           accuracyShort: 0.80,
           accuracyMedium: 0.55,
@@ -169,8 +183,8 @@ export class ItemDatabase {
           armorPenetration: 0.16,          // RimWorld: 16%
           stoppingPower: 0.5,              // RimWorld: 0.5
           burstCount: 3,                   // RimWorld: 3 per burst
-          aimTime: 1.0,                    // RimWorld: 60 ticks = 1.0 sec
-          cooldownTime: 1.7,               // RimWorld: 102 ticks = 1.7 sec
+          aimTimeTicks: 60,                // RimWorld: 60 ticks = 1.0 sec in RimWorld = 2.0 sec in game (60/30)
+          cooldownTicks: 102,              // RimWorld: 102 ticks = 1.7 sec in RimWorld = 3.4 sec in game (102/30)
           accuracyTouch: 0.60,             // RimWorld: 60% (touch - 3 tiles)
           accuracyShort: 0.70,             // RimWorld: 70% (short - 12 tiles)
           accuracyMedium: 0.65,            // RimWorld: 65% (medium - 25 tiles)
@@ -192,8 +206,8 @@ export class ItemDatabase {
           armorPenetration: 0.1,
           stoppingPower: 0.5,
           burstCount: 1,
-          aimTime: 0.2,
-          cooldownTime: 0.6,
+          aimTimeTicks: 12,          // 12 RimWorld ticks = 0.2 sec in RimWorld = 0.4 sec in game
+          cooldownTicks: 36,         // 36 RimWorld ticks = 0.6 sec in RimWorld = 1.2 sec in game
           meleeHitChance: 0.85,
           damageType: 'cut'
         },
@@ -213,8 +227,8 @@ export class ItemDatabase {
           armorPenetration: 0.0, // No armor penetration
           stoppingPower: 1.0, // Can stagger
           burstCount: 1,
-          aimTime: 0.3,
-          cooldownTime: 0.8,
+          aimTimeTicks: 18,          // 18 RimWorld ticks = 0.3 sec in RimWorld = 0.6 sec in game
+          cooldownTicks: 48,         // 48 RimWorld ticks = 0.8 sec in RimWorld = 1.6 sec in game
           meleeHitChance: 0.80,
           damageType: 'blunt',
           stunChance: 0.25 // 25% chance to stun
@@ -236,8 +250,8 @@ export class ItemDatabase {
           armorPenetration: 0.5,
           stoppingPower: 2.0,
           burstCount: 1,
-          aimTime: 1.2,
-          cooldownTime: 1.5,
+          aimTimeTicks: 72,          // 72 RimWorld ticks = 1.2 sec in RimWorld = 2.4 sec in game
+          cooldownTicks: 90,         // 90 RimWorld ticks = 1.5 sec in RimWorld = 3.0 sec in game
           accuracyTouch: 0.30,
           accuracyShort: 0.70,
           accuracyMedium: 0.92,
@@ -260,8 +274,8 @@ export class ItemDatabase {
           armorPenetration: 0.1,
           stoppingPower: 0.7,
           burstCount: 5,
-          aimTime: 0.3,
-          cooldownTime: 0.4,
+          aimTimeTicks: 18,          // 18 RimWorld ticks = 0.3 sec in RimWorld = 0.6 sec in game
+          cooldownTicks: 24,         // 24 RimWorld ticks = 0.4 sec in RimWorld = 0.8 sec in game
           accuracyTouch: 0.98,
           accuracyShort: 0.75,
           accuracyMedium: 0.45,
