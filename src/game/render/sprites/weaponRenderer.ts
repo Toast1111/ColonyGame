@@ -9,8 +9,8 @@
  * relative to the colonist's body.
  */
 
-import { ImageAssets } from "../../assets/images";
-import type { Colonist } from "../types";
+import { ImageAssets } from "../../../assets/images";
+import type { Colonist } from "../../types";
 
 /**
  * Calculate animation transforms for melee attacks

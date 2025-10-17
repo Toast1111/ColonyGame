@@ -1,7 +1,7 @@
 // Example integration for Game.ts
 // This shows how to add the RimWorld system to your existing game
 
-import { RimWorldSystemManager, type ItemType } from './index';
+import { RimWorldSystemManager, type ItemType } from '../index';
 
 // In your Game class, add the RimWorld system:
 export class Game {

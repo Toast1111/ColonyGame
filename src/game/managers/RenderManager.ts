@@ -5,7 +5,7 @@
 
 import type { Game } from '../Game';
 import { COLORS, T, WORLD } from '../constants';
-import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render';
+import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render/index';
 import { drawTerrainDebug } from '../terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/colonistProfile';

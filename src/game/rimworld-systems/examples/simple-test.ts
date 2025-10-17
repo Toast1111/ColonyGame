@@ -1,7 +1,7 @@
 // Simple test/demo of the RimWorld system
 // Run this in the browser console to test the system
 
-import { RimWorldSystemManager } from './rimWorldManager';
+import { RimWorldSystemManager } from '../rimWorldManager';
 
 // Create a test canvas
 const testCanvas = document.createElement('canvas');

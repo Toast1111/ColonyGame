@@ -1,21 +1,21 @@
-import { COLORS, T, WORLD } from "./constants";
-import type { Building, Bullet, Camera, Particle } from "./types";
-import type { TerrainGrid } from "./terrain";
-import { getFloorTypeFromId, FloorType, FLOOR_VISUALS } from "./terrain";
-import { ImageAssets } from "../assets/images";
-import { getColonistMood } from "./colonist_systems/colonistGenerator";
-import { drawParticles } from "../core/particles";
-import { getDoorOpenAmount } from "./systems/doorSystem";
-import { fillRectAlpha } from "../core/RenderOptimizations";
-import type { DirtyRectTracker } from "../core/DirtyRectTracker";
-import { colonistSpriteCache } from "../core/RenderCache";
+import { COLORS, T, WORLD } from "../constants";
+import type { Building, Bullet, Camera, Particle } from "../types";
+import type { TerrainGrid } from "../terrain";
+import { getFloorTypeFromId, FloorType, FLOOR_VISUALS } from "../terrain";
+import { ImageAssets } from "../../assets/images";
+import { getColonistMood } from "../colonist_systems/colonistGenerator";
+import { drawParticles } from "../../core/particles";
+import { getDoorOpenAmount } from "../systems/doorSystem";
+import { fillRectAlpha } from "../../core/RenderOptimizations";
+import type { DirtyRectTracker } from "../../core/DirtyRectTracker";
+import { colonistSpriteCache } from "../../core/RenderCache";
 
 // Export the new modular HUD system directly
-export { drawHUD, type HUDData } from './ui/hud/index';
+export { drawHUD, type HUDData } from '../ui/hud/index';
 
 // Re-export UI rendering utilities from their new locations
-export { drawPersonIcon, drawShieldIcon } from './ui/renderUtils';
-export { drawColonistAvatar } from './ui/colonistRenderer';
+export { drawPersonIcon, drawShieldIcon } from '../ui/renderUtils';
+export { drawColonistAvatar } from './sprites/colonistRenderer';
 
 /**
  * Clear canvas - optimized to support dirty rectangle tracking
