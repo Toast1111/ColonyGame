@@ -885,7 +885,10 @@ export class Game {
     c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
-      this.setTouchUIEnabled(false);
+      // Only disable touch UI if the user hasn't manually enabled it
+      if (this.touchUIManualOverride !== true) {
+        this.setTouchUIEnabled(false);
+      }
       if (this.touchUIManualOverride === null) {
         this.isActuallyTouchDevice = false;
       }
@@ -1365,6 +1368,10 @@ export class Game {
         this.mouse.rdown = false;
         if (created) {
           if (navigator.vibrate) { navigator.vibrate(30); }
+          if (this.lastInputWasTouch) {
+            this.selectedBuild = null;
+            this.syncMobileControls();
+          }
           this.touchLastPan = null;
           this.touchLastDist = null;
           return;
@@ -1396,6 +1403,10 @@ export class Game {
       this.touchZoneLastPos = null;
       this.uiManager.zoneDragStart = null;
       this.mouse.rdown = false;
+      if (this.lastInputWasTouch && this.selectedBuild === 'stock') {
+        this.selectedBuild = null;
+        this.syncMobileControls();
+      }
       this.touchLastPan = null;
       this.touchLastDist = null;
     }, { passive: false } as any);
@@ -1452,7 +1463,7 @@ export class Game {
       return;
     }
 
-    // If colonist panel shown, allow closing via X button or tapping outside (mobile UX)
+    // If colonist panel shown, allow closing via X button or interacting with tabs (mobile UX)
     if (this.selColonist) {
       const mx0 = this.mouse.x * this.DPR; const my0 = this.mouse.y * this.DPR;
       if (this.colonistPanelCloseRect) {
@@ -1473,7 +1484,10 @@ export class Game {
       if (this.isTouch && this.colonistPanelRect) {
         const r = this.colonistPanelRect;
         const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
-        if (!inside) { this.selColonist = null; this.follow = false; return; }
+        if (!inside) {
+          const keepSelection = this.lastInputWasTouch && this.selColonist?.isDrafted;
+          if (!keepSelection) { this.selColonist = null; this.follow = false; return; }
+        }
       }
     }
 
@@ -1572,7 +1586,30 @@ export class Game {
   // Start precise placement on touch if nothing active (unless forced desktop mode)
   if (!this.debug.forceDesktopMode && this.isActuallyTouchDevice && this.lastInputWasTouch && this.selectedBuild) { this.placeAtMouse(); return; }
 
-    const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+    const colonistUnderPointer = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+    const enemyUnderPointer = this.selColonist?.isDrafted ? this.findEnemyAt(this.mouse.wx, this.mouse.wy) : null;
+
+    const canDirectCommand = Boolean(this.selColonist && this.selColonist.isDrafted && this.lastInputWasTouch && !this.pendingPlacement && !this.selectedBuild && !this.contextMenu && !this.showBuildMenu && !this.eraseMode);
+    if (canDirectCommand) {
+      if (enemyUnderPointer) {
+        this.selColonist!.draftedTarget = enemyUnderPointer;
+        this.selColonist!.draftedPosition = null;
+        this.msg(`${this.selColonist!.profile?.name || 'Colonist'} targeting enemy`, 'info');
+        if (navigator.vibrate) { try { navigator.vibrate(25); } catch {} }
+        return;
+      }
+      if (!colonistUnderPointer) {
+        const gridX = Math.floor(this.mouse.wx / T) * T + T / 2;
+        const gridY = Math.floor(this.mouse.wy / T) * T + T / 2;
+        this.selColonist!.draftedPosition = { x: gridX, y: gridY };
+        this.selColonist!.draftedTarget = null;
+        this.msg(`${this.selColonist!.profile?.name || 'Colonist'} moving to position`, 'info');
+        if (navigator.vibrate) { try { navigator.vibrate(18); } catch {} }
+        return;
+      }
+    }
+
+    const col = colonistUnderPointer;
     if (col) { this.selColonist = col; this.follow = true; return; }
 
     const building = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
@@ -2961,7 +2998,7 @@ export class Game {
         break;
         
       // Medical actions
-      case 'medical_bandage':
+      case 'medical_bandage': // keep existing single bandage behavior fallback
         this.assignMedicalTreatment(colonist, 'bandage_wound');
         break;
       case 'medical_treat_infection':
@@ -3018,9 +3055,6 @@ export class Game {
           this.msg(`${doctor.profile?.name || 'Doctor'} cleared treatment priority`, 'info');
         }
         break; }
-      case 'medical_bandage': // keep existing single bandage behavior fallback
-        this.assignMedicalTreatment(colonist, 'bandage_wound');
-        break;
       case 'medical_rescue':
         // Find best doctor or nearest healthy colonist to rescue
         const rescuer = this.findBestDoctor(colonist) || this.colonists.find(c=>c!==colonist && c.alive && c.state!=='downed');
