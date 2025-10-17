@@ -5,21 +5,29 @@ export function drawColonistProfile(game: any, c: any) {
   const cw = game.canvas.width; 
   const ch = game.canvas.height; 
 
+  const isTouchUI = !!game.touchUIEnabled;
+
   // Responsive sizing - scale down for smaller screens
-  const baseW = 550;
-  const baseH = 450;
-  const minW = 320; // Minimum width for mobile
-  const minH = 280; // Minimum height for mobile
-  
-  const scaleW = Math.max(0.5, Math.min(0.85, cw / 800)); // Scale based on screen width
-  const scaleH = Math.max(0.5, Math.min(0.85, ch / 600)); // Scale based on screen height
+  const baseW = isTouchUI ? 420 : 550;
+  const baseH = isTouchUI ? 400 : 450;
+  const minW = isTouchUI ? 260 : 320;
+  const minH = isTouchUI ? 260 : 280;
+
+  const scaleW = isTouchUI
+    ? Math.max(0.6, Math.min(0.95, cw / 720))
+    : Math.max(0.5, Math.min(0.85, cw / 800));
+  const scaleH = isTouchUI
+    ? Math.max(0.6, Math.min(0.9, ch / 640))
+    : Math.max(0.5, Math.min(0.85, ch / 600));
   const scale = Math.min(scaleW, scaleH); // Use smaller scale to fit both dimensions
-  
-  const W = Math.max(minW, Math.min(game.scale(baseW * scale), cw * 0.9));
-  const H = Math.max(minH, Math.min(game.scale(baseH * scale), ch * 0.85));
+
   const PAD = game.scale(8);
-  const X = Math.max(PAD, (cw - W) / 2); // Center horizontally on smaller screens
-  const Y = game.scale(54);
+  const maxW = cw * (isTouchUI ? 0.55 : 0.9);
+  const maxH = ch * (isTouchUI ? 0.8 : 0.85);
+  const W = Math.max(minW, Math.min(game.scale(baseW * scale), maxW));
+  const H = Math.max(minH, Math.min(game.scale(baseH * scale), maxH));
+  const X = isTouchUI ? PAD : Math.max(PAD, (cw - W) / 2); // Anchor left on touch to free the center view
+  const Y = isTouchUI ? PAD + game.scale(28) : game.scale(54);
   const finalY = Math.max(PAD, Math.min(Y, ch - H - PAD));
 
   ctx.save();
@@ -127,7 +135,10 @@ export function drawColonistProfile(game: any, c: any) {
   ctx.fillStyle = '#4b5563';
   ctx.font = game.getScaledFont(9);
   ctx.textAlign = 'left';
-  ctx.fillText(game.follow ? 'Following (Esc to stop)' : 'Click to follow', X + game.scale(16), finalY + H - game.scale(8));
+  const followText = game.follow
+    ? (isTouchUI ? 'Following (tap portrait to stop)' : 'Following (Esc to stop)')
+    : (isTouchUI ? 'Tap portrait to follow' : 'Click to follow');
+  ctx.fillText(followText, X + game.scale(16), finalY + H - game.scale(8));
 
   game.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
   game.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
