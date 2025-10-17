@@ -53,6 +53,7 @@ import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
 import { RimWorldSystemManager, type RimWorldSystemConfig } from './rimworld-systems';
+import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -120,6 +121,8 @@ export class Game {
   isTouch = false;
   // Actual touch usage detection (vs just capability)
   isActuallyTouchDevice = false;
+  private touchUIEnabledInternal = false;
+  private touchUIManualOverride: boolean | null = null;
   // lastInputWasTouch moved to inputManager (see getter/setter below)
 
   getStorageCapacity(): number {
@@ -187,10 +190,22 @@ export class Game {
   get dayLength(): number { return this.timeSystem.getDayLength(); }
   
   get fastForward(): number { return this.timeSystem.getFastForward(); }
-  set fastForward(value: number) { this.timeSystem.setFastForward(value); }
+  set fastForward(value: number) {
+    const prev = this.timeSystem.getFastForward();
+    this.timeSystem.setFastForward(value);
+    if (prev !== value) {
+      this.syncMobileControls();
+    }
+  }
   
   get paused(): boolean { return this.timeSystem.isPaused(); }
-  set paused(value: boolean) { this.timeSystem.setPaused(value); }
+  set paused(value: boolean) {
+    const prev = this.timeSystem.isPaused();
+    this.timeSystem.setPaused(value);
+    if (prev !== value) {
+      this.syncMobileControls();
+    }
+  }
 
   // === UI Manager Property Redirects ===
   get selectedBuild() { return this.uiManager.selectedBuild; }
@@ -203,7 +218,13 @@ export class Game {
   set showBuildMenu(value) { this.uiManager.showBuildMenu = value; }
   
   get eraseMode() { return this.uiManager.eraseMode; }
-  set eraseMode(value) { this.uiManager.eraseMode = value; }
+  set eraseMode(value) {
+    const prev = this.uiManager.eraseMode;
+    this.uiManager.eraseMode = value;
+    if (prev !== value) {
+      this.syncMobileControls();
+    }
+  }
   
   get selColonist() { return this.uiManager.selColonist; }
   set selColonist(value) { this.uiManager.selColonist = value; }
@@ -287,6 +308,8 @@ export class Game {
   
   get lastInputWasTouch(): boolean { return this.inputManager.wasLastInputTouch(); }
   set lastInputWasTouch(value: boolean) { this.inputManager.setLastInputWasTouch(value); }
+
+  get touchUIEnabled(): boolean { return this.touchUIEnabledInternal; }
   
   // Debug flags (keep as is - not part of managers)
   debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
@@ -634,7 +657,6 @@ export class Game {
 
     // Heuristic boosts for touch devices and smaller screens
     const isTouch = (("ontouchstart" in window) || (navigator as any).maxTouchPoints > 0);
-    this.isTouch = isTouch;
     // Be more conservative about assuming actual touch usage - start with false
     this.isActuallyTouchDevice = isTouch && (currentWidth < 900); // Only assume touch for smaller screens initially
     if (isTouch) {
@@ -659,11 +681,57 @@ export class Game {
 
     // Apply final bounds (higher floor improves readability on tablets)
     scale = Math.max(1.1, Math.min(scale, 3.0));
-    
+
+    this.setTouchUIEnabled(this.isActuallyTouchDevice);
+
     this.uiScale = scale;
     console.log(`UI Scale calculated: ${scale.toFixed(2)} for ${currentWidth}x${currentHeight}`);
   }
-  
+
+  private getMobileControlsInstance(): MobileControls | null {
+    const mc = (this as any).mobileControls as MobileControls | undefined;
+    return mc ?? null;
+  }
+
+  syncMobileControls(): void {
+    const mc = this.getMobileControlsInstance();
+    if (!mc) return;
+    mc.setPauseState(this.paused);
+    mc.setFastForwardState(this.fastForward > 1);
+    mc.setEraseState(this.eraseMode);
+  }
+
+  private applyTouchUIState(): void {
+    const enabled = this.touchUIEnabledInternal;
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('touch-ui', enabled);
+    }
+    const mc = this.getMobileControlsInstance();
+    if (mc) {
+      if (enabled) {
+        mc.show();
+      } else {
+        mc.hide();
+      }
+    }
+    this.syncMobileControls();
+  }
+
+  setTouchUIEnabled(enabled: boolean, manual = false): void {
+    if (manual) {
+      this.touchUIManualOverride = enabled;
+    } else if (this.touchUIManualOverride !== null) {
+      return;
+    }
+    this.touchUIEnabledInternal = enabled;
+    this.isTouch = this.touchUIManualOverride ?? this.touchUIEnabledInternal;
+    this.applyTouchUIState();
+  }
+
+  refreshTouchUIState(): void {
+    this.applyTouchUIState();
+  }
+
   // Helper function to get scaled font size
   getScaledFont(baseSize: number, weight = '500', family = 'system-ui,Segoe UI,Roboto') {
     return `${weight} ${Math.round(baseSize * this.uiScale)}px ${family}`;
@@ -750,10 +818,14 @@ export class Game {
         else if (this.selectedBuild === 'wall') this.paintWallAtMouse();
       }
     });
-  c.addEventListener('mousedown', (e) => {
+    c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
-      
+      this.setTouchUIEnabled(false);
+      if (this.touchUIManualOverride === null) {
+        this.isActuallyTouchDevice = false;
+      }
+
       // PRIORITY PANEL IS MODAL - Check first and block all other interactions
       if (isWorkPriorityPanelOpen()) {
         if (handleWorkPriorityPanelClick(e.offsetX * this.DPR, e.offsetY * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
@@ -1046,6 +1118,7 @@ export class Game {
       e.preventDefault();
       this.lastInputWasTouch = true;
       this.isActuallyTouchDevice = true;
+      this.setTouchUIEnabled(true);
       if (e.touches.length === 1) {
         this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
         

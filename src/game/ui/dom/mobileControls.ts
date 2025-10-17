@@ -26,7 +26,10 @@ export class MobileControls {
   constructor(callbacks: MobileControlsCallbacks) {
     this.container = this.createContainer();
     this.buttons = this.createButtons(callbacks);
-    
+
+    // Hidden by default until touch UI is enabled
+    this.container.hidden = true;
+
     // Add main control buttons to container
     this.container.appendChild(this.buttons.erase);
     this.container.appendChild(this.buttons.pause);
@@ -60,6 +63,8 @@ export class MobileControls {
     btn.id = id;
     btn.textContent = emoji;
     btn.title = title;
+    btn.type = 'button';
+    btn.setAttribute('aria-label', title);
     btn.onclick = () => {
       try { (window as any).game?.audioManager?.play('ui.click.primary'); } catch {}
       onClick();
@@ -82,6 +87,7 @@ export class MobileControls {
    */
   show(): void {
     this.container.hidden = false;
+    this.container.style.display = '';
   }
 
   /**
@@ -89,6 +95,7 @@ export class MobileControls {
    */
   hide(): void {
     this.container.hidden = true;
+    this.container.style.display = 'none';
   }
 
   /**
