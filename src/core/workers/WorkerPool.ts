@@ -118,14 +118,11 @@ export class WorkerPool {
   public async initialize(): Promise<void> {
     // Prevent duplicate initialization - this is critical to avoid worker leaks
     if (this.initialized) {
-      console.log('[WorkerPool] Already initialized, skipping duplicate initialization');
+      console.debug('[WorkerPool] Already initialized, skipping duplicate initialization');
       return;
     }
     
     try {
-      // Terminate any existing workers before creating new ones (safety measure)
-      this.terminateAllWorkers();
-      
       // Create pathfinding worker
       this.pathfindingWorker = new Worker(
         new URL('./pathfindingWorker.ts', import.meta.url),
