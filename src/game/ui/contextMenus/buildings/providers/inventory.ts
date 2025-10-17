@@ -4,7 +4,7 @@
 
 import type { ContextMenuItem } from '../../types';
 import { buildingContextMenuManager } from '../manager';
-import { openBuildingInventoryPanel } from '../../../buildingInventoryPanel';
+import { openBuildingInventoryPanel } from '../../../panels/buildingInventoryPanel';
 
 // Register inventory menu for all inventory-capable buildings
 buildingContextMenuManager.register('*', ({ game, building }) => {

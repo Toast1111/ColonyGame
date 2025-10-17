@@ -14,7 +14,7 @@ import type { Colonist, Building } from '../types';
 import type { BUILD_TYPES } from '../buildings';
 import type { ContextMenuDescriptor, ContextMenuItem } from '../ui/contextMenus/types';
 import type { HotbarTab } from '../ui/hud/modernHotbar';
-import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/workPriorityPanel';
+import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/panels/workPriorityPanel';
 import { AudioManager } from '../audio/AudioManager';
 
 export class UIManager {

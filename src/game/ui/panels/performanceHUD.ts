@@ -13,10 +13,10 @@
  * - Especially important for Safari/iPad where canvas text is costly
  */
 
-import { PerformanceMetrics } from '../../core/PerformanceMetrics';
-import { SimulationClock } from '../../core/SimulationClock';
-import { BudgetedExecutionManager } from '../../core/BudgetedExecution';
-import type { Game } from '../Game';
+import { PerformanceMetrics } from '../../../core/PerformanceMetrics';
+import { SimulationClock } from '../../../core/SimulationClock';
+import { BudgetedExecutionManager } from '../../../core/BudgetedExecution';
+import type { Game } from '../../Game';
 
 export interface PerformanceHUDConfig {
   /** Show the HUD */

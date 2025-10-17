@@ -9,10 +9,10 @@
  * - Selection highlighting
  */
 
-import { COLORS } from "../constants";
-import { ImageAssets } from "../../assets/images";
-import { getColonistMood } from "../colonist_systems/colonistGenerator";
-import { colonistSpriteCache } from "../../core/RenderCache";
+import { COLORS } from "../../constants";
+import { ImageAssets } from "../../../assets/images";
+import { getColonistMood } from "../../colonist_systems/colonistGenerator";
+import { colonistSpriteCache } from "../../../core/RenderCache";
 import { drawWeapon } from "./weaponRenderer";
 
 /**
