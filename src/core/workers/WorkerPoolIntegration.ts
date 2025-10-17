@@ -5,7 +5,7 @@
  * Provides convenient wrappers for pathfinding, rendering, and simulation tasks.
  */
 
-import { WorkerPool, type WorkerTaskType } from './WorkerPool';
+import { WorkerPool, type WorkerPoolStats, type WorkerPoolStatus, type WorkerTaskType } from './WorkerPool';
 
 export class WorkerPoolIntegration {
   private static instance: WorkerPoolIntegration;
@@ -260,15 +260,22 @@ export class WorkerPoolIntegration {
   /**
    * Get worker pool statistics
    */
-  public getStats(): any {
+  public getStats(): WorkerPoolStats {
     return this.pool.getStats();
   }
-  
+
   /**
    * Get queue size
    */
   public getQueueSize(): number {
     return this.pool.getQueueSize();
+  }
+
+  /**
+   * Get worker utilization summary
+   */
+  public getWorkerStatus(): WorkerPoolStatus {
+    return this.pool.getWorkerBreakdown();
   }
   
   /**
