@@ -90,12 +90,10 @@ function getMenuDimensions(
     minCategoryWidth,
     Math.min(width * 0.58, width - minBuildingWidth - panelGap)
   );
-  const baseCategory = width * (isTouch ? 0.42 : 0.36);
-  const categoryPanelWidth = clamp(baseCategory, minCategoryWidth, maxCategoryWidth);
-  const buildingPanelWidth = Math.max(width - categoryPanelWidth - panelGap, minBuildingWidth);
-
-  // If we had to clamp the building width, ensure the category panel fits in the remainder
-  const adjustedCategoryWidth = width - buildingPanelWidth - panelGap;
+  // Compute buildingPanelWidth first, clamped so category panel can always be at least its minimum
+  const maxBuildingWidth = width - minCategoryWidth - panelGap;
+  const buildingPanelWidth = clamp(width * (isTouch ? 0.56 : 0.64), minBuildingWidth, maxBuildingWidth);
+  const categoryPanelWidth = clamp(width - buildingPanelWidth - panelGap, minCategoryWidth, maxCategoryWidth);
 
   return {
     menuWidth: width,
@@ -103,7 +101,7 @@ function getMenuDimensions(
     menuX,
     menuY,
     panelGap,
-    categoryPanelWidth: adjustedCategoryWidth,
+    categoryPanelWidth,
     buildingPanelWidth,
   };
 }
