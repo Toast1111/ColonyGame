@@ -57,8 +57,9 @@ export function initializeUI(game: Game | null = null): UIComponents {
     },
     onToggleMobile: () => {
       if (gameRef.current) {
-        gameRef.current.isTouch = !gameRef.current.isTouch;
-        gameRef.current.toast('Mobile mode: ' + (gameRef.current.isTouch ? 'ON' : 'OFF'));
+        const next = !gameRef.current.touchUIEnabled;
+        gameRef.current.setTouchUIEnabled(next, true);
+        gameRef.current.toast('Mobile mode: ' + (next ? 'ON' : 'OFF'));
       }
     }
   };
@@ -75,21 +76,18 @@ export function initializeUI(game: Game | null = null): UIComponents {
       if (gameRef.current) {
         // Toggle erase mode
         gameRef.current.eraseMode = !gameRef.current.eraseMode;
-        mobileControls.setEraseState(gameRef.current.eraseMode);
         gameRef.current.toast(gameRef.current.eraseMode ? 'Erase mode ON' : 'Erase mode OFF');
       }
     },
     onPause: () => {
       if (gameRef.current) {
         gameRef.current.paused = !gameRef.current.paused;
-        mobileControls.setPauseState(gameRef.current.paused);
         gameRef.current.toast(gameRef.current.paused ? 'Paused' : 'Resumed');
       }
     },
     onFastForward: () => {
       if (gameRef.current) {
         gameRef.current.fastForward = gameRef.current.fastForward === 1 ? 6 : 1;
-        mobileControls.setFastForwardState(gameRef.current.fastForward > 1);
         gameRef.current.toast(gameRef.current.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF');
       }
     },
@@ -107,6 +105,7 @@ export function initializeUI(game: Game | null = null): UIComponents {
   
   // Create mobile controls
   const mobileControls = new MobileControls(mobileCallbacks);
+  mobileControls.hide();
   
   // Create toast manager
   const toast = new ToastManager();
@@ -200,4 +199,7 @@ export function linkGameToUI(components: UIComponents, game: Game): void {
   (game as any).toastManager = components.toast;
   (game as any).helpPanel = components.helpPanel;
   (game as any).mobileControls = components.mobileControls;
+
+  game.syncMobileControls();
+  game.refreshTouchUIState();
 }

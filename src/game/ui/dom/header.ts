@@ -15,6 +15,8 @@ export class Header {
   private container: HTMLElement;
   private dropdown: HTMLDivElement | null = null;
   private menuButton: HTMLButtonElement | null = null;
+  private readonly handlePointerDownBound = this.handlePointerDown.bind(this);
+  private readonly handleKeyDownBound = this.handleKeyDown.bind(this);
 
   constructor(callbacks: HeaderCallbacks) {
     this.container = this.createElement();
@@ -22,8 +24,11 @@ export class Header {
     this.addSpacer();
     this.menuButton = this.addMenuButton();
     this.dropdown = this.createDropdown(callbacks);
-    
+
     document.body.appendChild(this.dropdown);
+
+    document.addEventListener('pointerdown', this.handlePointerDownBound);
+    document.addEventListener('keydown', this.handleKeyDownBound);
   }
 
   private createElement(): HTMLElement {
@@ -49,6 +54,9 @@ export class Header {
     btn.id = 'btnMenu';
     btn.textContent = '☰';
     btn.title = 'Menu';
+    btn.type = 'button';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
     btn.onclick = () => this.toggleDropdown();
     this.container.appendChild(btn);
     return btn;
@@ -91,6 +99,7 @@ export class Header {
   toggleDropdown(): void {
     if (this.dropdown) {
       this.dropdown.hidden = !this.dropdown.hidden;
+      this.menuButton?.setAttribute('aria-expanded', String(!this.dropdown.hidden));
       try {
         (window as any).game?.audioManager?.play(this.dropdown.hidden ? 'ui.panel.close' : 'ui.panel.open');
       } catch {}
@@ -103,6 +112,7 @@ export class Header {
   showDropdown(): void {
     if (this.dropdown) {
       this.dropdown.hidden = false;
+      this.menuButton?.setAttribute('aria-expanded', 'true');
       try { (window as any).game?.audioManager?.play('ui.panel.open'); } catch {}
     }
   }
@@ -113,7 +123,23 @@ export class Header {
   hideDropdown(): void {
     if (this.dropdown) {
       this.dropdown.hidden = true;
+      this.menuButton?.setAttribute('aria-expanded', 'false');
       try { (window as any).game?.audioManager?.play('ui.panel.close'); } catch {}
+    }
+  }
+
+  private handlePointerDown(event: PointerEvent): void {
+    if (!this.dropdown || this.dropdown.hidden) return;
+    const target = event.target as Node | null;
+    if (!target) return;
+    if (this.dropdown.contains(target)) return;
+    if (this.menuButton && this.menuButton.contains(target)) return;
+    this.hideDropdown();
+  }
+
+  private handleKeyDown(event: KeyboardEvent): void {
+    if ((event.key === 'Escape' || event.key === 'Esc') && this.dropdown && !this.dropdown.hidden) {
+      this.hideDropdown();
     }
   }
 
