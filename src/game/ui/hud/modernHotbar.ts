@@ -20,6 +20,21 @@ export interface HotbarTabRect {
 /**
  * Draw the modern hotbar at the bottom of the screen
  */
+export function getModernHotbarHeight(canvas: HTMLCanvasElement, game: any): number {
+  const isTouch = !!game?.isTouch;
+  const scaleFn = typeof game?.scale === 'function' ? game.scale.bind(game) : null;
+
+  const minHeight = scaleFn ? scaleFn(isTouch ? 110 : 68) : (isTouch ? 110 : 68);
+  const maxHeightCandidate = scaleFn ? scaleFn(isTouch ? 160 : 96) : (isTouch ? 160 : 96);
+  const percentHeight = canvas.height * (isTouch ? 0.095 : 0.06);
+  const percentMax = canvas.height * (isTouch ? 0.16 : 0.1);
+
+  const upperBound = Math.max(maxHeightCandidate, percentMax, minHeight);
+  const lowerBound = Math.min(minHeight, upperBound);
+
+  return Math.min(Math.max(percentHeight, lowerBound), upperBound);
+}
+
 export function drawModernHotbar(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -35,10 +50,15 @@ export function drawModernHotbar(
     { id: 'quests', label: 'Quests', enabled: false },
   ];
 
-  // Calculate dimensions based on canvas size (percentage-based)
-  const hotbarHeight = canvas.height * 0.06; // 6% of screen height
+  // Calculate dimensions with touch-friendly scaling
+  const hotbarHeight = getModernHotbarHeight(canvas, game);
   const hotbarY = canvas.height - hotbarHeight;
-  const tabPadding = canvas.width * 0.005; // 0.5% padding between tabs
+  const isTouch = !!game?.isTouch;
+  const scaleFn = typeof game?.scale === 'function' ? game.scale.bind(game) : null;
+  const tabPadding = Math.max(
+    canvas.width * (isTouch ? 0.007 : 0.005),
+    scaleFn ? scaleFn(isTouch ? 10 : 6) : isTouch ? 10 : 6
+  );
   const totalPadding = tabPadding * (tabs.length + 1);
   const tabWidth = (canvas.width - totalPadding) / tabs.length;
 
@@ -58,7 +78,10 @@ export function drawModernHotbar(
   let currentX = tabPadding;
 
   // Font size scales with hotbar height
-  const fontSize = Math.max(12, hotbarHeight * 0.3); // 30% of hotbar height
+  const fontSize = Math.max(
+    scaleFn ? scaleFn(isTouch ? 16 : 12) : isTouch ? 16 : 12,
+    hotbarHeight * (isTouch ? 0.34 : 0.3)
+  );
 
   for (const tab of tabs) {
     const rect: HotbarTabRect = {

@@ -8,6 +8,7 @@
  */
 
 import { BUILD_TYPES, groupByCategory } from '../../buildings';
+import { getModernHotbarHeight } from './modernHotbar';
 import type { BuildingDef } from '../../types';
 
 export type BuildCategory = string;
@@ -43,11 +44,12 @@ export function drawModernBuildMenu(
   game: any
 ): BuildMenuRects {
   // Calculate dimensions (percentage-based)
-  const hotbarHeight = canvas.height * 0.06;
+  const hotbarHeight = getModernHotbarHeight(canvas, game);
   const menuHeight = canvas.height * 0.50; // 50% of screen height
   const menuWidth = canvas.width * 0.35; // 35% of screen width
   const menuX = canvas.width * 0.02; // 2% from left edge
-  const menuY = canvas.height - hotbarHeight - menuHeight - (canvas.height * 0.01); // 1% gap above hotbar
+  const gap = Math.max(canvas.height * 0.01, hotbarHeight * 0.12);
+  const menuY = canvas.height - hotbarHeight - menuHeight - gap; // keep gap responsive to hotbar size
 
   const categoryPanelWidth = menuWidth * 0.35; // 35% of menu width for categories
   const buildingPanelWidth = menuWidth * 0.63; // 63% of menu width for buildings (2% gap in between)
