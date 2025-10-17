@@ -125,6 +125,7 @@ export class Game {
   private touchUIManualOverride: boolean | null = null;
   private touchZoneDragActive = false;
   private touchZoneLastPos: { x: number; y: number } | null = null;
+  private skipNextTapAfterLongPress = false;
   private defaultStockpileSize = 64;
   // lastInputWasTouch moved to inputManager (see getter/setter below)
 
@@ -885,10 +886,7 @@ export class Game {
     c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
-      // Only disable touch UI if the user hasn't manually enabled it
-      if (this.touchUIManualOverride !== true) {
-        this.setTouchUIEnabled(false);
-      }
+      this.setTouchUIEnabled(false);
       if (this.touchUIManualOverride === null) {
         this.isActuallyTouchDevice = false;
       }
@@ -1173,6 +1171,7 @@ export class Game {
       this.isActuallyTouchDevice = true;
       this.setTouchUIEnabled(true);
       if (e.touches.length === 1) {
+        this.skipNextTapAfterLongPress = false;
         const rect = c.getBoundingClientRect();
         const sx = e.touches[0].clientX - rect.left;
         const sy = e.touches[0].clientY - rect.top;
@@ -1216,9 +1215,11 @@ export class Game {
             if (navigator.vibrate) {
               navigator.vibrate(50);
             }
+            this.skipNextTapAfterLongPress = true;
             this.longPressStartTime = null;
             this.longPressTarget = null;
             this.longPressTargetType = null;
+            this.longPressTimer = null;
           }, 500); // 500ms long press
         } else {
           const clickedBuilding = this.findBuildingAt(wpt.x, wpt.y);
@@ -1229,13 +1230,16 @@ export class Game {
             this.longPressTargetType = 'building';
 
             this.longPressTimer = window.setTimeout(() => {
-              showBuildingContextMenu(this, clickedBuilding, sx, sy);
-              if (navigator.vibrate) {
-                navigator.vibrate(50);
+              if (showBuildingContextMenu(this, clickedBuilding, sx, sy)) {
+                if (navigator.vibrate) {
+                  navigator.vibrate(50);
+                }
+                this.skipNextTapAfterLongPress = true;
               }
               this.longPressStartTime = null;
               this.longPressTarget = null;
               this.longPressTargetType = null;
+              this.longPressTimer = null;
             }, 500);
           }
         }
@@ -1345,7 +1349,12 @@ export class Game {
       this.longPressStartPos = null;
       this.longPressStartTime = null;
       this.longPressTarget = null;
-  this.longPressTargetType = null;
+      this.longPressTargetType = null;
+
+      const suppressTap = this.skipNextTapAfterLongPress;
+      if (suppressTap) {
+        this.skipNextTapAfterLongPress = false;
+      }
 
       if (this.touchZoneDragActive && this.uiManager.zoneDragStart) {
         const rect = c.getBoundingClientRect();
@@ -1378,14 +1387,39 @@ export class Game {
         }
       }
 
-      // Treat single-finger touchend as a tap/click if not panning
-      if (e.changedTouches.length === 1 && e.touches.length === 0) {
+      // Treat single-finger touchend as a tap/click if not panning or suppressed by long press
+      if (!suppressTap && e.changedTouches.length === 1 && e.touches.length === 0) {
         const rect = c.getBoundingClientRect();
         const sx = e.changedTouches[0].clientX - rect.left;
         const sy = e.changedTouches[0].clientY - rect.top;
         this.handleTapOrClickAtScreen(sx, sy);
       }
       if (e.touches.length === 0) { this.touchLastPan = null; this.touchLastDist = null; }
+      if (suppressTap) { return; }
+    }, { passive: false } as any);
+
+    c.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+      this.longPressStartPos = null;
+      this.longPressStartTime = null;
+      this.longPressTarget = null;
+      this.longPressTargetType = null;
+      this.skipNextTapAfterLongPress = false;
+      this.touchZoneDragActive = false;
+      this.touchZoneLastPos = null;
+      this.uiManager.zoneDragStart = null;
+      this.mouse.rdown = false;
+      if (this.lastInputWasTouch && this.selectedBuild === 'stock') {
+        this.selectedBuild = null;
+        this.syncMobileControls();
+      }
+      this.touchLastPan = null;
+      this.touchLastDist = null;
     }, { passive: false } as any);
 
     c.addEventListener('touchcancel', (e) => {
@@ -1599,6 +1633,7 @@ export class Game {
         return;
       }
       if (!colonistUnderPointer) {
+        const T = 32;
         const gridX = Math.floor(this.mouse.wx / T) * T + T / 2;
         const gridY = Math.floor(this.mouse.wy / T) * T + T / 2;
         this.selColonist!.draftedPosition = { x: gridX, y: gridY };
