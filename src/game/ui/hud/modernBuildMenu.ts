@@ -9,7 +9,102 @@
 
 import { BUILD_TYPES, groupByCategory } from '../../buildings';
 import { getModernHotbarHeight } from './modernHotbar';
-import type { BuildingDef } from '../../types';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getScaled(game: any, desktop: number, touchOverride?: number): number {
+  const isTouch = !!game?.isTouch;
+  const raw = isTouch && touchOverride !== undefined ? touchOverride : desktop;
+  const scaleFn = typeof game?.scale === 'function' ? game.scale.bind(game) : null;
+  return scaleFn ? scaleFn(raw) : raw;
+}
+
+function getMenuDimensions(
+  canvas: HTMLCanvasElement,
+  game: any,
+  hotbarHeight: number
+): {
+  menuWidth: number;
+  menuHeight: number;
+  menuX: number;
+  menuY: number;
+  panelGap: number;
+  categoryPanelWidth: number;
+  buildingPanelWidth: number;
+} {
+  const isTouch = !!game?.isTouch;
+
+  const horizontalMargin = Math.max(
+    canvas.width * (isTouch ? 0.035 : 0.02),
+    getScaled(game, 18, 24)
+  );
+  const topClearance = Math.max(canvas.height * 0.04, getScaled(game, 28, 36));
+  const hotbarGap = Math.max(
+    canvas.height * (isTouch ? 0.018 : 0.012),
+    hotbarHeight * (isTouch ? 0.2 : 0.14),
+    getScaled(game, 18, 26)
+  );
+
+  const availableWidth = Math.max(canvas.width - horizontalMargin * 2, getScaled(game, 300));
+  const width = clamp(
+    canvas.width * (isTouch ? 0.88 : 0.34),
+    Math.min(getScaled(game, 340, 520), availableWidth),
+    Math.min(
+      availableWidth,
+      canvas.width * (isTouch ? 0.94 : 0.42),
+      getScaled(game, 860, 980)
+    )
+  );
+
+  const availableHeight = Math.max(
+    canvas.height - hotbarHeight - hotbarGap - topClearance,
+    getScaled(game, 240)
+  );
+  const height = clamp(
+    canvas.height * (isTouch ? 0.58 : 0.46),
+    Math.min(getScaled(game, 300, 420), availableHeight),
+    Math.min(
+      availableHeight,
+      canvas.height * (isTouch ? 0.68 : 0.56),
+      getScaled(game, 720, 880)
+    )
+  );
+
+  const menuX = horizontalMargin;
+  const menuY = Math.max(
+    topClearance,
+    canvas.height - hotbarHeight - hotbarGap - height
+  );
+
+  const panelGap = clamp(
+    width * (isTouch ? 0.022 : 0.018),
+    getScaled(game, 12, 16),
+    getScaled(game, 28, 30)
+  );
+
+  const minBuildingWidth = getScaled(game, 220, 300);
+  const minCategoryWidth = Math.min(getScaled(game, 180, 240), width * 0.5);
+  const maxCategoryWidth = Math.max(
+    minCategoryWidth,
+    Math.min(width * 0.58, width - minBuildingWidth - panelGap)
+  );
+  // Compute buildingPanelWidth first, clamped so category panel can always be at least its minimum
+  const maxBuildingWidth = width - minCategoryWidth - panelGap;
+  const buildingPanelWidth = clamp(width * (isTouch ? 0.56 : 0.64), minBuildingWidth, maxBuildingWidth);
+  const categoryPanelWidth = clamp(width - buildingPanelWidth - panelGap, minCategoryWidth, maxCategoryWidth);
+
+  return {
+    menuWidth: width,
+    menuHeight: height,
+    menuX,
+    menuY,
+    panelGap,
+    categoryPanelWidth,
+    buildingPanelWidth,
+  };
+}
 
 export type BuildCategory = string;
 
@@ -43,17 +138,18 @@ export function drawModernBuildMenu(
   selectedCategory: string | null,
   game: any
 ): BuildMenuRects {
-  // Calculate dimensions (percentage-based)
   const hotbarHeight = getModernHotbarHeight(canvas, game);
-  const menuHeight = canvas.height * 0.50; // 50% of screen height
-  const menuWidth = canvas.width * 0.35; // 35% of screen width
-  const menuX = canvas.width * 0.02; // 2% from left edge
-  const gap = Math.max(canvas.height * 0.01, hotbarHeight * 0.12);
-  const menuY = canvas.height - hotbarHeight - menuHeight - gap; // keep gap responsive to hotbar size
+  const {
+    menuHeight,
+    menuWidth,
+    menuX,
+    menuY,
+    panelGap,
+    categoryPanelWidth,
+    buildingPanelWidth,
+  } = getMenuDimensions(canvas, game, hotbarHeight);
 
-  const categoryPanelWidth = menuWidth * 0.35; // 35% of menu width for categories
-  const buildingPanelWidth = menuWidth * 0.63; // 63% of menu width for buildings (2% gap in between)
-  const panelGap = menuWidth * 0.02;
+  const toPx = (desktop: number, touchOverride?: number) => getScaled(game, desktop, touchOverride);
 
   // Group buildings by category
   const groups = groupByCategory(BUILD_TYPES);
@@ -87,22 +183,38 @@ export function drawModernBuildMenu(
   ctx.strokeRect(categoryPanelX, categoryPanelY, categoryPanelWidth, menuHeight);
 
   // Header
-  const headerHeight = menuHeight * 0.08;
+  const headerHeight = Math.max(
+    menuHeight * 0.08,
+    toPx(34, 46)
+  );
   ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
   ctx.fillRect(categoryPanelX, categoryPanelY, categoryPanelWidth, headerHeight);
 
-  ctx.font = `${Math.floor(menuHeight * 0.028)}px system-ui, -apple-system, sans-serif`;
+  const headerFontSize = Math.max(
+    menuHeight * 0.028,
+    toPx(14, 18)
+  );
+  ctx.font = `${Math.floor(headerFontSize)}px system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(148, 163, 184, 1)';
   ctx.fillText('Categories', categoryPanelX + categoryPanelWidth / 2, categoryPanelY + headerHeight / 2);
 
   // Category items
-  const categoryItemHeight = menuHeight * 0.08; // 8% of menu height per category
-  const categoryPadding = menuHeight * 0.01;
+  const categoryItemHeight = Math.max(
+    menuHeight * 0.08,
+    toPx(42, 56)
+  );
+  const categoryPadding = Math.max(
+    menuHeight * 0.01,
+    toPx(6, 8)
+  );
   let categoryY = categoryPanelY + headerHeight + categoryPadding;
 
-  const categoryFontSize = Math.floor(menuHeight * 0.025);
+  const categoryFontSize = Math.max(
+    menuHeight * 0.025,
+    toPx(13, 17)
+  );
 
   for (const category of categories) {
     const rect: CategoryRect = {
@@ -141,7 +253,7 @@ export function drawModernBuildMenu(
     }
 
     // Text
-    ctx.font = `${isSelected ? 'bold ' : ''}${categoryFontSize}px system-ui, -apple-system, sans-serif`;
+    ctx.font = `${isSelected ? 'bold ' : ''}${Math.floor(categoryFontSize)}px system-ui, -apple-system, sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = isSelected ? 'rgba(219, 234, 254, 1)' : 'rgba(159, 179, 200, 0.9)';
@@ -167,7 +279,7 @@ export function drawModernBuildMenu(
   ctx.fillStyle = 'rgba(30, 41, 59, 0.5)';
   ctx.fillRect(buildingPanelX, buildingPanelY, buildingPanelWidth, headerHeight);
 
-  ctx.font = `${Math.floor(menuHeight * 0.028)}px system-ui, -apple-system, sans-serif`;
+  ctx.font = `${Math.floor(headerFontSize)}px system-ui, -apple-system, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = 'rgba(148, 163, 184, 1)';
@@ -177,12 +289,24 @@ export function drawModernBuildMenu(
   // Building items (if category selected)
   if (selectedCategory && groups[selectedCategory]) {
     const buildings = groups[selectedCategory];
-    const buildingItemHeight = menuHeight * 0.12; // 12% of menu height per building
-    const buildingPadding = menuHeight * 0.01;
+    const buildingItemHeight = Math.max(
+      menuHeight * 0.12,
+      toPx(58, 78)
+    );
+    const buildingPadding = Math.max(
+      menuHeight * 0.01,
+      toPx(6, 10)
+    );
     let buildingY = buildingPanelY + headerHeight + buildingPadding;
 
-    const buildingFontSize = Math.floor(menuHeight * 0.023);
-    const buildingDescFontSize = Math.floor(menuHeight * 0.018);
+    const buildingFontSize = Math.max(
+      menuHeight * 0.023,
+      toPx(14, 18)
+    );
+    const buildingDescFontSize = Math.max(
+      menuHeight * 0.018,
+      toPx(12, 15)
+    );
 
     for (const [key, def] of buildings) {
       // Don't show if it would overflow
@@ -230,7 +354,7 @@ export function drawModernBuildMenu(
       ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
 
       // Building name
-      ctx.font = `${buildingFontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.font = `${Math.floor(buildingFontSize)}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillStyle = 'rgba(219, 234, 254, 1)';
@@ -238,14 +362,14 @@ export function drawModernBuildMenu(
 
       // Cost
       const cost = game.costText(def.cost || {});
-      ctx.font = `${buildingDescFontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.font = `${Math.floor(buildingDescFontSize)}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = 'right';
       ctx.fillStyle = 'rgba(159, 179, 200, 0.9)';
       ctx.fillText(cost, rect.x + buildingPanelWidth * 0.96, rect.y + buildingItemHeight * 0.15);
 
       // Description (truncated)
       if (def.description) {
-        ctx.font = `${buildingDescFontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.font = `${Math.floor(buildingDescFontSize)}px system-ui, -apple-system, sans-serif`;
         ctx.textAlign = 'left';
         ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
         
@@ -262,7 +386,11 @@ export function drawModernBuildMenu(
     }
   } else {
     // No category selected - show instruction
-    ctx.font = `${Math.floor(menuHeight * 0.022)}px system-ui, -apple-system, sans-serif`;
+    const emptyFontSize = Math.max(
+      menuHeight * 0.022,
+      toPx(13, 17)
+    );
+    ctx.font = `${Math.floor(emptyFontSize)}px system-ui, -apple-system, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';

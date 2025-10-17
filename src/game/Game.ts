@@ -1986,10 +1986,12 @@ export class Game {
     if (cur <= 0) this.buildReservations.delete(b); else this.buildReservations.set(b, cur);
     c.reservedBuildFor = null;
   }
-  clearPath(c: Colonist) { 
-    c.path = undefined; 
+  clearPath(c: Colonist) {
+    c.path = undefined;
     c.pathIndex = undefined; // RE-ENABLED
     // c.repath = 0; // REPATH TIMER STILL DISABLED
+    if (c.pendingPathRequest) c.pendingPathRequest = undefined;
+    if (c.pendingPathPromise) c.pendingPathPromise = null;
   }
   setTask(c: Colonist, task: string, target: any, options?: { isPlayerCommand?: boolean; extraData?: any }) {
     const isPlayerCommand = options?.isPlayerCommand ?? false;
@@ -2209,21 +2211,111 @@ export class Game {
   }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
     // Check if colonist is using async pathfinding mode
-    const useAsync = (c as any).useAsyncPathfinding === true;
-    
+    const colonistAny = c as any;
+    const workerPoolActive = this.navigationManager.isWorkerPoolActive();
+    const useAsync = colonistAny.useAsyncPathfinding === true
+      || (colonistAny.useAsyncPathfinding !== false && workerPoolActive);
+
     // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
     // c.repath = (c.repath || 0) - dt; // TEMPORARILY DISABLED
     const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24);
     if (target && (goalChanged || !c.path || c.pathIndex == null)) {
-      // Compute path immediately
+      if (useAsync) {
+        const pending = colonistAny.pendingPathRequest as undefined | {
+          targetX: number;
+          targetY: number;
+          requestId: number;
+          startedAt: number;
+          fallbackIssued?: boolean;
+        };
+        const samePendingTarget = pending
+          ? Math.abs(pending.targetX - target.x) < 1 && Math.abs(pending.targetY - target.y) < 1
+          : false;
+
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        if (pending && pending.startedAt && now - pending.startedAt > 750 && !pending.fallbackIssued) {
+          pending.fallbackIssued = true;
+          const fallback = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
+          if (fallback && fallback.length) {
+            colonistAny.pendingPathRequest = undefined;
+            colonistAny.pendingPathPromise = null;
+            c.path = fallback;
+            c.pathIndex = 0;
+            c.pathGoal = { x: target.x, y: target.y };
+            return false;
+          }
+        }
+
+        if (!samePendingTarget) {
+          const requestId = (pending?.requestId ?? 0) + 1;
+          const requestInfo = {
+            targetX: target.x,
+            targetY: target.y,
+            requestId,
+            startedAt: now,
+            fallbackIssued: false,
+          };
+          colonistAny.pendingPathRequest = requestInfo;
+          const promise = this.navigationManager.computePathWithDangerAvoidanceAsync(
+            c,
+            c.x,
+            c.y,
+            target.x,
+            target.y
+          );
+          colonistAny.pendingPathPromise = promise;
+
+          promise
+            .then(path => {
+              const current = (c as any).pendingPathRequest;
+              if (!current || current.requestId !== requestId) {
+                return;
+              }
+
+              (c as any).pendingPathRequest = undefined;
+              (c as any).pendingPathPromise = null;
+
+              let resolved = path ?? undefined;
+              if (!resolved || !resolved.length) {
+                resolved = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y) ?? undefined;
+              }
+
+              if (resolved && resolved.length) {
+                c.path = resolved;
+                c.pathIndex = 0;
+                c.pathGoal = { x: target.x, y: target.y };
+              } else {
+                this.clearPath(c);
+              }
+            })
+            .catch(error => {
+              const current = (c as any).pendingPathRequest;
+              if (current && current.requestId === requestId) {
+                (c as any).pendingPathRequest = undefined;
+                (c as any).pendingPathPromise = null;
+              }
+              console.warn('[Game] Async pathfinding failed, using fallback:', error);
+              const fallback = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
+              if (fallback && fallback.length) {
+                c.path = fallback;
+                c.pathIndex = 0;
+                c.pathGoal = { x: target.x, y: target.y };
+              }
+            });
+        }
+
+        return false;
+      }
+
+      // Compute path immediately when not using async workers
       const p = this.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
-      if (p && p.length) { 
-        c.path = p; 
+      if (p && p.length) {
+        c.path = p;
         c.pathIndex = 0;
         c.pathGoal = { x: target.x, y: target.y };
       }
     }
-    
+
     if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) {
       if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
       return false;
