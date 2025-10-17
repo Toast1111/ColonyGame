@@ -1421,6 +1421,29 @@ export class Game {
       this.touchLastPan = null;
       this.touchLastDist = null;
     }, { passive: false } as any);
+
+    c.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+      this.longPressStartPos = null;
+      this.longPressStartTime = null;
+      this.longPressTarget = null;
+      this.longPressTargetType = null;
+      this.touchZoneDragActive = false;
+      this.touchZoneLastPos = null;
+      this.uiManager.zoneDragStart = null;
+      this.mouse.rdown = false;
+      if (this.lastInputWasTouch && this.selectedBuild === 'stock') {
+        this.selectedBuild = null;
+        this.syncMobileControls();
+      }
+      this.touchLastPan = null;
+      this.touchLastDist = null;
+    }, { passive: false } as any);
   }
 
   // Handle a tap/click at screen-space coordinates (sx, sy)
