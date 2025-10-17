@@ -304,10 +304,14 @@ export class PerformanceHUD {
       if (workerPoolIntegration.isAvailable()) {
         const workerStats = workerPoolIntegration.getStats();
         const queueSize = workerPoolIntegration.getQueueSize();
-        const successRate = workerStats.tasksDispatched > 0 
+        const successRate = workerStats.tasksDispatched > 0
           ? ((workerStats.tasksCompleted / workerStats.tasksDispatched) * 100).toFixed(0)
           : '100';
-        
+        const averageTaskTime =
+          workerStats.averageTaskTime > 0
+            ? `${workerStats.averageTaskTime.toFixed(2)}ms`
+            : 'n/a';
+
         lines.push(''); // Blank line
         lines.push('WORKER POOL:');
         lines.push(`  ✓ 4 workers active`);
@@ -320,6 +324,7 @@ export class PerformanceHUD {
           lines.push(`  ⏳ Queue: ${queueSize} tasks`);
         }
         lines.push(`  📊 Success: ${successRate}%`);
+        lines.push(`  ⏱️ Avg Task: ${averageTaskTime}`);
       }
     }
 
