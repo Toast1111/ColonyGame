@@ -654,10 +654,12 @@ export function initDebugConsole(game: Game) {
       
       const stats = workerPoolIntegration.getStats();
       const queueSize = workerPoolIntegration.getQueueSize();
-      const successRate = stats.tasksDispatched > 0 
+      const successRate = stats.tasksDispatched > 0
         ? ((stats.tasksCompleted / stats.tasksDispatched) * 100).toFixed(1)
         : '100';
-      
+      const averageTaskTime =
+        stats.averageTaskTime > 0 ? `${stats.averageTaskTime.toFixed(2)}ms` : 'n/a';
+
       return [
         "=== WORKER POOL STATUS ===",
         "✓ 4 workers active:",
@@ -671,6 +673,7 @@ export function initDebugConsole(game: Game) {
         `  Failed: ${stats.tasksFailed}`,
         `  Success Rate: ${successRate}%`,
         `  Queue Size: ${queueSize}`,
+        `  Avg Task Time: ${averageTaskTime}`,
         "",
         "Worker availability:",
         `  Pathfinding: ${workerPoolIntegration.isWorkerAvailable('pathfinding') ? 'available' : 'busy'}`,

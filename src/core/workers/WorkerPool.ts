@@ -65,6 +65,9 @@ export class WorkerPool {
     tasksFailed: 0,
     averageTaskTime: 0,
   };
+
+  private totalTaskTimeMs = 0;
+  private tasksWithTiming = 0;
   
   private constructor() {}
   
@@ -128,6 +131,11 @@ export class WorkerPool {
         
         if (response.success) {
           this.stats.tasksCompleted++;
+          const executionTime = response.data?.executionTime;
+          if (typeof executionTime === 'number' && !Number.isNaN(executionTime)) {
+            this.totalTaskTimeMs += executionTime;
+            this.tasksWithTiming++;
+          }
           pending.resolve(response);
         } else {
           this.stats.tasksFailed++;
@@ -260,7 +268,10 @@ export class WorkerPool {
    * Get statistics about worker pool performance
    */
   public getStats(): typeof this.stats {
-    return { ...this.stats };
+    const averageTaskTime =
+      this.tasksWithTiming > 0 ? this.totalTaskTimeMs / this.tasksWithTiming : 0;
+
+    return { ...this.stats, averageTaskTime };
   }
   
   /**
