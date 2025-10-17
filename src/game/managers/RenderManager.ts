@@ -884,7 +884,7 @@ export class RenderManager {
       (game as any).modernBuildMenuRects = buildMenuRects;
     } else if (game.uiManager.activeHotbarTab === 'work') {
       // Work priority panel - modal overlay, no container needed
-      drawWorkPriorityPanel(ctx, game.colonists, canvas.width, canvas.height);
+      drawWorkPriorityPanel(ctx, game.colonists, canvas, game);
     }
 
     // Colonist profile panel

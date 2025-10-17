@@ -7,6 +7,7 @@
 
 import type { Colonist } from '../../types';
 import { WORK_TYPE_ORDER, WORK_TYPE_INFO, cycleWorkPriority, type WorkType, type WorkPriority } from '../../systems/workPriority';
+import { getModernHotbarHeight } from '../hud/modernHotbar';
 
 // UI state
 let isPanelOpen = false;
@@ -38,8 +39,10 @@ interface PanelLayout {
  * Uses percentages and ratios, NOT fixed pixel values
  * Panel positioned in bottom-left corner above hotbar (like build menu)
  */
-function calculatePanelLayout(canvasWidth: number, canvasHeight: number, colonistCount: number): PanelLayout {
-  const hotbarHeight = canvasHeight * 0.06; // Hotbar is 6% of screen
+function calculatePanelLayout(canvas: HTMLCanvasElement, colonistCount: number, game: any): PanelLayout {
+  const canvasWidth = canvas.width;
+  const canvasHeight = canvas.height;
+  const hotbarHeight = getModernHotbarHeight(canvas, game);
   
   // Panel is thinner - just enough for the table
   const panelWidth = canvasWidth * 0.70; // 70% of screen width (narrower)
@@ -158,20 +161,20 @@ function getPriorityText(priority: WorkPriority): string {
  * Draw the work priority panel
  */
 export function drawWorkPriorityPanel(
-  ctx: CanvasRenderingContext2D, 
+  ctx: CanvasRenderingContext2D,
   colonists: Colonist[],
-  canvasWidth: number,
-  canvasHeight: number
+  canvas: HTMLCanvasElement,
+  game: any
 ): void {
   if (!isPanelOpen) return;
-  
+
   // Save canvas state to ensure clean rendering on top of everything
   ctx.save();
-  
+
   const aliveColonists = colonists.filter(c => c.alive);
-  
+
   // Calculate responsive layout (NO hardcoded pixels!)
-  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const layout = calculatePanelLayout(canvas, aliveColonists.length, game);
   const { panelX, panelY, panelWidth, panelHeight, cellWidth, cellHeight, 
           headerHeight, nameColumnWidth, padding, fontSize, headerFontSize, footerHeight } = layout;
   
@@ -403,18 +406,18 @@ export function drawWorkPriorityPanel(
  * Returns true if click was handled
  */
 export function handleWorkPriorityPanelClick(
-  mouseX: number, 
+  mouseX: number,
   mouseY: number,
   colonists: Colonist[],
-  canvasWidth: number,
-  canvasHeight: number
+  canvas: HTMLCanvasElement,
+  game: any
 ): boolean {
   if (!isPanelOpen) return false;
-  
+
   const aliveColonists = colonists.filter(c => c.alive);
-  
+
   // CRITICAL: Calculate same layout as draw function (NO hardcoded pixels!)
-  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const layout = calculatePanelLayout(canvas, aliveColonists.length, game);
   const { panelX, panelY, panelWidth, panelHeight, cellWidth, cellHeight, 
           headerHeight, nameColumnWidth, padding, footerHeight } = layout;
   
@@ -474,13 +477,13 @@ export function handleWorkPriorityPanelClick(
 export function handleWorkPriorityPanelScroll(
   deltaY: number,
   colonists: Colonist[],
-  canvasWidth: number,
-  canvasHeight: number
+  canvas: HTMLCanvasElement,
+  game: any
 ): void {
   if (!isPanelOpen) return;
-  
+
   const aliveColonists = colonists.filter(c => c.alive);
-  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const layout = calculatePanelLayout(canvas, aliveColonists.length, game);
   const { cellHeight, panelHeight, headerHeight, padding, footerHeight } = layout;
   
   const tableHeight = panelHeight - headerHeight - padding * 2 - footerHeight;
@@ -498,19 +501,19 @@ export function handleWorkPriorityPanelScroll(
  * Call this from mousemove to update tooltip state
  */
 export function handleWorkPriorityPanelHover(
-  mouseX: number, 
+  mouseX: number,
   mouseY: number,
   colonists: Colonist[],
-  canvasWidth: number,
-  canvasHeight: number
+  canvas: HTMLCanvasElement,
+  game: any
 ): void {
   if (!isPanelOpen) {
     tooltipWorkType = null;
     return;
   }
-  
+
   const aliveColonists = colonists.filter(c => c.alive);
-  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const layout = calculatePanelLayout(canvas, aliveColonists.length, game);
   const { panelX, panelY, cellWidth, headerHeight, nameColumnWidth, padding } = layout;
   
   const tableX = panelX + padding;
@@ -543,13 +546,13 @@ export function isMouseOverWorkPanel(
   mouseX: number,
   mouseY: number,
   colonists: Colonist[],
-  canvasWidth: number,
-  canvasHeight: number
+  canvas: HTMLCanvasElement,
+  game: any
 ): boolean {
   if (!isPanelOpen) return false;
-  
+
   const aliveColonists = colonists.filter(c => c.alive);
-  const layout = calculatePanelLayout(canvasWidth, canvasHeight, aliveColonists.length);
+  const layout = calculatePanelLayout(canvas, aliveColonists.length, game);
   const { panelX, panelY, panelWidth, panelHeight } = layout;
   
   return mouseX >= panelX && 

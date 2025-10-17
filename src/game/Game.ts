@@ -820,7 +820,13 @@ export class Game {
       
       // PRIORITY PANEL IS MODAL - Block world interactions when open, but allow hover for tooltips
       if (isWorkPriorityPanelOpen()) {
-        handleWorkPriorityPanelHover(this.mouse.x * this.DPR, this.mouse.y * this.DPR, this.colonists, this.canvas.width, this.canvas.height);
+        handleWorkPriorityPanelHover(
+          this.mouse.x * this.DPR,
+          this.mouse.y * this.DPR,
+          this.colonists,
+          this.canvas,
+          this
+        );
         return;
       }
       
@@ -893,7 +899,13 @@ export class Game {
 
       // PRIORITY PANEL IS MODAL - Check first and block all other interactions
       if (isWorkPriorityPanelOpen()) {
-        if (handleWorkPriorityPanelClick(e.offsetX * this.DPR, e.offsetY * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
+        if (handleWorkPriorityPanelClick(
+          e.offsetX * this.DPR,
+          e.offsetY * this.DPR,
+          this.colonists,
+          this.canvas,
+          this
+        )) {
           return; // Panel handled the click (including closing via X or outside click)
         }
         // If panel is open but click wasn't handled, still block everything else
@@ -1133,8 +1145,8 @@ export class Game {
       const cy = e.clientY - rect.top;
       
       // If work priority panel is open and mouse is over it, scroll the panel (and prevent zoom)
-      if (isWorkPriorityPanelOpen() && isMouseOverWorkPanel(cx, cy, this.colonists, c.width, c.height)) {
-        handleWorkPriorityPanelScroll(e.deltaY, this.colonists, c.width, c.height);
+      if (isWorkPriorityPanelOpen() && isMouseOverWorkPanel(cx, cy, this.colonists, this.canvas, this)) {
+        handleWorkPriorityPanelScroll(e.deltaY, this.colonists, this.canvas, this);
         return; // Don't zoom when scrolling the panel
       }
       
@@ -1458,7 +1470,15 @@ export class Game {
 
     // PRIORITY PANEL IS MODAL - Check first and block all other interactions
     if (isWorkPriorityPanelOpen()) {
-      if (handleWorkPriorityPanelClick(sx * this.DPR, sy * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
+      if (
+        handleWorkPriorityPanelClick(
+          sx * this.DPR,
+          sy * this.DPR,
+          this.colonists,
+          this.canvas,
+          this
+        )
+      ) {
         return; // Panel handled the click (including closing via X or outside click)
       }
       // If panel is open but click wasn't handled, still block everything else

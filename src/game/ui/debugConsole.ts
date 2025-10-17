@@ -653,33 +653,68 @@ export function initDebugConsole(game: Game) {
       }
       
       const stats = workerPoolIntegration.getStats();
+      const status = workerPoolIntegration.getWorkerStatus();
       const queueSize = workerPoolIntegration.getQueueSize();
-      const successRate = stats.tasksDispatched > 0
-        ? ((stats.tasksCompleted / stats.tasksDispatched) * 100).toFixed(1)
-        : '100';
-      const averageTaskTime =
-        stats.averageTaskTime > 0 ? `${stats.averageTaskTime.toFixed(2)}ms` : 'n/a';
 
-      return [
-        "=== WORKER POOL STATUS ===",
-        "✓ 4 workers active:",
-        "  - 1 pathfinding worker",
-        "  - 1 rendering worker",
-        "  - 2 simulation workers",
-        "",
-        "Statistics:",
-        `  Dispatched: ${stats.tasksDispatched}`,
-        `  Completed: ${stats.tasksCompleted}`,
-        `  Failed: ${stats.tasksFailed}`,
-        `  Success Rate: ${successRate}%`,
-        `  Queue Size: ${queueSize}`,
-        `  Avg Task Time: ${averageTaskTime}`,
-        "",
-        "Worker availability:",
-        `  Pathfinding: ${workerPoolIntegration.isWorkerAvailable('pathfinding') ? 'available' : 'busy'}`,
-        `  Rendering: ${workerPoolIntegration.isWorkerAvailable('rendering') ? 'available' : 'busy'}`,
-        `  Simulation: ${workerPoolIntegration.isWorkerAvailable('simulation') ? 'available' : 'busy'}`,
-      ].join('\n');
+      const successRate = stats.tasksDispatched > 0
+        ? `${((stats.tasksCompleted / stats.tasksDispatched) * 100).toFixed(1)}%`
+        : '—';
+      const averageTaskTime = stats.tasksCompleted > 0
+        ? `${stats.averageTaskTime.toFixed(2)}ms`
+        : '—';
+
+      const typeLabels: Record<'pathfinding' | 'rendering' | 'simulation', string> = {
+        pathfinding: 'Pathfinding',
+        rendering: 'Rendering',
+        simulation: 'Simulation',
+      };
+
+      const lines: string[] = [
+        '=== WORKER POOL STATUS ===',
+        status.total > 0
+          ? `${status.busy > 0 ? '⚙️' : '💤'} Workers: ${status.busy}/${status.total} busy`
+          : '⚠️ Workers unavailable',
+      ];
+
+      if (status.total > 0) {
+        lines.push('Type breakdown:');
+        for (const key of Object.keys(typeLabels) as Array<keyof typeof typeLabels>) {
+          const info = status.byType[key];
+          if (info.total > 0) {
+            lines.push(`  - ${typeLabels[key]}: ${info.busy}/${info.total} busy`);
+          }
+        }
+      }
+
+      lines.push('');
+      lines.push('Statistics:');
+      lines.push(`  Dispatched: ${stats.tasksDispatched}`);
+      lines.push(`  Completed: ${stats.tasksCompleted}`);
+      if (stats.tasksFailed > 0) {
+        lines.push(`  Failed: ${stats.tasksFailed}`);
+      }
+      if (stats.inFlight > 0) {
+        lines.push(`  In-flight: ${stats.inFlight}`);
+      }
+      lines.push(`  Queue Size: ${queueSize}`);
+      lines.push(`  Success Rate: ${successRate}`);
+      lines.push(`  Avg Task Time: ${averageTaskTime}`);
+      if (stats.lastTaskType && stats.lastTaskDuration != null) {
+        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        const finishedAt = stats.lastTaskFinishedAt ?? now;
+        const secondsAgo = Math.max(0, (now - finishedAt) / 1000);
+        const sinceText = Number.isFinite(secondsAgo) ? ` (${secondsAgo.toFixed(1)}s ago)` : '';
+        const taskLabel = typeLabels[stats.lastTaskType] || stats.lastTaskType;
+        lines.push(`  Last ${taskLabel}: ${stats.lastTaskDuration.toFixed(2)}ms${sinceText}`);
+      }
+
+      lines.push('');
+      lines.push('Worker availability:');
+      lines.push(`  Pathfinding: ${workerPoolIntegration.isWorkerAvailable('pathfinding') ? 'available' : 'busy'}`);
+      lines.push(`  Rendering: ${workerPoolIntegration.isWorkerAvailable('rendering') ? 'available' : 'busy'}`);
+      lines.push(`  Simulation: ${workerPoolIntegration.isWorkerAvailable('simulation') ? 'available' : 'busy'}`);
+
+      return lines.join('\n');
     }
     
     if (sub === "test") {
