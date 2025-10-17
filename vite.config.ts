@@ -8,4 +8,10 @@ const BASE_PATH = process.env.BASE_PATH || './';
 
 export default defineConfig({
   base: BASE_PATH,
+  worker: {
+    format: 'es',
+  },
+  build: {
+    target: 'esnext',
+  },
 });

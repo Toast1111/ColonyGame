@@ -2,6 +2,7 @@ import { Game } from "./game/Game";
 import { BUILD_TYPES } from "./game/buildings";
 import { ImageAssets } from "./assets/images";
 import { initializeUI, linkGameToUI } from "./game/ui/bootstrap";
+import { workerPoolIntegration } from "./core/workers";
 
 // Initialize game and load assets
 async function initGame() {
@@ -24,6 +25,14 @@ async function initGame() {
     ctx.font = '24px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText('Loading assets...', canvas.width / 2, canvas.height / 2);
+  }
+
+  // Initialize Web Worker pool (non-blocking)
+  try {
+    await workerPoolIntegration.initialize();
+    console.log('Worker pool initialized successfully');
+  } catch (error) {
+    console.warn('Worker pool initialization failed, continuing without workers:', error);
   }
 
   // Load image assets
