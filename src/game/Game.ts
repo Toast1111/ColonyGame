@@ -885,7 +885,10 @@ export class Game {
     c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
-      this.setTouchUIEnabled(false);
+      // Only disable touch UI if the user hasn't manually enabled it
+      if (this.touchUIManualOverride !== true) {
+        this.setTouchUIEnabled(false);
+      }
       if (this.touchUIManualOverride === null) {
         this.isActuallyTouchDevice = false;
       }
