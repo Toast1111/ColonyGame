@@ -6,22 +6,22 @@
 import type { Game } from '../Game';
 import { COLORS, T, WORLD } from '../constants';
 import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render/index';
-import { drawTerrainDebug } from '../terrainDebugRender';
+import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
-import { drawColonistProfile as drawColonistProfileUI } from '../ui/colonistProfile';
+import { drawColonistProfile as drawColonistProfileUI } from '../ui/panels/colonistProfile';
 import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
 import { drawMobilePlacementUI } from '../ui/mobilePlacement';
 import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
-import { drawWorkPriorityPanel } from '../ui/workPriorityPanel';
-import { drawBuildingInventoryPanel } from '../ui/buildingInventoryPanel';
+import { drawWorkPriorityPanel } from '../ui/panels/workPriorityPanel';
+import { drawBuildingInventoryPanel } from '../ui/panels/buildingInventoryPanel';
 import { drawModernHotbar, type HotbarTabRect } from '../ui/hud/modernHotbar';
 import { drawModernBuildMenu, type BuildMenuRects } from '../ui/hud/modernBuildMenu';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
 import { drawDebugConsole } from '../ui/debugConsole';
 import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
-import { drawPerformanceHUD } from '../ui/performanceHUD';
+import { drawPerformanceHUD } from '../ui/panels/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
 

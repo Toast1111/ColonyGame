@@ -5,13 +5,13 @@
  * Shows item icons, quantities, and inventory capacity
  */
 
-import type { Building } from '../types';
+import type { Building } from '../../types';
 import { 
   getResourceDisplayName, 
   getResourceIcon, 
   getTotalInventoryCount,
   getInventoryUsagePercent 
-} from '../systems/buildingInventory';
+} from '../../systems/buildingInventory';
 
 // UI state
 let selectedBuilding: Building | null = null;

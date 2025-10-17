@@ -5,8 +5,8 @@
  * Click a cell to cycle through priorities
  */
 
-import type { Colonist } from '../types';
-import { WORK_TYPE_ORDER, WORK_TYPE_INFO, cycleWorkPriority, type WorkType, type WorkPriority } from '../systems/workPriority';
+import type { Colonist } from '../../types';
+import { WORK_TYPE_ORDER, WORK_TYPE_INFO, cycleWorkPriority, type WorkType, type WorkPriority } from '../../systems/workPriority';
 
 // UI state
 let isPanelOpen = false;

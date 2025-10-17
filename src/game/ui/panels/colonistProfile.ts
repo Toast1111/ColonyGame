@@ -1,4 +1,4 @@
-import { drawColonistAvatar } from "../render";
+import { drawColonistAvatar } from "../../render/index";
 
 export function drawColonistProfile(game: any, c: any) {
   const ctx = game.ctx as CanvasRenderingContext2D;

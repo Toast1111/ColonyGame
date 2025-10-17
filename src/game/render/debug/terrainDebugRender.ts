@@ -3,9 +3,9 @@
  * Shows terrain and floor layers for debugging
  */
 
-import { T } from "./constants";
-import { getFloorTypeFromId, getTerrainTypeFromId, FLOOR_VISUALS, TERRAIN_VISUALS, FloorType } from "./terrain";
-import type { Game } from "./Game";
+import { T } from "../../constants";
+import { getFloorTypeFromId, getTerrainTypeFromId, FLOOR_VISUALS, TERRAIN_VISUALS, FloorType } from "../../terrain";
+import type { Game } from "../../Game";
 
 /**
  * Draw terrain debug overlay
