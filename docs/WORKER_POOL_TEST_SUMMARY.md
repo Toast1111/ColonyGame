@@ -87,11 +87,16 @@ await workerPoolIntegration.initialize();
 
 ### Performance Impact
 
-Expected improvements (not yet benchmarked in production):
-- Pathfinding: 60-80% reduction in main thread blocking
-- Rendering: 40-50% reduction in frame preparation time
-- Simulation: 30-40% better frame consistency
-- Overall: Smoother 60 FPS with 20+ entities
+**Status: Infrastructure Ready, Not Yet Actively Used**
+
+The worker pool infrastructure is complete and functional, but integration into the actual game loop is pending. The numbers below are **estimated/projected** improvements based on similar implementations:
+
+- Pathfinding: 60-80% reduction in main thread blocking (projected)
+- Rendering: 40-50% reduction in frame preparation time (projected)
+- Simulation: 30-40% better frame consistency (projected)
+- Overall: Smoother 60 FPS with 20+ entities (projected)
+
+**Note**: Actual performance gains require active integration of workers into the game loop, which is listed in "Next Steps" below.
 
 ### Testing Commands
 
@@ -122,16 +127,31 @@ Performance HUD (press P):
 - `src/core/workers/index.ts`
 - `docs/WORKER_POOL.md`
 
-### Next Steps (Optional Enhancements)
+### Next Steps (Active Integration)
 
-1. Actually use workers in game loop for pathfinding
-2. Benchmark performance improvements
-3. Add more worker operations (terrain generation, etc.)
-4. Implement SharedArrayBuffer for faster data transfer
-5. Add worker health monitoring and auto-restart
+**Current Status**: The worker pool infrastructure is complete and initialized, but not yet actively used in the game loop. The following steps are needed to achieve actual performance improvements:
+
+1. **Integrate workers into game loop for pathfinding** - Modify colonist FSM to use async pathfinding
+2. **Use rendering worker for viewport culling** - Offload entity culling to rendering worker
+3. **Benchmark performance improvements** - Measure actual gains vs. projected estimates
+4. **Add more worker operations** (terrain generation, etc.)
+5. **Implement SharedArrayBuffer for faster data transfer** (if needed)
+6. **Add worker health monitoring and auto-restart** (robustness)
 
 ## Conclusion
 
-The Web Worker pool implementation is **complete and functional**. All 4 workers are successfully created and initialized. The infrastructure is in place for offloading heavy computations from the main thread. The implementation includes comprehensive error handling, performance monitoring, and debugging tools.
+The Web Worker pool implementation is **complete and functional** at the infrastructure level. All 4 workers are successfully created, initialized, and ready to receive tasks. The implementation includes comprehensive error handling, performance monitoring, and debugging tools.
 
-The workers are ready to be actively used in the game loop for pathfinding, rendering preparation, and simulation tasks. The current implementation provides a solid foundation that can be extended with additional operations as needed.
+**Current Implementation State:**
+- ✅ Worker pool infrastructure: Complete
+- ✅ Worker initialization: Working
+- ✅ API and integration points: Ready
+- ⏳ Active usage in game loop: Pending
+
+The workers are **ready to be actively used** in the game loop for pathfinding, rendering preparation, and simulation tasks. However, the game code has not yet been modified to actually dispatch tasks to the workers during gameplay. This means:
+
+- The infrastructure works and is tested
+- Performance improvements are not yet realized
+- Integration into the game loop is the next step
+
+The current implementation provides a solid foundation that can be extended with active task dispatch in the game loop to achieve the projected performance improvements.
