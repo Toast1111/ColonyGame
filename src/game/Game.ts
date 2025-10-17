@@ -1599,7 +1599,6 @@ export class Game {
         return;
       }
       if (!colonistUnderPointer) {
-        const T = 32;
         const gridX = Math.floor(this.mouse.wx / T) * T + T / 2;
         const gridY = Math.floor(this.mouse.wy / T) * T + T / 2;
         this.selColonist!.draftedPosition = { x: gridX, y: gridY };
