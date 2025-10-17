@@ -1990,9 +1990,8 @@ export class Game {
     c.path = undefined;
     c.pathIndex = undefined; // RE-ENABLED
     // c.repath = 0; // REPATH TIMER STILL DISABLED
-    const colonistAny = c as any;
-    if (colonistAny.pendingPathRequest) colonistAny.pendingPathRequest = undefined;
-    if (colonistAny.pendingPathPromise) colonistAny.pendingPathPromise = null;
+    if (c.pendingPathRequest) c.pendingPathRequest = undefined;
+    if (c.pendingPathPromise) c.pendingPathPromise = null;
   }
   setTask(c: Colonist, task: string, target: any, options?: { isPlayerCommand?: boolean; extraData?: any }) {
     const isPlayerCommand = options?.isPlayerCommand ?? false;
