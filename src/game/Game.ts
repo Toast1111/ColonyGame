@@ -53,6 +53,7 @@ import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
 import { RimWorldSystemManager, type RimWorldSystemConfig } from './rimworld-systems';
+import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -120,6 +121,11 @@ export class Game {
   isTouch = false;
   // Actual touch usage detection (vs just capability)
   isActuallyTouchDevice = false;
+  private touchUIEnabledInternal = false;
+  private touchUIManualOverride: boolean | null = null;
+  private touchZoneDragActive = false;
+  private touchZoneLastPos: { x: number; y: number } | null = null;
+  private defaultStockpileSize = 64;
   // lastInputWasTouch moved to inputManager (see getter/setter below)
 
   getStorageCapacity(): number {
@@ -187,10 +193,22 @@ export class Game {
   get dayLength(): number { return this.timeSystem.getDayLength(); }
   
   get fastForward(): number { return this.timeSystem.getFastForward(); }
-  set fastForward(value: number) { this.timeSystem.setFastForward(value); }
+  set fastForward(value: number) {
+    const prev = this.timeSystem.getFastForward();
+    this.timeSystem.setFastForward(value);
+    if (prev !== value) {
+      this.syncMobileControls();
+    }
+  }
   
   get paused(): boolean { return this.timeSystem.isPaused(); }
-  set paused(value: boolean) { this.timeSystem.setPaused(value); }
+  set paused(value: boolean) {
+    const prev = this.timeSystem.isPaused();
+    this.timeSystem.setPaused(value);
+    if (prev !== value) {
+      this.syncMobileControls();
+    }
+  }
 
   // === UI Manager Property Redirects ===
   get selectedBuild() { return this.uiManager.selectedBuild; }
@@ -203,7 +221,13 @@ export class Game {
   set showBuildMenu(value) { this.uiManager.showBuildMenu = value; }
   
   get eraseMode() { return this.uiManager.eraseMode; }
-  set eraseMode(value) { this.uiManager.eraseMode = value; }
+  set eraseMode(value) {
+    const prev = this.uiManager.eraseMode;
+    this.uiManager.eraseMode = value;
+    if (prev !== value) {
+      this.syncMobileControls();
+    }
+  }
   
   get selColonist() { return this.uiManager.selColonist; }
   set selColonist(value) { this.uiManager.selColonist = value; }
@@ -287,6 +311,8 @@ export class Game {
   
   get lastInputWasTouch(): boolean { return this.inputManager.wasLastInputTouch(); }
   set lastInputWasTouch(value: boolean) { this.inputManager.setLastInputWasTouch(value); }
+
+  get touchUIEnabled(): boolean { return this.touchUIEnabledInternal; }
   
   // Debug flags (keep as is - not part of managers)
   debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
@@ -333,7 +359,7 @@ export class Game {
     this.rimWorld = new RimWorldSystemManager({
       canvas: this.canvas,
       enableAutoHauling: false, // We'll drive hauling via our WorkGiver so it fits FSM
-      defaultStockpileSize: 64,
+      defaultStockpileSize: this.defaultStockpileSize,
       useEnhancedLogistics: false
     } as RimWorldSystemConfig);
   // Init debug console
@@ -634,7 +660,6 @@ export class Game {
 
     // Heuristic boosts for touch devices and smaller screens
     const isTouch = (("ontouchstart" in window) || (navigator as any).maxTouchPoints > 0);
-    this.isTouch = isTouch;
     // Be more conservative about assuming actual touch usage - start with false
     this.isActuallyTouchDevice = isTouch && (currentWidth < 900); // Only assume touch for smaller screens initially
     if (isTouch) {
@@ -659,11 +684,57 @@ export class Game {
 
     // Apply final bounds (higher floor improves readability on tablets)
     scale = Math.max(1.1, Math.min(scale, 3.0));
-    
+
+    this.setTouchUIEnabled(this.isActuallyTouchDevice);
+
     this.uiScale = scale;
     console.log(`UI Scale calculated: ${scale.toFixed(2)} for ${currentWidth}x${currentHeight}`);
   }
-  
+
+  private getMobileControlsInstance(): MobileControls | null {
+    const mc = (this as any).mobileControls as MobileControls | undefined;
+    return mc ?? null;
+  }
+
+  syncMobileControls(): void {
+    const mc = this.getMobileControlsInstance();
+    if (!mc) return;
+    mc.setPauseState(this.paused);
+    mc.setFastForwardState(this.fastForward > 1);
+    mc.setEraseState(this.eraseMode);
+  }
+
+  private applyTouchUIState(): void {
+    const enabled = this.touchUIEnabledInternal;
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.toggle('touch-ui', enabled);
+    }
+    const mc = this.getMobileControlsInstance();
+    if (mc) {
+      if (enabled) {
+        mc.show();
+      } else {
+        mc.hide();
+      }
+    }
+    this.syncMobileControls();
+  }
+
+  setTouchUIEnabled(enabled: boolean, manual = false): void {
+    if (manual) {
+      this.touchUIManualOverride = enabled;
+    } else if (this.touchUIManualOverride !== null) {
+      return;
+    }
+    this.touchUIEnabledInternal = enabled;
+    this.isTouch = this.touchUIManualOverride ?? this.touchUIEnabledInternal;
+    this.applyTouchUIState();
+  }
+
+  refreshTouchUIState(): void {
+    this.applyTouchUIState();
+  }
+
   // Helper function to get scaled font size
   getScaledFont(baseSize: number, weight = '500', family = 'system-ui,Segoe UI,Roboto') {
     return `${weight} ${Math.round(baseSize * this.uiScale)}px ${family}`;
@@ -675,6 +746,67 @@ export class Game {
   }
 
   screenToWorld = (sx: number, sy: number) => this.cameraSystem.screenToWorld(sx, sy);
+
+  private computeStockpileRect(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut: boolean): { x: number; y: number; width: number; height: number } | null {
+    if (!start || !end) { return null; }
+
+    const dx = Math.abs(end.x - start.x);
+    const dy = Math.abs(end.y - start.y);
+    const dragDistance = Math.hypot(dx, dy);
+
+    const defaultTiles = Math.max(1, Math.round(this.defaultStockpileSize / T));
+    const defaultWidth = Math.min(WORLD.w, defaultTiles * T);
+    const defaultHeight = Math.min(WORLD.h, defaultTiles * T);
+
+    if (allowTapShortcut && dragDistance < T * 0.75) {
+      const baseX = Math.floor(start.x / T) * T;
+      const baseY = Math.floor(start.y / T) * T;
+      const clampedX = clamp(baseX, 0, Math.max(0, WORLD.w - defaultWidth));
+      const clampedY = clamp(baseY, 0, Math.max(0, WORLD.h - defaultHeight));
+      return { x: clampedX, y: clampedY, width: defaultWidth, height: defaultHeight };
+    }
+
+    if (!allowTapShortcut && dragDistance < T * 0.5) {
+      return null;
+    }
+
+    const x0 = Math.min(start.x, end.x);
+    const y0 = Math.min(start.y, end.y);
+    const x1 = Math.max(start.x, end.x);
+    const y1 = Math.max(start.y, end.y);
+
+    let width = Math.ceil(Math.max(x1 - x0, T) / T) * T;
+    let height = Math.ceil(Math.max(y1 - y0, T) / T) * T;
+    width = Math.min(Math.max(T, width), WORLD.w);
+    height = Math.min(Math.max(T, height), WORLD.h);
+
+    const gx = Math.floor(x0 / T) * T;
+    const gy = Math.floor(y0 / T) * T;
+    const clampedX = clamp(gx, 0, Math.max(0, WORLD.w - width));
+    const clampedY = clamp(gy, 0, Math.max(0, WORLD.h - height));
+
+    return { x: clampedX, y: clampedY, width, height };
+  }
+
+  private finalizeStockpileDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
+    if (!this.rimWorld) { return false; }
+    const rect = this.computeStockpileRect(start, end, allowTapShortcut);
+    if (!rect) { return false; }
+
+    this.rimWorld.createStockpileZone(rect.x, rect.y, rect.width, rect.height, 'Stockpile');
+    this.msg('Stockpile created', 'good');
+    return true;
+  }
+
+  getZoneDragPreviewRect(): { x: number; y: number; width: number; height: number } | null {
+    if (!this.uiManager.zoneDragStart) { return null; }
+    const dragging = this.mouse.rdown || this.touchZoneDragActive;
+    if (!dragging) { return null; }
+    const current = this.touchZoneDragActive && this.touchZoneLastPos
+      ? this.touchZoneLastPos
+      : { x: this.mouse.wx, y: this.mouse.wy };
+    return this.computeStockpileRect(this.uiManager.zoneDragStart, current, this.touchZoneDragActive);
+  }
 
   bindInput() {
     const c = this.canvas;
@@ -750,10 +882,14 @@ export class Game {
         else if (this.selectedBuild === 'wall') this.paintWallAtMouse();
       }
     });
-  c.addEventListener('mousedown', (e) => {
+    c.addEventListener('mousedown', (e) => {
       e.preventDefault();
       this.lastInputWasTouch = false; // Track that mouse is being used
-      
+      this.setTouchUIEnabled(false);
+      if (this.touchUIManualOverride === null) {
+        this.isActuallyTouchDevice = false;
+      }
+
       // PRIORITY PANEL IS MODAL - Check first and block all other interactions
       if (isWorkPriorityPanelOpen()) {
         if (handleWorkPriorityPanelClick(e.offsetX * this.DPR, e.offsetY * this.DPR, this.colonists, this.canvas.width, this.canvas.height)) {
@@ -974,21 +1110,7 @@ export class Game {
       }
       if ((e as MouseEvent).button === 2) {
         if (this.uiManager.zoneDragStart && this.selectedBuild === 'stock') {
-          // Create a stockpile zone based on drag rectangle
-          const x0 = Math.min(this.uiManager.zoneDragStart.x, this.mouse.wx);
-          const y0 = Math.min(this.uiManager.zoneDragStart.y, this.mouse.wy);
-          const x1 = Math.max(this.uiManager.zoneDragStart.x, this.mouse.wx);
-          const y1 = Math.max(this.uiManager.zoneDragStart.y, this.mouse.wy);
-          const w = Math.max(0, Math.floor(x1 - x0));
-          const h = Math.max(0, Math.floor(y1 - y0));
-          if (w >= T && h >= T) {
-            const gx = Math.floor(x0 / T) * T;
-            const gy = Math.floor(y0 / T) * T;
-            const gw = Math.ceil(w / T) * T;
-            const gh = Math.ceil(h / T) * T;
-            (this as any).rimWorld?.createStockpileZone(gx, gy, gw, gh, 'Stockpile');
-            this.msg('Stockpile created', 'good');
-          }
+          this.finalizeStockpileDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
         } else if (this.eraseDragStart) {
           const x0 = Math.min(this.eraseDragStart.x, this.mouse.wx);
           const y0 = Math.min(this.eraseDragStart.y, this.mouse.wy);
@@ -1046,22 +1168,46 @@ export class Game {
       e.preventDefault();
       this.lastInputWasTouch = true;
       this.isActuallyTouchDevice = true;
+      this.setTouchUIEnabled(true);
       if (e.touches.length === 1) {
-        this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-        
-        // Start long press timer for context menu
         const rect = c.getBoundingClientRect();
         const sx = e.touches[0].clientX - rect.left;
         const sy = e.touches[0].clientY - rect.top;
         const wpt = this.screenToWorld(sx, sy);
+        this.mouse.x = sx; this.mouse.y = sy; this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+
+        if (this.selectedBuild === 'stock') {
+          this.touchZoneDragActive = true;
+          this.touchZoneLastPos = { x: wpt.x, y: wpt.y };
+          this.uiManager.zoneDragStart = { x: wpt.x, y: wpt.y };
+          this.mouse.rdown = true;
+          this.touchLastPan = null;
+          if (this.longPressTimer) {
+            clearTimeout(this.longPressTimer);
+            this.longPressTimer = null;
+          }
+          this.longPressStartPos = null;
+          this.longPressStartTime = null;
+          this.longPressTarget = null;
+          this.longPressTargetType = null;
+          return;
+        }
+
+        this.touchZoneDragActive = false;
+        this.touchZoneLastPos = null;
+        this.uiManager.zoneDragStart = null;
+        this.mouse.rdown = false;
+
+        this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
         const clickedColonist = this.findColonistAt(wpt.x, wpt.y);
-        
+
         if (clickedColonist) {
           this.longPressStartPos = { x: sx, y: sy };
           this.longPressStartTime = performance.now();
           this.longPressTarget = clickedColonist;
           this.longPressTargetType = 'colonist';
-          
+
           this.longPressTimer = window.setTimeout(() => {
             showColonistContextMenu(this, clickedColonist, sx, sy);
             if (navigator.vibrate) {
@@ -1090,7 +1236,7 @@ export class Game {
             }, 500);
           }
         }
-        
+
       } else if (e.touches.length === 2) {
         // Cancel long press timer when multi-touch
         if (this.longPressTimer) {
@@ -1100,6 +1246,10 @@ export class Game {
         this.longPressStartTime = null;
         this.longPressTarget = null;
         this.longPressTargetType = null;
+        this.touchZoneDragActive = false;
+        this.touchZoneLastPos = null;
+        this.uiManager.zoneDragStart = null;
+        this.mouse.rdown = false;
         const dx = e.touches[0].clientX - e.touches[1].clientX;
         const dy = e.touches[0].clientY - e.touches[1].clientY;
         this.touchLastDist = Math.hypot(dx, dy);
@@ -1125,6 +1275,16 @@ export class Game {
         }
       }
       
+      if (this.touchZoneDragActive && e.touches.length === 1) {
+        const rect = c.getBoundingClientRect();
+        const sx = e.touches[0].clientX - rect.left;
+        const sy = e.touches[0].clientY - rect.top;
+        const wpt = this.screenToWorld(sx, sy);
+        this.mouse.x = sx; this.mouse.y = sy; this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+        this.touchZoneLastPos = { x: wpt.x, y: wpt.y };
+        return;
+      }
+
       if (e.touches.length === 1 && this.touchLastPan) {
         // If adjusting a pending placement ghost, move it with the finger
         if (this.pendingPlacement) {
@@ -1183,7 +1343,38 @@ export class Game {
       this.longPressStartTime = null;
       this.longPressTarget = null;
   this.longPressTargetType = null;
-      
+
+      if (this.touchZoneDragActive && this.uiManager.zoneDragStart) {
+        const rect = c.getBoundingClientRect();
+        const changed = e.changedTouches[0];
+        let endWorld: { x: number; y: number } | null = null;
+        if (changed) {
+          const sx = changed.clientX - rect.left;
+          const sy = changed.clientY - rect.top;
+          endWorld = this.screenToWorld(sx, sy);
+        } else if (this.touchZoneLastPos) {
+          endWorld = this.touchZoneLastPos;
+        } else {
+          endWorld = { x: this.mouse.wx, y: this.mouse.wy };
+        }
+
+        const created = this.finalizeStockpileDrag(this.uiManager.zoneDragStart, endWorld, true);
+        this.touchZoneDragActive = false;
+        this.touchZoneLastPos = null;
+        this.uiManager.zoneDragStart = null;
+        this.mouse.rdown = false;
+        if (created) {
+          if (navigator.vibrate) { navigator.vibrate(30); }
+          if (this.lastInputWasTouch) {
+            this.selectedBuild = null;
+            this.syncMobileControls();
+          }
+          this.touchLastPan = null;
+          this.touchLastDist = null;
+          return;
+        }
+      }
+
       // Treat single-finger touchend as a tap/click if not panning
       if (e.changedTouches.length === 1 && e.touches.length === 0) {
         const rect = c.getBoundingClientRect();
@@ -1192,6 +1383,29 @@ export class Game {
         this.handleTapOrClickAtScreen(sx, sy);
       }
       if (e.touches.length === 0) { this.touchLastPan = null; this.touchLastDist = null; }
+    }, { passive: false } as any);
+
+    c.addEventListener('touchcancel', (e) => {
+      e.preventDefault();
+      this.lastInputWasTouch = true;
+      if (this.longPressTimer) {
+        clearTimeout(this.longPressTimer);
+        this.longPressTimer = null;
+      }
+      this.longPressStartPos = null;
+      this.longPressStartTime = null;
+      this.longPressTarget = null;
+      this.longPressTargetType = null;
+      this.touchZoneDragActive = false;
+      this.touchZoneLastPos = null;
+      this.uiManager.zoneDragStart = null;
+      this.mouse.rdown = false;
+      if (this.lastInputWasTouch && this.selectedBuild === 'stock') {
+        this.selectedBuild = null;
+        this.syncMobileControls();
+      }
+      this.touchLastPan = null;
+      this.touchLastDist = null;
     }, { passive: false } as any);
   }
 
@@ -1246,7 +1460,7 @@ export class Game {
       return;
     }
 
-    // If colonist panel shown, allow closing via X button or tapping outside (mobile UX)
+    // If colonist panel shown, allow closing via X button or interacting with tabs (mobile UX)
     if (this.selColonist) {
       const mx0 = this.mouse.x * this.DPR; const my0 = this.mouse.y * this.DPR;
       if (this.colonistPanelCloseRect) {
@@ -1267,12 +1481,24 @@ export class Game {
       if (this.isTouch && this.colonistPanelRect) {
         const r = this.colonistPanelRect;
         const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
-        if (!inside) { this.selColonist = null; this.follow = false; return; }
+        if (!inside) {
+          const keepSelection = this.lastInputWasTouch && this.selColonist?.isDrafted;
+          if (!keepSelection) { this.selColonist = null; this.follow = false; return; }
+        }
       }
     }
 
-    // Hotbar selection
     const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
+
+    // Modern hotbar tabs (touch)
+    const modernHotbarRects = (this as any).modernHotbarRects || [];
+    const touchedTab = handleHotbarClick(mx, my, modernHotbarRects);
+    if (touchedTab) {
+      this.uiManager.setHotbarTab(touchedTab);
+      return;
+    }
+
+    // Legacy hotbar fallback (desktop-only UI still available in some screens)
     for (const r of this.hotbarRects) {
       if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
         const key = this.hotbar[r.index];
@@ -1280,7 +1506,27 @@ export class Game {
         return;
       }
     }
-    
+
+    // Modern build menu (build tab)
+    if (this.uiManager.activeHotbarTab === 'build') {
+      const buildMenuRects = (this as any).modernBuildMenuRects;
+      if (buildMenuRects) {
+        const clickResult = handleModernBuildMenuClick(mx, my, buildMenuRects);
+        if (clickResult) {
+          if (clickResult.type === 'category') {
+            this.uiManager.setSelectedBuildCategory(clickResult.value);
+            void this.audioManager.play('ui.click.primary').catch(() => {});
+          } else if (clickResult.type === 'building') {
+            this.selectedBuild = clickResult.value;
+            void this.audioManager.play('ui.click.primary').catch(() => {});
+            this.uiManager.setHotbarTab(null);
+            this.toast('Selected: ' + BUILD_TYPES[clickResult.value].name);
+          }
+          return;
+        }
+      }
+    }
+
     // Check for context menu click
     if (this.contextMenu) {
       const mxMenu = this.mouse.x * this.DPR; const myMenu = this.mouse.y * this.DPR;
@@ -1337,7 +1583,31 @@ export class Game {
   // Start precise placement on touch if nothing active (unless forced desktop mode)
   if (!this.debug.forceDesktopMode && this.isActuallyTouchDevice && this.lastInputWasTouch && this.selectedBuild) { this.placeAtMouse(); return; }
 
-    const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+    const colonistUnderPointer = this.findColonistAt(this.mouse.wx, this.mouse.wy);
+    const enemyUnderPointer = this.selColonist?.isDrafted ? this.findEnemyAt(this.mouse.wx, this.mouse.wy) : null;
+
+    const canDirectCommand = Boolean(this.selColonist && this.selColonist.isDrafted && this.lastInputWasTouch && !this.pendingPlacement && !this.selectedBuild && !this.contextMenu && !this.showBuildMenu && !this.eraseMode);
+    if (canDirectCommand) {
+      if (enemyUnderPointer) {
+        this.selColonist!.draftedTarget = enemyUnderPointer;
+        this.selColonist!.draftedPosition = null;
+        this.msg(`${this.selColonist!.profile?.name || 'Colonist'} targeting enemy`, 'info');
+        if (navigator.vibrate) { try { navigator.vibrate(25); } catch {} }
+        return;
+      }
+      if (!colonistUnderPointer) {
+        const T = 32;
+        const gridX = Math.floor(this.mouse.wx / T) * T + T / 2;
+        const gridY = Math.floor(this.mouse.wy / T) * T + T / 2;
+        this.selColonist!.draftedPosition = { x: gridX, y: gridY };
+        this.selColonist!.draftedTarget = null;
+        this.msg(`${this.selColonist!.profile?.name || 'Colonist'} moving to position`, 'info');
+        if (navigator.vibrate) { try { navigator.vibrate(18); } catch {} }
+        return;
+      }
+    }
+
+    const col = colonistUnderPointer;
     if (col) { this.selColonist = col; this.follow = true; return; }
 
     const building = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
@@ -2726,7 +2996,7 @@ export class Game {
         break;
         
       // Medical actions
-      case 'medical_bandage':
+      case 'medical_bandage': // keep existing single bandage behavior fallback
         this.assignMedicalTreatment(colonist, 'bandage_wound');
         break;
       case 'medical_treat_infection':
@@ -2783,9 +3053,6 @@ export class Game {
           this.msg(`${doctor.profile?.name || 'Doctor'} cleared treatment priority`, 'info');
         }
         break; }
-      case 'medical_bandage': // keep existing single bandage behavior fallback
-        this.assignMedicalTreatment(colonist, 'bandage_wound');
-        break;
       case 'medical_rescue':
         // Find best doctor or nearest healthy colonist to rescue
         const rescuer = this.findBestDoctor(colonist) || this.colonists.find(c=>c!==colonist && c.alive && c.state!=='downed');

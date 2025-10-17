@@ -96,10 +96,13 @@ export class RenderManager {
 
     // World rendering
     this.renderWorld();
-    
+
     // Entities
     this.renderEntities();
-    
+
+    // Stockpile zone preview (world space overlay)
+    this.renderZoneDragPreview();
+
     // Debug visualizations (only if enabled)
     this.renderDebug();
     
@@ -458,6 +461,53 @@ export class RenderManager {
       ctx.setLineDash([]);
       ctx.restore();
     }
+  }
+
+  private renderZoneDragPreview(): void {
+    const { game } = this;
+    if (!game.getZoneDragPreviewRect) { return; }
+    const preview = game.getZoneDragPreviewRect();
+    if (!preview) { return; }
+
+    const { ctx, camera } = game;
+    const zoom = camera.zoom;
+    const dash = 8 / zoom;
+    const lineWidth = 2 / zoom;
+    const handleSize = 10 / zoom;
+    const halfHandle = handleSize / 2;
+    const label = `${Math.max(1, Math.round(preview.width / T))}x${Math.max(1, Math.round(preview.height / T))}`;
+    const centerX = preview.x + preview.width / 2;
+    const centerY = preview.y + preview.height / 2;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(80, 180, 255, 0.18)';
+    ctx.strokeStyle = 'rgba(80, 180, 255, 0.7)';
+    ctx.lineWidth = lineWidth;
+    ctx.setLineDash([dash, dash]);
+    ctx.fillRect(preview.x, preview.y, preview.width, preview.height);
+    ctx.strokeRect(preview.x, preview.y, preview.width, preview.height);
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    const corners: [number, number][] = [
+      [preview.x, preview.y],
+      [preview.x + preview.width, preview.y],
+      [preview.x, preview.y + preview.height],
+      [preview.x + preview.width, preview.y + preview.height]
+    ];
+    for (const [px, py] of corners) {
+      ctx.fillRect(px - halfHandle, py - halfHandle, handleSize, handleSize);
+    }
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `${14 / zoom}px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif`;
+    ctx.lineWidth = 3 / zoom;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.strokeText(label, centerX, centerY);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fillText(label, centerX, centerY);
+    ctx.restore();
   }
 
   /**
