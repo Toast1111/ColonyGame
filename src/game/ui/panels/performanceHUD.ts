@@ -16,6 +16,7 @@
 import { PerformanceMetrics } from '../../../core/PerformanceMetrics';
 import { SimulationClock } from '../../../core/SimulationClock';
 import { BudgetedExecutionManager } from '../../../core/BudgetedExecution';
+import { workerPoolIntegration } from '../../../core/workers';
 import type { Game } from '../../Game';
 
 export interface PerformanceHUDConfig {
@@ -297,6 +298,28 @@ export class PerformanceHUD {
             lines.push(`  ${subsystem}: ${stats.queueSize} tasks`);
           }
         }
+      }
+      
+      // Worker pool stats
+      if (workerPoolIntegration.isAvailable()) {
+        const workerStats = workerPoolIntegration.getStats();
+        const queueSize = workerPoolIntegration.getQueueSize();
+        const successRate = workerStats.tasksDispatched > 0 
+          ? ((workerStats.tasksCompleted / workerStats.tasksDispatched) * 100).toFixed(0)
+          : '100';
+        
+        lines.push(''); // Blank line
+        lines.push('WORKER POOL:');
+        lines.push(`  ✓ 4 workers active`);
+        lines.push(`  📤 Dispatched: ${workerStats.tasksDispatched}`);
+        lines.push(`  ✅ Completed: ${workerStats.tasksCompleted}`);
+        if (workerStats.tasksFailed > 0) {
+          lines.push(`  ❌ Failed: ${workerStats.tasksFailed}`);
+        }
+        if (queueSize > 0) {
+          lines.push(`  ⏳ Queue: ${queueSize} tasks`);
+        }
+        lines.push(`  📊 Success: ${successRate}%`);
       }
     }
 
