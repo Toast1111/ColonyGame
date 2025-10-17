@@ -197,11 +197,20 @@ export type Colonist = {
   task: string | null; target: any; carrying: any; hunger: number; 
   alive: boolean; color: string; t: number; 
   taskData?: any; // auxiliary task context (e.g. haul destination)
-  fatigue?: number; fatigueSlow?: number; 
-  state?: ColonistState; stateSince?: number; 
-  path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2; 
-  lastHp?: number; hurt?: number; 
-  inside?: import('./types').Building | null; hideTimer?: number; 
+  fatigue?: number; fatigueSlow?: number;
+  state?: ColonistState; stateSince?: number;
+  path?: import('../core/utils').Vec2[]; pathIndex?: number; repath?: number; pathGoal?: import('../core/utils').Vec2;
+  pendingPathRequest?: {
+    targetX: number;
+    targetY: number;
+    requestId: number;
+    startedAt: number;
+    fallbackIssued?: boolean;
+  };
+  pendingPathPromise?: Promise<import('../core/utils').Vec2[] | null> | null;
+  useAsyncPathfinding?: boolean;
+  lastHp?: number; hurt?: number;
+  inside?: import('./types').Building | null; hideTimer?: number;
   safeTarget?: import('./types').Building | null; safeTimer?: number; 
   reservedBuildFor?: import('./types').Building | null; 
   reservedSleepFor?: import('./types').Building | null;

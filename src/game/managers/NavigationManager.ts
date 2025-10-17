@@ -24,6 +24,13 @@ export class NavigationManager {
   constructor(private game: Game) {}
 
   /**
+   * Check whether worker pool pathfinding can be used right now
+   */
+  public isWorkerPoolActive(): boolean {
+    return this.useWorkerPool && workerPoolIntegration.isAvailable();
+  }
+
+  /**
    * Rebuild the navigation grid (call when buildings/obstacles change)
    */
   rebuildNavGrid(): void {
@@ -53,17 +60,25 @@ export class NavigationManager {
    * Uses worker pool if available, otherwise falls back to main thread
    */
   async computePathAsync(sx: number, sy: number, tx: number, ty: number) {
-    if (this.useWorkerPool && workerPoolIntegration.isAvailable()) {
-      try {
-        return await workerPoolIntegration.computePath(
-          this.game.grid,
-          sx, sy, tx, ty
-        );
-      } catch (error) {
-        console.warn('[NavigationManager] Worker pathfinding failed, using fallback:', error);
-      }
+    if (!this.isWorkerPoolActive()) {
+      return computePathNav(this.game, sx, sy, tx, ty);
     }
-    // Fallback to synchronous pathfinding
+
+    try {
+      const result = await workerPoolIntegration.computePath(
+        this.game.grid,
+        sx,
+        sy,
+        tx,
+        ty
+      );
+      if (result && result.length) {
+        return result;
+      }
+    } catch (error) {
+      console.warn('[NavigationManager] Worker pathfinding failed, using fallback:', error);
+    }
+
     return computePathNav(this.game, sx, sy, tx, ty);
   }
 
@@ -79,19 +94,27 @@ export class NavigationManager {
    * Uses worker pool if available
    */
   async computePathWithDangerAvoidanceAsync(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-    if (this.useWorkerPool && workerPoolIntegration.isAvailable()) {
-      try {
-        const dangerZones = (c as any).dangerMemory || [];
-        return await workerPoolIntegration.computePathWithDangerAvoidance(
-          this.game.grid,
-          sx, sy, tx, ty,
-          dangerZones
-        );
-      } catch (error) {
-        console.warn('[NavigationManager] Worker danger-aware pathfinding failed, using fallback:', error);
-      }
+    if (!this.isWorkerPoolActive()) {
+      return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
     }
-    // Fallback to synchronous pathfinding
+
+    try {
+      const dangerZones = (c as any).dangerMemory || [];
+      const result = await workerPoolIntegration.computePathWithDangerAvoidance(
+        this.game.grid,
+        sx,
+        sy,
+        tx,
+        ty,
+        dangerZones
+      );
+      if (result && result.length) {
+        return result;
+      }
+    } catch (error) {
+      console.warn('[NavigationManager] Worker danger-aware pathfinding failed, using fallback:', error);
+    }
+
     return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
   }
 
