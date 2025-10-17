@@ -151,7 +151,6 @@ export function drawModernBuildMenu(
     buildingPanelWidth,
   } = getMenuDimensions(canvas, game, hotbarHeight);
 
-  const isTouch = !!game?.isTouch;
   const toPx = (desktop: number, touchOverride?: number) => getScaled(game, desktop, touchOverride);
 
   // Group buildings by category
