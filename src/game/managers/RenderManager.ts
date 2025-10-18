@@ -24,23 +24,6 @@ import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/panels/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
-import { workerPoolIntegration } from '../../core/workers';
-
-type RenderWorkerVisibility = {
-  trees: Set<number>;
-  rocks: Set<number>;
-  buildings: Set<number>;
-  colonists: Set<number>;
-  enemies: Set<number>;
-};
-
-type RenderWorkerState = {
-  pending: boolean;
-  pendingViewportKey: string;
-  lastResultKey: string;
-  visible: RenderWorkerVisibility | null;
-  lastRequestedAt: number;
-};
 
 export class RenderManager {
   // Performance optimization flags
@@ -48,168 +31,6 @@ export class RenderManager {
   public useColonistCache = true;  // Toggle colonist sprite caching (enabled via import)
   public useNightCache = true;  // Toggle night overlay caching
   public useParticleSprites = true;  // Toggle particle sprite caching
-
-  private renderWorkerState: RenderWorkerState = {
-    pending: false,
-    pendingViewportKey: '',
-    lastResultKey: '',
-    visible: null,
-    lastRequestedAt: 0,
-  };
-
-  private getViewportKey(
-    viewport: { minX: number; minY: number; maxX: number; maxY: number },
-    zoom: number
-  ): string {
-    const precision = 1; // 0.1 world unit precision is sufficient for culling reuse
-    return [
-      viewport.minX.toFixed(precision),
-      viewport.minY.toFixed(precision),
-      viewport.maxX.toFixed(precision),
-      viewport.maxY.toFixed(precision),
-      zoom.toFixed(3)
-    ].join('|');
-  }
-
-  private updateRenderWorkerVisibility(
-    viewport: { minX: number; minY: number; maxX: number; maxY: number },
-    viewportKey: string,
-    padding: number
-  ): RenderWorkerVisibility | null {
-    const state = this.renderWorkerState;
-
-    if (!workerPoolIntegration.isAvailable()) {
-      state.pending = false;
-      state.pendingViewportKey = '';
-      state.lastResultKey = '';
-      state.visible = null;
-      return null;
-    }
-
-    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    const elapsed = now - state.lastRequestedAt;
-    const readyForNewRequest = state.lastRequestedAt === 0 || elapsed >= 16; // Throttle to ~60Hz
-
-    if (!state.pending && state.lastResultKey !== viewportKey && readyForNewRequest) {
-      this.dispatchRenderWorkerTask(viewport, viewportKey, padding, now);
-    }
-
-    // If the camera moved significantly while a request is in-flight, queue a new one when possible
-    if (
-      state.pending &&
-      state.pendingViewportKey !== viewportKey &&
-      readyForNewRequest &&
-      state.lastResultKey !== viewportKey
-    ) {
-      // Mark pendingViewportKey so the next availability triggers a fresh request
-      state.pendingViewportKey = '';
-    }
-
-    if (!state.pending && state.pendingViewportKey === '') {
-      // No work queued and viewport changed since last resolve, request immediately
-      if (state.lastResultKey !== viewportKey && readyForNewRequest) {
-        this.dispatchRenderWorkerTask(viewport, viewportKey, padding, now);
-      }
-    }
-
-    return state.lastResultKey === viewportKey ? state.visible : null;
-  }
-
-  private dispatchRenderWorkerTask(
-    viewport: { minX: number; minY: number; maxX: number; maxY: number },
-    viewportKey: string,
-    padding: number,
-    timestamp: number
-  ): void {
-    const state = this.renderWorkerState;
-
-    if (!workerPoolIntegration.isAvailable()) {
-      return;
-    }
-
-    const { game } = this;
-
-    const treeEntities = game.trees.map((tree, index) => ({
-      id: index,
-      x: tree.x,
-      y: tree.y,
-      r: tree.r ?? 12,
-    }));
-
-    const rockEntities = game.rocks.map((rock, index) => ({
-      id: index,
-      x: rock.x,
-      y: rock.y,
-      r: rock.r ?? 12,
-    }));
-
-    const buildingEntities = game.buildings.map((building, index) => ({
-      id: index,
-      x: building.x,
-      y: building.y,
-      w: building.w,
-      h: building.h,
-    }));
-
-    const colonistEntities = game.colonists.reduce<{ id: number; x: number; y: number; r: number }[]>((acc, colonist, index) => {
-      if (!colonist.alive) return acc;
-      const hiddenInside = colonist.inside && (colonist.inside as any).kind !== 'bed';
-      if (hiddenInside) return acc;
-      const radius = (colonist.r ?? 12) + 18; // Include sprite size and drafted indicators
-      acc.push({ id: index, x: colonist.x, y: colonist.y, r: radius });
-      return acc;
-    }, []);
-
-    const enemyEntities = game.enemies.reduce<{ id: number; x: number; y: number; r: number }[]>((acc, enemy, index) => {
-      if (enemy.hp <= 0) return acc;
-      const radius = (enemy.r ?? 12) + 5;
-      acc.push({ id: index, x: enemy.x, y: enemy.y, r: radius });
-      return acc;
-    }, []);
-
-    state.pending = true;
-    state.pendingViewportKey = viewportKey;
-    state.lastRequestedAt = timestamp;
-
-    const requestKey = viewportKey;
-
-    Promise.all([
-      workerPoolIntegration.cullEntities(treeEntities, viewport, padding),
-      workerPoolIntegration.cullEntities(rockEntities, viewport, padding),
-      workerPoolIntegration.cullEntities(buildingEntities, viewport, padding),
-      workerPoolIntegration.cullEntities(colonistEntities, viewport, padding),
-      workerPoolIntegration.cullEntities(enemyEntities, viewport, padding),
-    ])
-      .then(([treeIds, rockIds, buildingIds, colonistIds, enemyIds]) => {
-        if (state.pendingViewportKey && state.pendingViewportKey !== requestKey) {
-          return;
-        }
-
-        const toSet = (ids: Array<string | number>) => new Set(ids.map(id => Number(id)));
-
-        state.visible = {
-          trees: toSet(treeIds),
-          rocks: toSet(rockIds),
-          buildings: toSet(buildingIds),
-          colonists: toSet(colonistIds),
-          enemies: toSet(enemyIds),
-        };
-        state.lastResultKey = requestKey;
-      })
-      .catch(error => {
-        console.warn('[RenderManager] Rendering worker culling failed, falling back to main thread:', error);
-        if (state.pendingViewportKey === requestKey) {
-          state.visible = null;
-          state.lastResultKey = '';
-        }
-      })
-      .finally(() => {
-        if (state.pendingViewportKey === requestKey || state.pendingViewportKey === '') {
-          state.pending = false;
-          state.pendingViewportKey = '';
-        }
-      });
-  }
 
   constructor(private game: Game) {}
 
@@ -342,51 +163,38 @@ export class RenderManager {
       return x + r >= minX && x - r <= maxX && y + r >= minY && y - r <= maxY;
     };
 
-    const viewport = { minX, minY, maxX, maxY };
-    const viewportKey = this.getViewportKey(viewport, camera.zoom);
-    const workerVisible = this.updateRenderWorkerVisibility(viewport, viewportKey, viewportPadding);
-    const visibleTrees = workerVisible?.trees ?? null;
-    const visibleRocks = workerVisible?.rocks ?? null;
-    const visibleBuildings = workerVisible?.buildings ?? null;
-    const visibleColonists = workerVisible?.colonists ?? null;
-    const visibleEnemies = workerVisible?.enemies ?? null;
-
-    // Trees - use drawCircle helper (with worker-assisted culling)
+    // Trees
     for (let i = 0; i < game.trees.length; i++) {
       const tree = game.trees[i];
-      const isVisible = visibleTrees ? visibleTrees.has(i) : inViewport(tree.x, tree.y, tree.r);
-      if (!isVisible) continue;
+      if (!inViewport(tree.x, tree.y, tree.r)) continue;
       drawCircle(ctx, tree.x, tree.y, tree.r, COLORS.tree);
     }
 
-    // Rocks - use drawCircle helper (with worker-assisted culling)
+    // Rocks
     for (let i = 0; i < game.rocks.length; i++) {
       const rock = game.rocks[i];
-      const isVisible = visibleRocks ? visibleRocks.has(i) : inViewport(rock.x, rock.y, rock.r);
-      if (!isVisible) continue;
+      if (!inViewport(rock.x, rock.y, rock.r)) continue;
       drawCircle(ctx, rock.x, rock.y, rock.r, COLORS.rock);
     }
 
-    // Buildings - use drawBuilding helper which handles all the rendering logic (with worker-assisted culling)
+    // Buildings
     for (let i = 0; i < game.buildings.length; i++) {
       const b = game.buildings[i];
       const radius = Math.max(b.w, b.h) / 2;
       const centerX = b.x + b.w / 2;
       const centerY = b.y + b.h / 2;
-      const isVisible = visibleBuildings ? visibleBuildings.has(i) : inViewport(centerX, centerY, radius);
-      if (!isVisible) continue;
+      if (!inViewport(centerX, centerY, radius)) continue;
       drawBuilding(ctx, b);
     }
 
-    // Colonist hiding indicators - show person icons on buildings with colonists inside (with worker-assisted culling)
+    // Colonist hiding indicators - show person icons on buildings with colonists inside
     for (let i = 0; i < game.buildings.length; i++) {
       const b = game.buildings[i];
       if (!b.done) continue;
       const radius = Math.max(b.w, b.h) / 2;
       const centerX = b.x + b.w / 2;
       const centerY = b.y + b.h / 2;
-      const isVisible = visibleBuildings ? visibleBuildings.has(i) : inViewport(centerX, centerY, radius);
-      if (!isVisible) continue;
+      if (!inViewport(centerX, centerY, radius)) continue;
 
       const numInside = game.insideCounts.get(b) || 0;
       if (numInside > 0 && (b.kind === 'hq' || b.kind === 'house')) {
@@ -434,9 +242,8 @@ export class RenderManager {
       const hiddenInside = c.inside && (c.inside as any).kind !== 'bed';
       if (hiddenInside) continue;
 
-      // Cull colonists outside viewport
-      const colonistVisible = visibleColonists ? visibleColonists.has(i) : inViewport(c.x, c.y, 30);
-      if (!colonistVisible) continue; // 30px padding for sprite size
+      // Cull colonists outside viewport (30px padding for sprite size)
+      if (!inViewport(c.x, c.y, 30)) continue;
       
       // Check if this colonist is selected
       const isSelected = game.selColonist === c;
@@ -610,8 +417,7 @@ export class RenderManager {
     // Enemies (with culling)
     for (let i = 0; i < game.enemies.length; i++) {
       const e = game.enemies[i];
-      const enemyVisible = visibleEnemies ? visibleEnemies.has(i) : inViewport(e.x, e.y, e.r + 5);
-      if (!enemyVisible) continue;
+      if (!inViewport(e.x, e.y, e.r + 5)) continue;
       drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
     }
 

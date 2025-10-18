@@ -15,20 +15,9 @@ import {
   isBlocked as isBlockedNav 
 } from '../navigation/navGrid';
 import { syncTerrainToGrid } from '../../core/pathfinding';
-import { workerPoolIntegration } from '../../core/workers';
 
 export class NavigationManager {
-  // Enable/disable worker pool usage
-  private useWorkerPool = true;
-
   constructor(private game: Game) {}
-
-  /**
-   * Check whether worker pool pathfinding can be used right now
-   */
-  public isWorkerPoolActive(): boolean {
-    return this.useWorkerPool && workerPoolIntegration.isAvailable();
-  }
 
   /**
    * Rebuild the navigation grid (call when buildings/obstacles change)
@@ -57,28 +46,9 @@ export class NavigationManager {
 
   /**
    * Compute a path from (sx, sy) to (tx, ty)
-   * Uses worker pool if available, otherwise falls back to main thread
+   * Async wrapper for compatibility - just calls synchronous version
    */
   async computePathAsync(sx: number, sy: number, tx: number, ty: number) {
-    if (!this.isWorkerPoolActive()) {
-      return computePathNav(this.game, sx, sy, tx, ty);
-    }
-
-    try {
-      const result = await workerPoolIntegration.computePath(
-        this.game.grid,
-        sx,
-        sy,
-        tx,
-        ty
-      );
-      if (result && result.length) {
-        return result;
-      }
-    } catch (error) {
-      console.warn('[NavigationManager] Worker pathfinding failed, using fallback:', error);
-    }
-
     return computePathNav(this.game, sx, sy, tx, ty);
   }
 
@@ -91,30 +61,9 @@ export class NavigationManager {
 
   /**
    * Colonist-aware pathfinding that avoids dangerous areas from memory
-   * Uses worker pool if available
+   * Async wrapper for compatibility - just calls synchronous version
    */
   async computePathWithDangerAvoidanceAsync(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-    if (!this.isWorkerPoolActive()) {
-      return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
-    }
-
-    try {
-      const dangerZones = (c as any).dangerMemory || [];
-      const result = await workerPoolIntegration.computePathWithDangerAvoidance(
-        this.game.grid,
-        sx,
-        sy,
-        tx,
-        ty,
-        dangerZones
-      );
-      if (result && result.length) {
-        return result;
-      }
-    } catch (error) {
-      console.warn('[NavigationManager] Worker danger-aware pathfinding failed, using fallback:', error);
-    }
-
     return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
   }
 
@@ -125,12 +74,7 @@ export class NavigationManager {
     return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
   }
 
-  /**
-   * Toggle worker pool usage for pathfinding
-   */
-  setUseWorkerPool(enabled: boolean): void {
-    this.useWorkerPool = enabled;
-  }
+
 
   /**
    * Get the grid cell index at world position (x, y)

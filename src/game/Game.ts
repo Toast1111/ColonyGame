@@ -2210,11 +2210,9 @@ export class Game {
     return this.nearestCircle(p, arr);
   }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
-    // Check if colonist is using async pathfinding mode
+    // Check if colonist is using async pathfinding mode (via PathRequestQueue)
     const colonistAny = c as any;
-    const workerPoolActive = this.navigationManager.isWorkerPoolActive();
-    const useAsync = colonistAny.useAsyncPathfinding === true
-      || (colonistAny.useAsyncPathfinding !== false && workerPoolActive);
+    const useAsync = colonistAny.useAsyncPathfinding === true;
 
     // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
     // c.repath = (c.repath || 0) - dt; // TEMPORARILY DISABLED

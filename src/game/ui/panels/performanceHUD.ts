@@ -16,7 +16,6 @@
 import { PerformanceMetrics } from '../../../core/PerformanceMetrics';
 import { SimulationClock } from '../../../core/SimulationClock';
 import { BudgetedExecutionManager } from '../../../core/BudgetedExecution';
-import { workerPoolIntegration } from '../../../core/workers';
 import type { Game } from '../../Game';
 
 export interface PerformanceHUDConfig {
@@ -297,63 +296,6 @@ export class PerformanceHUD {
           if (stats.queueSize > 0) {
             lines.push(`  ${subsystem}: ${stats.queueSize} tasks`);
           }
-        }
-      }
-      
-      // Worker pool stats
-      if (workerPoolIntegration.isAvailable()) {
-        const workerStats = workerPoolIntegration.getStats();
-        const workerStatus = workerPoolIntegration.getWorkerStatus();
-        const queueSize = workerPoolIntegration.getQueueSize();
-
-        const successRate = workerStats.tasksDispatched > 0
-          ? `${((workerStats.tasksCompleted / workerStats.tasksDispatched) * 100).toFixed(0)}%`
-          : '—';
-        const averageTaskTime = workerStats.tasksCompleted > 0
-          ? `${workerStats.averageTaskTime.toFixed(2)}ms`
-          : '—';
-
-        lines.push(''); // Blank line
-        lines.push('WORKER POOL:');
-
-        const workerIcon = workerStatus.busy > 0 ? '⚙️' : '💤';
-        if (workerStatus.total > 0) {
-          lines.push(`  ${workerIcon} Workers busy: ${workerStatus.busy}/${workerStatus.total}`);
-        } else {
-          lines.push('  ⚠️ Workers unavailable');
-        }
-
-        const typeLabels: Record<'pathfinding' | 'rendering' | 'simulation', string> = {
-          pathfinding: 'Pathfinding',
-          rendering: 'Rendering',
-          simulation: 'Simulation',
-        };
-        for (const key of Object.keys(typeLabels) as Array<keyof typeof typeLabels>) {
-          const status = workerStatus.byType[key];
-          if (status.total > 0) {
-            lines.push(`  • ${typeLabels[key]}: ${status.busy}/${status.total} busy`);
-          }
-        }
-
-        lines.push(`  📤 Dispatched: ${workerStats.tasksDispatched}`);
-        lines.push(`  ✅ Completed: ${workerStats.tasksCompleted}`);
-        if (workerStats.tasksFailed > 0) {
-          lines.push(`  ❌ Failed: ${workerStats.tasksFailed}`);
-        }
-        if (workerStats.inFlight > 0) {
-          lines.push(`  🔄 In-flight: ${workerStats.inFlight}`);
-        }
-        lines.push(`  ⏳ Queue: ${queueSize > 0 ? `${queueSize} tasks` : 'idle'}`);
-        lines.push(`  📊 Success: ${successRate}`);
-        lines.push(`  ⏱️ Avg Task: ${averageTaskTime}`);
-
-        if (workerStats.lastTaskType && workerStats.lastTaskDuration != null) {
-          const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-          const finishedAt = workerStats.lastTaskFinishedAt ?? now;
-          const secondsAgo = Math.max(0, (now - finishedAt) / 1000);
-          const sinceText = Number.isFinite(secondsAgo) ? ` (${secondsAgo.toFixed(1)}s ago)` : '';
-          const taskLabel = typeLabels[workerStats.lastTaskType] || workerStats.lastTaskType;
-          lines.push(`  🕒 Last ${taskLabel}: ${workerStats.lastTaskDuration.toFixed(2)}ms${sinceText}`);
         }
       }
     }
