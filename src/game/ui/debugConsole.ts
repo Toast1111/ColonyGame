@@ -1,7 +1,6 @@
 import type { Game } from "../Game";
 import { itemDatabase } from "../../data/itemDatabase";
 import { initializeColonistHealth } from "../health/healthSystem";
-import { workerPoolIntegration } from "../../core/workers";
 
 type CommandHandler = (game: Game, args: string[]) => string | void;
 
@@ -27,7 +26,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, drop, stockpile, kill, heal, godmode, workers";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, drop, stockpile, kill, heal, godmode";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -642,108 +641,6 @@ export function initDebugConsole(game: Game) {
     const status = (targets[0] as any).godmode ? 'enabled' : 'disabled';
     return `godmode ${status} for ${targets.length} colonist(s)`;
   }, "godmode [target] — toggle godmode (no damage/hunger/fatigue). Target: selected,all,name");
-
-  // Worker pool commands
-  reg("workers", (g, args) => {
-    const sub = (args[0] || "status").toLowerCase();
-    
-    if (sub === "status") {
-      if (!workerPoolIntegration.isAvailable()) {
-        return "Worker pool is NOT initialized";
-      }
-      
-      const stats = workerPoolIntegration.getStats();
-      const status = workerPoolIntegration.getWorkerStatus();
-      const queueSize = workerPoolIntegration.getQueueSize();
-
-      const successRate = stats.tasksDispatched > 0
-        ? `${((stats.tasksCompleted / stats.tasksDispatched) * 100).toFixed(1)}%`
-        : '—';
-      const averageTaskTime = stats.tasksCompleted > 0
-        ? `${stats.averageTaskTime.toFixed(2)}ms`
-        : '—';
-
-      const typeLabels: Record<'pathfinding' | 'rendering' | 'simulation', string> = {
-        pathfinding: 'Pathfinding',
-        rendering: 'Rendering',
-        simulation: 'Simulation',
-      };
-
-      const lines: string[] = [
-        '=== WORKER POOL STATUS ===',
-        status.total > 0
-          ? `${status.busy > 0 ? '⚙️' : '💤'} Workers: ${status.busy}/${status.total} busy`
-          : '⚠️ Workers unavailable',
-      ];
-
-      if (status.total > 0) {
-        lines.push('Type breakdown:');
-        for (const key of Object.keys(typeLabels) as Array<keyof typeof typeLabels>) {
-          const info = status.byType[key];
-          if (info.total > 0) {
-            lines.push(`  - ${typeLabels[key]}: ${info.busy}/${info.total} busy`);
-          }
-        }
-      }
-
-      lines.push('');
-      lines.push('Statistics:');
-      lines.push(`  Dispatched: ${stats.tasksDispatched}`);
-      lines.push(`  Completed: ${stats.tasksCompleted}`);
-      if (stats.tasksFailed > 0) {
-        lines.push(`  Failed: ${stats.tasksFailed}`);
-      }
-      if (stats.inFlight > 0) {
-        lines.push(`  In-flight: ${stats.inFlight}`);
-      }
-      lines.push(`  Queue Size: ${queueSize}`);
-      lines.push(`  Success Rate: ${successRate}`);
-      lines.push(`  Avg Task Time: ${averageTaskTime}`);
-      if (stats.lastTaskType && stats.lastTaskDuration != null) {
-        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        const finishedAt = stats.lastTaskFinishedAt ?? now;
-        const secondsAgo = Math.max(0, (now - finishedAt) / 1000);
-        const sinceText = Number.isFinite(secondsAgo) ? ` (${secondsAgo.toFixed(1)}s ago)` : '';
-        const taskLabel = typeLabels[stats.lastTaskType] || stats.lastTaskType;
-        lines.push(`  Last ${taskLabel}: ${stats.lastTaskDuration.toFixed(2)}ms${sinceText}`);
-      }
-
-      lines.push('');
-      lines.push('Worker availability:');
-      lines.push(`  Pathfinding: ${workerPoolIntegration.isWorkerAvailable('pathfinding') ? 'available' : 'busy'}`);
-      lines.push(`  Rendering: ${workerPoolIntegration.isWorkerAvailable('rendering') ? 'available' : 'busy'}`);
-      lines.push(`  Simulation: ${workerPoolIntegration.isWorkerAvailable('simulation') ? 'available' : 'busy'}`);
-
-      return lines.join('\n');
-    }
-    
-    if (sub === "test") {
-      const testType = (args[1] || "pathfinding").toLowerCase();
-      
-      if (testType === "pathfinding") {
-        // Test pathfinding worker
-        const grid = g.grid;
-        const startX = g.camera.x;
-        const startY = g.camera.y;
-        const targetX = g.camera.x + 320;
-        const targetY = g.camera.y + 320;
-        
-        workerPoolIntegration.computePath(grid, startX, startY, targetX, targetY)
-          .then(() => {
-            console.log('[Workers] Pathfinding test completed successfully');
-          })
-          .catch((err: any) => {
-            console.error('[Workers] Pathfinding test failed:', err);
-          });
-        
-        return "Pathfinding test dispatched - check console for results";
-      }
-      
-      return `Unknown test type '${testType}'. Available: pathfinding`;
-    }
-    
-    return "usage: workers status | test [pathfinding]";
-  }, "workers — manage worker pool. status = show stats, test [type] = test workers");
 }
 
 export function toggleDebugConsole(game: Game) {
