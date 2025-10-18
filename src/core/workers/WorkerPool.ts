@@ -82,6 +82,10 @@ export class WorkerPool {
   // Worker status tracking
   private workerBusy = new Map<Worker, boolean>();
   private workerMeta = new Map<Worker, { type: WorkerTaskType; name: string }>();
+  private taskToWorker = new Map<string, Worker>(); // Track which worker is processing which task
+  
+  // Initialization tracking
+  private initialized = false;
 
   // Statistics
   public stats: WorkerPoolStats = {
@@ -112,6 +116,12 @@ export class WorkerPool {
    * Creates all workers and sets up message handlers
    */
   public async initialize(): Promise<void> {
+    // Prevent duplicate initialization - this is critical to avoid worker leaks
+    if (this.initialized) {
+      console.debug('[WorkerPool] Already initialized, skipping duplicate initialization');
+      return;
+    }
+    
     try {
       // Create pathfinding worker
       this.pathfindingWorker = new Worker(
@@ -143,9 +153,11 @@ export class WorkerPool {
         this.workerBusy.set(worker, false);
       }
 
+      this.initialized = true;
       console.log('[WorkerPool] Initialized with 4 workers');
     } catch (error) {
       console.error('[WorkerPool] Failed to initialize workers:', error);
+      this.initialized = false;
       throw error;
     }
   }
@@ -160,6 +172,7 @@ export class WorkerPool {
 
       if (pending) {
         this.pendingTasks.delete(response.taskId);
+        this.taskToWorker.delete(response.taskId); // Clean up task-to-worker mapping
 
         if (response.success) {
           this.stats.tasksCompleted++;
@@ -196,11 +209,15 @@ export class WorkerPool {
       this.workerBusy.set(worker, false);
       this.stats.inFlight = this.getCurrentInFlightCount();
 
-      // Fail all pending tasks for this worker
+      // Fail only pending tasks assigned to THIS specific worker
       for (const [taskId, pending] of this.pendingTasks.entries()) {
-        pending.reject(new Error(`Worker ${workerName} crashed: ${error.message}`));
-        this.pendingTasks.delete(taskId);
-        this.stats.tasksFailed++;
+        const assignedWorker = this.taskToWorker.get(taskId);
+        if (assignedWorker === worker) {
+          pending.reject(new Error(`Worker ${workerName} crashed: ${error.message}`));
+          this.pendingTasks.delete(taskId);
+          this.taskToWorker.delete(taskId);
+          this.stats.tasksFailed++;
+        }
       }
     };
   }
@@ -239,6 +256,7 @@ export class WorkerPool {
 
     // Mark worker as busy and dispatch
     this.workerBusy.set(worker, true);
+    this.taskToWorker.set(task.id, worker); // Track which worker is processing this task
     this.stats.inFlight = this.getCurrentInFlightCount();
     worker.postMessage(task);
     return true;
@@ -286,26 +304,38 @@ export class WorkerPool {
    * Terminate all workers (cleanup)
    */
   public terminate(): void {
+    this.terminateAllWorkers();
+    this.initialized = false;
+    console.log('[WorkerPool] All workers terminated');
+  }
+  
+  /**
+   * Internal helper to terminate all workers without resetting initialized flag
+   */
+  private terminateAllWorkers(): void {
     if (this.pathfindingWorker) {
       this.workerMeta.delete(this.pathfindingWorker);
+      this.workerBusy.delete(this.pathfindingWorker);
       this.pathfindingWorker.terminate();
       this.pathfindingWorker = null;
     }
     if (this.renderingWorker) {
       this.workerMeta.delete(this.renderingWorker);
+      this.workerBusy.delete(this.renderingWorker);
       this.renderingWorker.terminate();
       this.renderingWorker = null;
     }
     for (const worker of this.simulationWorkers) {
       this.workerMeta.delete(worker);
+      this.workerBusy.delete(worker);
       worker.terminate();
     }
     this.simulationWorkers = [];
-    this.workerBusy.clear();
+    
+    // Clean up task tracking
     this.pendingTasks.clear();
     this.taskQueue = [];
-    
-    console.log('[WorkerPool] All workers terminated');
+    this.taskToWorker.clear();
   }
   
   /**
