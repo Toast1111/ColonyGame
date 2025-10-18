@@ -35,16 +35,18 @@ Total: 1-3ms (no serialization)
 
 ```typescript
 async computePathWithDangerAvoidanceAsync(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-  // Just wraps synchronous call - Promise makes it async from caller's perspective
+  // Wraps synchronous call in Promise - makes function awaitable
   return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
 }
 ```
 
-This is **intentionally simple** and works because:
-1. JavaScript Promises don't block even if they resolve immediately
-2. The calling code uses `.then()` which defers execution to next event loop tick
-3. No serialization overhead (direct memory access)
-4. Pathfinding is still fast (1-3ms for typical paths)
+**Important clarification**: This async wrapper doesn't make pathfinding run on a separate thread. Instead:
+1. The pathfinding still runs synchronously (1-3ms)
+2. BUT the calling code uses `.then()` callbacks, not blocking waits
+3. Colonists continue on their old path while the promise resolves
+4. No serialization overhead (direct memory access)
+
+**The key benefit**: Caller doesn't block waiting for the result. The colonist continues moving on their current path.
 
 ### Game.ts Integration
 
@@ -118,11 +120,13 @@ With async wrapper:
 
 ### Comparison
 
-| Method | Serialization | Computation | Total | Mobile Safe |
-|--------|---------------|-------------|-------|-------------|
-| **Synchronous** | 0ms | 1-3ms | 1-3ms | ✅ Yes |
-| **Async (Promise)** | 0ms | 1-3ms | 1-3ms | ✅ Yes |
-| **Workers** | 2-5ms | 1-3ms | 3-8ms | ❌ No |
+| Method | Serialization | Computation | Total | Caller Blocks | Mobile Safe |
+|--------|---------------|-------------|-------|---------------|-------------|
+| **Synchronous (blocking)** | 0ms | 1-3ms | 1-3ms | ✅ Yes | ✅ Yes |
+| **Async (Promise pattern)** | 0ms | 1-3ms | 1-3ms | ❌ No* | ✅ Yes |
+| **Workers** | 2-5ms | 1-3ms | 3-8ms | ❌ No | ❌ No |
+
+*Colonist continues on old path, doesn't wait for new path to be ready.
 
 ## When Pathfinding Runs
 
@@ -163,20 +167,25 @@ Frame N+1:
   - Continue game loop
 ```
 
-### Non-Blocking Execution
-Even though the pathfinding is "synchronous", the Promise wrapper makes it non-blocking from the caller's perspective:
+### Non-Blocking Caller Pattern
+The Promise wrapper doesn't make pathfinding non-blocking, but the calling pattern does:
 
 ```typescript
-// This doesn't block
+// This initiates pathfinding (runs synchronously 1-3ms)
 const promise = computePathAsync(...);
 
-// This continues immediately
+// But colonist doesn't wait for it
+colonist.continueOnCurrentPath();
+
+// When path ready, colonist switches to it
+promise.then(path => colonist.usePath(path));
+
+// Meanwhile, game continues
 updateOtherColonists();
 renderFrame();
-
-// This runs later when promise resolves
-promise.then(path => assignPath(path));
 ```
+
+**Key insight**: The async wrapper enables a "fire and forget" pattern where colonists don't wait for paths, they continue moving on their current path.
 
 ## Best Practices
 
@@ -204,8 +213,8 @@ promise.then(path => {
 
 ### 3. Cancel Old Requests
 ```typescript
-if (colonist.pendingPathRequest) {
-  // New target, cancel old request
+if (colonist.pendingPathPromise) {
+  // New target, ignore old promise result
   colonist.pendingPathRequest = undefined;
   colonist.pendingPathPromise = null;
 }
