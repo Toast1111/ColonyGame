@@ -1371,7 +1371,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       
       const pt = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
-      
+
+      // Walls and other 1x1 structures block their own tile even while under construction.
+      // When builders stand on the adjacent tile, the distance to the building centre is
+      // roughly half the building's largest dimension (~16px for a wall). The previous
+      // arrive radius of 12px meant we would only register "in range" for a single frame
+      // as the colonist slid into position, then immediately fall out of range and stop
+      // progressing the build. Expand the reach based on building size so tiny blueprints
+      // can be completed while standing just outside the blocked tile.
+      const largestHalfExtent = Math.max(b.w, b.h) / 2;
+      const interactRadius = Math.max(12, largestHalfExtent + 6);
+
       // Build-specific stuck detection and timeout
       if (c.stateSince > 15) {
         console.log(`Build task timeout after ${c.stateSince.toFixed(1)}s, abandoning building`);
@@ -1409,7 +1419,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       */
       c.lastDistToNode = distToTarget;
       
-      if (game.moveAlongPath(c, dt, pt, 12)) {
+      if (game.moveAlongPath(c, dt, pt, interactRadius)) {
         // Apply equipment work speed bonuses (Construction) and skill multiplier
         const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Construction') : 1;
         const lvl = c.skills ? skillLevel(c, 'Construction') : 0;

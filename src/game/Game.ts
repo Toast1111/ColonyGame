@@ -1067,6 +1067,11 @@ export class Game {
         }
       }
       if ((e as MouseEvent).button === 2) {
+        if (this.pendingPlacement) {
+          this.cancelPending();
+          void this.audioManager.play('ui.click.secondary').catch(() => {});
+          return;
+        }
         this.mouse.rdown = true;
         if (this.showBuildMenu) { this.showBuildMenu = false; return; }
         

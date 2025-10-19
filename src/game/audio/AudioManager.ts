@@ -25,7 +25,7 @@ interface CachedBuffer {
 interface ActiveSound {
   source: AudioBufferSourceNode;
   gainNode: GainNode;
-  pannerNode: PannerNode;
+  pannerNode?: PannerNode;
   baseVolume: number;
   key: AudioKey;
   isLooping: boolean;
@@ -124,46 +124,47 @@ export class AudioManager {
     }
 
     // Create gain node for volume control
-  const gainNode = this.audioContext.createGain();
-  const category = deriveCategory(key, options.categoryOverride);
-  const baseVolume = options.volume ?? variant.volume ?? 1;
-  const baseGain = this.computeVolume(category, baseVolume);
-  gainNode.gain.value = baseGain;
+    const gainNode = this.audioContext.createGain();
+    const category = deriveCategory(key, options.categoryOverride);
+    const baseVolume = options.volume ?? variant.volume ?? 1;
+    const baseGain = this.computeVolume(category, baseVolume);
+    gainNode.gain.value = baseGain;
 
-    // Create panner node for spatial audio
-    const pannerNode = new PannerNode(this.audioContext, {
-      panningModel: 'HRTF',
-      distanceModel: 'exponential',
-      refDistance: AudioManager.REF_DIST,
-      rolloffFactor: AudioManager.ROLLOFF,
-      maxDistance: AudioManager.MAX_DIST_HARD,
-    });
-    
-    // Calculate spatial audio if position is provided
-    if (options.position) {
-      const listenerPosition = options.listenerPosition ?? this.listenerPosition;
-      const listenerZoom = options.listenerZoom ?? this.listenerZoom;
-      const altitude = this.zoomToAltitude(listenerZoom);
-      pannerNode.positionX.value = options.position.x;
-      pannerNode.positionY.value = options.position.y;
+    // Determine whether to use spatial audio (never for UI sounds)
+    const shouldUseSpatial = Boolean(options.position) && category !== 'ui';
+    let pannerNode: PannerNode | null = null;
+    if (shouldUseSpatial) {
+      pannerNode = new PannerNode(this.audioContext, {
+        panningModel: 'HRTF',
+        distanceModel: 'exponential',
+        refDistance: AudioManager.REF_DIST,
+        rolloffFactor: AudioManager.ROLLOFF,
+        maxDistance: AudioManager.MAX_DIST_HARD,
+      });
+
+      pannerNode.positionX.value = options.position!.x;
+      pannerNode.positionY.value = options.position!.y;
       pannerNode.positionZ.value = 0;
-      // Listener position and orientation will be set in updateSpatialAudio
     }
 
-    // Connect the audio graph: source -> panner -> gain -> master -> destination
-    source.connect(pannerNode);
-    pannerNode.connect(gainNode);
+    // Connect the audio graph
+    if (pannerNode) {
+      source.connect(pannerNode);
+      pannerNode.connect(gainNode);
+    } else {
+      source.connect(gainNode);
+    }
     gainNode.connect(this.masterGainNode);
 
     // Track active sounds
     const activeSound: ActiveSound = {
       source,
       gainNode,
-      pannerNode,
+      pannerNode: pannerNode ?? undefined,
       baseVolume: clamp(baseVolume, 0, 1.5),
       key,
       isLooping: source.loop,
-      position: options.position
+      position: shouldUseSpatial ? options.position : undefined
     };
 
     if (!this.activeSounds.has(key)) {
@@ -185,7 +186,9 @@ export class AudioManager {
       }
       // Disconnect nodes to free resources
       gainNode.disconnect();
-      pannerNode.disconnect();
+      if (pannerNode) {
+        pannerNode.disconnect();
+      }
     });
 
     // Start playback
@@ -203,7 +206,7 @@ export class AudioManager {
         try {
           sound.source.stop();
           sound.gainNode.disconnect();
-          sound.pannerNode.disconnect();
+          sound.pannerNode?.disconnect();
         } catch (e) {
           // Source may already be stopped
         }
@@ -345,7 +348,7 @@ export class AudioManager {
 
     for (const sounds of this.activeSounds.values()) {
       for (const sound of sounds) {
-        if (!sound.position) {
+        if (!sound.position || !sound.pannerNode) {
           continue;
         }
 
