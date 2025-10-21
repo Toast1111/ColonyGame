@@ -281,6 +281,29 @@ export class ItemDatabase {
           accuracyMedium: 0.45,
           accuracyLong: 0.20
         },
+        {
+          defName: 'TurretGun',
+          label: 'turret gun',
+          description: 'Automated turret weapon. Fires 2-round bursts with high accuracy.',
+          category: 'Weapon',
+          equipSlot: 'none', // Can't be equipped by colonists
+          maxDurability: 999,
+          stackable: false,
+          value: 0, // Not tradeable
+          weight: 0, // Part of turret structure
+          damage: 30,                      // High damage per shot
+          range: 28.9,                     // RimWorld: 28.9 tiles (924.8 pixels at 32px/tile)
+          ammoType: 'Bullets',
+          armorPenetration: 0.20,          // Moderate AP
+          stoppingPower: 1.0,              // Can stagger
+          burstCount: 2,                   // 2-round burst
+          aimTimeTicks: 0,                 // No warmup (instant fire)
+          cooldownTicks: 144,              // 144 RimWorld ticks = 2.4 sec in RimWorld = 4.8 sec in game (144/30)
+          accuracyTouch: 0.96,             // 96% accuracy at all ranges (equivalent to Shooting skill 8)
+          accuracyShort: 0.96,
+          accuracyMedium: 0.96,
+          accuracyLong: 0.96
+        },
         
         // Armor
         {

@@ -12,7 +12,7 @@
 import { WORLD, T, COLORS } from '../game/constants';
 import type { Camera, Colonist } from '../game/types';
 import type { TerrainGrid } from '../game/terrain';
-import { getFloorTypeFromId, FloorType, FLOOR_VISUALS } from '../game/terrain';
+import { getFloorTypeFromId, FloorType, FLOOR_VISUALS, getTerrainTypeFromId, TerrainType } from '../game/terrain';
 
 /**
  * World background cache - renders static world tiles to a canvas once
@@ -51,9 +51,51 @@ export class WorldBackgroundCache {
 
     const cacheCtx = this.canvas.getContext('2d')!;
     
-    // Base ground
-    cacheCtx.fillStyle = COLORS.ground;
-    cacheCtx.fillRect(0, 0, WORLD.w, WORLD.h);
+    // Draw ground and floors tile-by-tile, skipping mountains
+    if (terrainGrid) {
+      for (let gy = 0; gy < terrainGrid.rows; gy++) {
+        for (let gx = 0; gx < terrainGrid.cols; gx++) {
+          const idx = gy * terrainGrid.cols + gx;
+          const terrainType = getTerrainTypeFromId(terrainGrid.terrain[idx]);
+          const wx = gx * T;
+          const wy = gy * T;
+          
+          // Skip mountain tiles - they'll be drawn dynamically with ores
+          if (terrainType === TerrainType.MOUNTAIN) continue;
+          
+          // Draw ground tile
+          cacheCtx.fillStyle = COLORS.ground;
+          cacheCtx.fillRect(wx, wy, T, T);
+          
+          // Draw floor if present
+          const floorId = terrainGrid.floors[idx];
+          if (floorId !== 0) {
+            const floorType = getFloorTypeFromId(floorId);
+            if (floorType !== FloorType.NONE) {
+              const visual = FLOOR_VISUALS[floorType];
+              if (visual) {
+                cacheCtx.fillStyle = visual.color;
+                cacheCtx.fillRect(wx, wy, T, T);
+
+                // Add pattern if applicable
+                if (visual.pattern === 'stripes' && visual.secondaryColor) {
+                  cacheCtx.fillStyle = visual.secondaryColor;
+                  cacheCtx.fillRect(wx, wy, T, T / 4);
+                  cacheCtx.fillRect(wx, wy + T / 2, T, T / 4);
+                } else if (visual.pattern === 'dots' && visual.secondaryColor) {
+                  cacheCtx.fillStyle = visual.secondaryColor;
+                  cacheCtx.fillRect(wx + T / 4, wy + T / 4, T / 2, T / 2);
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Fallback: draw entire ground
+      cacheCtx.fillStyle = COLORS.ground;
+      cacheCtx.fillRect(0, 0, WORLD.w, WORLD.h);
+    }
 
     // Grid lines
     cacheCtx.strokeStyle = 'rgba(30, 41, 59, 0.5)';
@@ -68,39 +110,6 @@ export class WorldBackgroundCache {
       cacheCtx.lineTo(WORLD.w, y);
     }
     cacheCtx.stroke();
-
-    // Render floors (paths, roads, wooden floors)
-    if (terrainGrid) {
-      for (let gy = 0; gy < terrainGrid.rows; gy++) {
-        for (let gx = 0; gx < terrainGrid.cols; gx++) {
-          const idx = gy * terrainGrid.cols + gx;
-          const floorId = terrainGrid.floors[idx];
-          if (floorId === 0) continue;
-
-          const floorType = getFloorTypeFromId(floorId);
-          if (floorType === FloorType.NONE) continue;
-
-          const visual = FLOOR_VISUALS[floorType];
-          if (!visual) continue;
-
-          const wx = gx * T;
-          const wy = gy * T;
-
-          cacheCtx.fillStyle = visual.color;
-          cacheCtx.fillRect(wx, wy, T, T);
-
-          // Add pattern if applicable
-          if (visual.pattern === 'stripes' && visual.secondaryColor) {
-            cacheCtx.fillStyle = visual.secondaryColor;
-            cacheCtx.fillRect(wx, wy, T, T / 4);
-            cacheCtx.fillRect(wx, wy + T / 2, T, T / 4);
-          } else if (visual.pattern === 'dots' && visual.secondaryColor) {
-            cacheCtx.fillStyle = visual.secondaryColor;
-            cacheCtx.fillRect(wx + T / 4, wy + T / 4, T / 2, T / 2);
-          }
-        }
-      }
-    }
   }
 }
 

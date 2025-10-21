@@ -26,7 +26,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, drop, stockpile, kill, heal, godmode";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, kill, heal, godmode";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -531,6 +531,53 @@ export function initDebugConsole(game: Game) {
       return "usage: resources [unlimited|add|set|show] [type] [amount]";
     }
   }, "resources [action] — manage resources. Actions: unlimited, add <type> <amt>, set <type> <amt>, show");
+
+  reg("mountains", (g, args) => {
+    const action = (args[0] || "count").toLowerCase();
+    
+    if (action === "count" || action === "info") {
+      // Count mountain tiles
+      let mountainCount = 0;
+      let exposedCount = 0;
+      const oreCounts: Record<string, number> = {};
+      
+      for (let i = 0; i < g.terrainGrid.terrain.length; i++) {
+        const terrainId = g.terrainGrid.terrain[i];
+        // Check if it's a mountain (TerrainType.MOUNTAIN = 8)
+        if (terrainId === 8) {
+          mountainCount++;
+          if (g.terrainGrid.oreVisible[i] === 1) {
+            exposedCount++;
+            const oreId = g.terrainGrid.ores[i];
+            const oreNames = ['NONE', 'COAL', 'COPPER', 'STEEL', 'SILVER', 'GOLD'];
+            const oreName = oreNames[oreId] || 'UNKNOWN';
+            oreCounts[oreName] = (oreCounts[oreName] || 0) + 1;
+          }
+        }
+      }
+      
+      const totalTiles = g.terrainGrid.cols * g.terrainGrid.rows;
+      const coverage = ((mountainCount / totalTiles) * 100).toFixed(1);
+      let result = `Mountains: ${mountainCount} tiles (${coverage}% coverage)\n`;
+      result += `Exposed: ${exposedCount} tiles\n`;
+      result += `Ores: ${Object.entries(oreCounts).map(([k,v]) => `${k}:${v}`).join(' ')}`;
+      return result;
+    }
+    else if (action === "reveal") {
+      // Reveal all ores (debug)
+      let revealed = 0;
+      for (let i = 0; i < g.terrainGrid.terrain.length; i++) {
+        if (g.terrainGrid.terrain[i] === 8) { // Mountain
+          g.terrainGrid.oreVisible[i] = 1;
+          revealed++;
+        }
+      }
+      return `revealed ${revealed} mountain ores`;
+    }
+    else {
+      return "usage: mountains [count|reveal]";
+    }
+  }, "mountains [action] — debug mountain generation. Actions: count (show info), reveal (expose all ores)");
 
   reg("kill", (g, args) => {
     const target = (args[0] || "enemies").toLowerCase();

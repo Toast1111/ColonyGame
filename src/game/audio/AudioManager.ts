@@ -43,8 +43,8 @@ export class AudioManager {
 
   // Spatial audio constants based on game scale (bird's-eye view with true 3D)
   private static readonly T = 32;                           // tile size (px)
-  private static readonly REF_DIST = 6 * AudioManager.T;    // reference distance ~6 tiles (192px)
-  private static readonly ROLLOFF = 1.0;                    // distance rolloff factor (1.0 = natural inverse distance)
+  private static readonly REF_DIST = 12 * AudioManager.T;   // reference distance ~12 tiles (384px) - doubled for wider center zone
+  private static readonly ROLLOFF = 0.7;                    // distance rolloff factor (0.7 = gentler panning transition)
   private static readonly MAX_DIST = 80 * AudioManager.T;   // max distance ~80 tiles (2560px)
   private static readonly ZOOM_ALTITUDE_SCALE = 800;        // altitude scaling for zoom (higher = more dramatic altitude effect)
   private static readonly SMOOTH_TAU = 0.025;               // ~25ms smoothing for listener/sound updates
@@ -138,7 +138,7 @@ export class AudioManager {
       // Y = North/South (up/down on screen) 
       // Z = Altitude (camera height above ground)
       pannerNode = new PannerNode(this.audioContext, {
-        panningModel: 'HRTF',
+        panningModel: 'equalpower',  // Use equalpower for smoother, less aggressive panning (better for top-down view)
         distanceModel: 'inverse',  // Natural inverse distance falloff
         refDistance: AudioManager.REF_DIST,
         rolloffFactor: AudioManager.ROLLOFF,

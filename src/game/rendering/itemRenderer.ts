@@ -70,6 +70,9 @@ export class ItemRenderer {
         if (zone.priority !== 1) {
           this.ctx.fillText(`Priority: ${zone.priority}`, screenX + zone.width / 2, screenY + 30);
         }
+        
+        // CRITICAL: Reset textAlign to default (not saved by ctx.save/restore)
+        this.ctx.textAlign = 'left';
       }
     }
 
@@ -164,6 +167,9 @@ export class ItemRenderer {
       this.ctx.strokeText(text, x, y + halfSize + 12);
       // Draw text
       this.ctx.fillText(text, x, y + halfSize + 12);
+      
+      // CRITICAL: Reset textAlign to default
+      this.ctx.textAlign = 'left';
     }
 
     // Draw item type indicator
@@ -193,6 +199,9 @@ export class ItemRenderer {
 
     this.ctx.strokeText(icon, x, y);
     this.ctx.fillText(icon, x, y);
+    
+    // CRITICAL: Reset textAlign to default
+    this.ctx.textAlign = 'left';
   }
 
   private getItemColor(type: string): string {

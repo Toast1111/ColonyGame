@@ -42,6 +42,14 @@
 - Uses 32px tile size for alignment
 - Consistent with building placement
 
+### 6. Infinite Construction Audio Loop ✅
+**Issue:** Construction sounds (drills, saws) would play forever after building completed.
+
+**Fix:**
+- Added `audioManager.stop()` calls in 4 strategic locations in FSM
+- Stops looping audio when: building completes, colonist changes state, task times out, or building is deleted
+- Full details: `docs/bug-fixes/INFINITE_CONSTRUCTION_AUDIO_FIX.md`
+
 ## ⚠️ Remaining Issues (Not Addressed)
 
 ### Combat & Health Systems

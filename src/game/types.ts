@@ -2,7 +2,21 @@ import type { Vec2 } from "../core/utils";
 
 export type Camera = { x: number; y: number; zoom: number };
 
-export type Resources = { wood: number; stone: number; food: number; medicine?: number; herbal?: number; wheat?: number; bread?: number };
+export type Resources = { 
+  wood: number; 
+  stone: number; 
+  food: number; 
+  medicine?: number; 
+  herbal?: number; 
+  wheat?: number; 
+  bread?: number;
+  // Ore resources from mountains
+  coal?: number;
+  copper?: number;
+  steel?: number;
+  silver?: number;
+  gold?: number;
+};
 
 export type Circle = { x: number; y: number; r: number; hp: number; type: "tree" | "rock" };
 
@@ -28,6 +42,7 @@ export type BuildingDef = {
   range?: number;
   fireRate?: number;
   dps?: number;
+  weaponDefName?: string; // Reference to weapon in itemDatabase (e.g., for turrets)
   // utility
   healRate?: number; // hp per second
   healRange?: number; // pixels
@@ -316,6 +331,7 @@ export type Bullet = {
   owner?: 'turret' | 'colonist' | 'enemy';
   shooterId?: string;       // colonist id for XP attribution (if owner is colonist)
   particles?: Particle[];
+  targetPawn?: Enemy;       // Original intended target (for hit probability tracking)
   // Advanced combat stats
   armorPenetration?: number; // 0-1, ability to ignore armor (AP directly subtracts from armor rating)
   stoppingPower?: number;    // >= 1 can stagger humans, reducing speed to 1/6th for 95 ticks (1.58s)
@@ -328,6 +344,16 @@ export type Particle = {
 };
 
 export type Message = { text: string; t: number; kind: "info" | "warn" | "good" | "bad" };
+
+// Mining zone for designating areas to mine
+export type MiningZone = {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+};
 
 export type Colors = {
   sky: string; ground: string; grass: string; water: string; wood: string; stone: string; food: string; metal: string;

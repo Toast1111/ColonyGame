@@ -31,16 +31,15 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
   turret: { 
     category:'Defense', 
     name: 'Turret', 
-    description: 'Automated defense structure. Shoots at enemies within range.',
+    description: 'Automated defense turret. Fires 2-round bursts at enemies. Can hit friendlies! Max range: 28.9 tiles.',
     key: '3', 
     cost: { wood: 5, stone: 20 }, 
-    hp: 160, 
+    hp: 100, 
     size: { w: 1, h: 1 }, 
-    build: 120, 
+    build: 750,  // 30 seconds at base work speed (750/25 = 30s)
     color: COLORS.turret, 
-    range: 190, 
-    fireRate: 0.6, 
-    dps: 30 
+    range: 924.8,  // 28.9 tiles × 32 pixels/tile = 924.8 pixels
+    weaponDefName: 'TurretGun'  // References TurretGun from itemDatabase
   },
   wall: { 
     category:'Defense', 

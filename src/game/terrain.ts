@@ -24,12 +24,23 @@ export enum TerrainType {
   // Impassable terrain
   DEEP_WATER = 'deep_water',
   ROCK = 'rock',
+  MOUNTAIN = 'mountain', // Impassable until mined
   
   // Future biomes
   SNOW = 'snow',
   ICE = 'ice',
   MARSH = 'marsh',
   GRAVEL = 'gravel',
+}
+
+// Ore types found within mountains
+export enum OreType {
+  NONE = 'none',
+  COAL = 'coal',
+  COPPER = 'copper',
+  STEEL = 'steel',
+  SILVER = 'silver',
+  GOLD = 'gold',
 }
 
 // Floor types (built structures that go on terrain)
@@ -60,12 +71,74 @@ export const TERRAIN_COSTS: Record<TerrainType, number> = {
   // Impassable (extremely high cost = pathfinding avoids)
   [TerrainType.DEEP_WATER]: 999.0,  // Effectively impassable
   [TerrainType.ROCK]: 999.0,
+  [TerrainType.MOUNTAIN]: 999.0,     // Impassable until mined
   
   // Future biomes
   [TerrainType.SNOW]: 1.3,
   [TerrainType.ICE]: 0.9,            // Faster but slippery
   [TerrainType.MARSH]: 2.0,
   [TerrainType.GRAVEL]: 1.05,
+};
+
+// Ore properties
+export interface OreProperties {
+  name: string;
+  rarity: number; // 0-1, lower = more rare
+  miningYield: number; // Amount of resource per tile mined
+  hp: number; // HP to mine through
+  color: string; // Visual color
+  secondaryColor?: string; // For variation
+}
+
+export const ORE_PROPERTIES: Record<OreType, OreProperties> = {
+  [OreType.NONE]: {
+    name: 'Stone',
+    rarity: 1.0,
+    miningYield: 3,
+    hp: 80,
+    color: '#6b7280',
+    secondaryColor: '#5b6270',
+  },
+  [OreType.COAL]: {
+    name: 'Coal',
+    rarity: 0.25,
+    miningYield: 5,
+    hp: 70,
+    color: '#1f2937',
+    secondaryColor: '#111827',
+  },
+  [OreType.COPPER]: {
+    name: 'Copper',
+    rarity: 0.15,
+    miningYield: 4,
+    hp: 90,
+    color: '#b45309',
+    secondaryColor: '#92400e',
+  },
+  [OreType.STEEL]: {
+    name: 'Steel Ore',
+    rarity: 0.12,
+    miningYield: 6,
+    hp: 120,
+    color: '#64748b',
+    secondaryColor: '#475569',
+  },
+  [OreType.SILVER]: {
+    name: 'Silver',
+    rarity: 0.08,
+    miningYield: 3,
+    hp: 100,
+    color: '#d4d4d8',
+    secondaryColor: '#a1a1aa',
+  },
+  [OreType.GOLD]: {
+    name: 'Gold',
+    rarity: 0.05,
+    miningYield: 2,
+    hp: 110,
+    color: '#fbbf24',
+    secondaryColor: '#f59e0b',
+  },
 };
 
 // Floor costs (built structures)
@@ -98,6 +171,7 @@ export const TERRAIN_VISUALS: Record<TerrainType, TerrainVisuals> = {
   [TerrainType.SHALLOW_WATER]: { color: '#4a90a4', secondaryColor: '#5aa0b4', pattern: 'noise', renderLayer: 0 },
   [TerrainType.DEEP_WATER]: { color: '#1e3a5f', secondaryColor: '#2e4a6f', pattern: 'noise', renderLayer: 0 },
   [TerrainType.ROCK]: { color: '#4b5563', pattern: 'solid', renderLayer: 0 },
+  [TerrainType.MOUNTAIN]: { color: '#3f3f46', secondaryColor: '#27272a', pattern: 'noise', renderLayer: 0 },
   [TerrainType.SNOW]: { color: '#f0f4f8', secondaryColor: '#e0e8f0', pattern: 'noise', renderLayer: 0 },
   [TerrainType.ICE]: { color: '#c7d7e8', secondaryColor: '#d7e7f8', pattern: 'stripes', renderLayer: 0 },
   [TerrainType.MARSH]: { color: '#3d5a4c', secondaryColor: '#4d6a5c', pattern: 'dots', renderLayer: 0 },
@@ -127,6 +201,12 @@ export interface TerrainGrid {
   // Floor layer (built structures on top of terrain)
   floors: Uint8Array;   // FloorType enum values
   
+  // Mountain ore data (stores ore type for mountain tiles)
+  ores: Uint8Array;     // OreType enum values (only valid where terrain === MOUNTAIN)
+  
+  // Ore visibility (fog of war - true if ore is exposed/visible)
+  oreVisible: Uint8Array; // 0 = hidden, 1 = visible
+  
   // Biome regions (for future use)
   biomes?: Uint8Array;  // Biome IDs
 }
@@ -142,6 +222,8 @@ export function makeTerrainGrid(cols: number, rows: number): TerrainGrid {
     rows,
     terrain: new Uint8Array(size).fill(getTerrainTypeId(TerrainType.GRASS)),
     floors: new Uint8Array(size).fill(getFloorTypeId(FloorType.NONE)),
+    ores: new Uint8Array(size).fill(getOreTypeId(OreType.NONE)),
+    oreVisible: new Uint8Array(size).fill(0),
   };
 }
 
@@ -171,6 +253,20 @@ export function getFloorTypeId(type: FloorType): number {
  */
 export function getFloorTypeFromId(id: number): FloorType {
   return Object.values(FloorType)[id] as FloorType;
+}
+
+/**
+ * Get numeric ID for ore type
+ */
+export function getOreTypeId(type: OreType): number {
+  return Object.values(OreType).indexOf(type);
+}
+
+/**
+ * Get ore type from numeric ID
+ */
+export function getOreTypeFromId(id: number): OreType {
+  return Object.values(OreType)[id] as OreType;
 }
 
 /**
@@ -312,3 +408,339 @@ export function generateTerrainFromBiome(
     }
   }
 }
+
+/**
+ * Simple 2D Perlin-like noise generator for procedural generation
+ * Based on smooth interpolated random values
+ */
+class SimpleNoise {
+  private seed: number;
+
+  constructor(seed: number = Math.random()) {
+    this.seed = seed;
+  }
+
+  // Simple hash function for pseudo-random values
+  private hash(x: number, y: number): number {
+    let h = (x * 374761393 + y * 668265263 + this.seed * 1234567) | 0;
+    h = (h ^ (h >>> 13)) * 1274126177;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296; // Normalize to 0-1
+  }
+
+  // Smooth interpolation (smoothstep)
+  private smoothstep(t: number): number {
+    return t * t * (3 - 2 * t);
+  }
+
+  // 2D noise at any coordinate
+  noise(x: number, y: number, frequency: number = 1): number {
+    x *= frequency;
+    y *= frequency;
+
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+    const x1 = x0 + 1;
+    const y1 = y0 + 1;
+
+    const sx = this.smoothstep(x - x0);
+    const sy = this.smoothstep(y - y0);
+
+    const n00 = this.hash(x0, y0);
+    const n10 = this.hash(x1, y0);
+    const n01 = this.hash(x0, y1);
+    const n11 = this.hash(x1, y1);
+
+    const nx0 = n00 * (1 - sx) + n10 * sx;
+    const nx1 = n01 * (1 - sx) + n11 * sx;
+
+    return nx0 * (1 - sy) + nx1 * sy;
+  }
+
+  // Layered noise (octaves) for more natural variation
+  octaveNoise(x: number, y: number, octaves: number = 4): number {
+    let value = 0;
+    let amplitude = 1;
+    let frequency = 1;
+    let maxValue = 0;
+
+    for (let i = 0; i < octaves; i++) {
+      value += this.noise(x, y, frequency * 0.01) * amplitude; // Lower frequency = larger features
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+
+    return value / maxValue;
+  }
+}
+
+/**
+ * Generate procedural mountains with ore deposits
+ * Creates natural-looking mountain ranges that avoid the HQ area
+ */
+export function generateMountains(
+  terrainGrid: TerrainGrid,
+  hqGridX: number,
+  hqGridY: number,
+  hqProtectionRadius: number = 15 // tiles to keep clear around HQ
+): void {
+  const { cols, rows } = terrainGrid;
+  const noise = new SimpleNoise(Date.now());
+  const mountainTypeId = getTerrainTypeId(TerrainType.MOUNTAIN);
+
+  console.log(`[Mountain Gen] Starting generation: grid ${cols}x${rows}, HQ @ (${hqGridX},${hqGridY}), mountainTypeId=${mountainTypeId}`);
+  
+  let mountainCount = 0;
+  let sampleNoiseValues: number[] = [];
+
+  // Generate mountain heightmap
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+
+      // Distance from HQ (in tiles)
+      const dx = x - hqGridX;
+      const dy = y - hqGridY;
+      const distFromHQ = Math.sqrt(dx * dx + dy * dy);
+
+      // Skip tiles near HQ
+      if (distFromHQ < hqProtectionRadius) {
+        continue;
+      }
+
+      // Generate mountain noise (multiple octaves for natural look)
+      const mountainNoise = noise.octaveNoise(x, y, 5);
+      
+      // Sample first 10 noise values for debugging
+      if (sampleNoiseValues.length < 10) {
+        sampleNoiseValues.push(mountainNoise);
+      }
+
+      // Create mountain threshold that varies across the map
+      // This creates clusters of mountains rather than uniform distribution
+      const clusterNoise = noise.noise(x, y, 0.005);
+      const threshold = 0.55 + clusterNoise * 0.1; // Lower threshold for more mountains
+
+      // Place mountain if noise exceeds threshold
+      if (mountainNoise > threshold) {
+        terrainGrid.terrain[idx] = mountainTypeId;
+        mountainCount++;
+        
+        // Generate ore deposits for this mountain tile
+        generateOreDeposit(terrainGrid, x, y, noise);
+      }
+    }
+  }
+
+  console.log(`[Mountain Gen] Generated ${mountainCount} mountain tiles`);
+  console.log(`[Mountain Gen] Sample noise values:`, sampleNoiseValues);
+  console.log(`[Mountain Gen] Threshold range: 0.55-0.65`);
+
+  // Update ore visibility (initially all hidden)
+  updateOreVisibility(terrainGrid);
+}
+
+/**
+ * Generate ore deposit for a mountain tile
+ * Uses weighted random distribution based on ore rarity
+ */
+function generateOreDeposit(
+  terrainGrid: TerrainGrid,
+  gx: number,
+  gy: number,
+  noise: SimpleNoise
+): void {
+  const idx = gy * terrainGrid.cols + gx;
+
+  // Use noise to determine ore type (more natural clustering)
+  const oreNoise = noise.noise(gx * 2.5, gy * 2.5, 0.1);
+
+  // Weighted ore selection based on rarity
+  // Most tiles are plain stone, rarer ores need higher noise values
+  let oreType: OreType = OreType.NONE;
+
+  if (oreNoise > 0.95) {
+    oreType = OreType.GOLD; // Rarest (5% of high-noise areas)
+  } else if (oreNoise > 0.87) {
+    oreType = OreType.SILVER; // (8%)
+  } else if (oreNoise > 0.75) {
+    oreType = OreType.STEEL; // (12%)
+  } else if (oreNoise > 0.60) {
+    oreType = OreType.COPPER; // (15%)
+  } else if (oreNoise > 0.35) {
+    oreType = OreType.COAL; // (25%)
+  }
+  // else: NONE (plain stone) - (35%)
+
+  terrainGrid.ores[idx] = getOreTypeId(oreType);
+}
+
+/**
+ * Update ore visibility based on exposure to non-mountain tiles
+ * Ores are only visible when adjacent to an exposed tile (fog of war)
+ */
+export function updateOreVisibility(terrainGrid: TerrainGrid): void {
+  const { cols, rows } = terrainGrid;
+  const mountainTypeId = getTerrainTypeId(TerrainType.MOUNTAIN);
+
+  // Reset visibility
+  terrainGrid.oreVisible.fill(0);
+
+  // Check each mountain tile
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const idx = y * cols + x;
+
+      // Only check mountain tiles
+      if (terrainGrid.terrain[idx] !== mountainTypeId) {
+        continue;
+      }
+
+      // Check if any adjacent tile is NOT a mountain (exposed edge)
+      const neighbors = [
+        { dx: -1, dy: 0 },  // left
+        { dx: 1, dy: 0 },   // right
+        { dx: 0, dy: -1 },  // up
+        { dx: 0, dy: 1 },   // down
+      ];
+
+      let isExposed = false;
+      for (const { dx, dy } of neighbors) {
+        const nx = x + dx;
+        const ny = y + dy;
+
+        // Edge of map counts as exposed
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) {
+          isExposed = true;
+          break;
+        }
+
+        const nIdx = ny * cols + nx;
+        if (terrainGrid.terrain[nIdx] !== mountainTypeId) {
+          isExposed = true;
+          break;
+        }
+      }
+
+      // Mark as visible if exposed
+      if (isExposed) {
+        terrainGrid.oreVisible[idx] = 1;
+      }
+    }
+  }
+}
+
+/**
+ * Mine a mountain tile - converts it back to grass and returns the ore type
+ * Updates ore visibility for neighboring tiles
+ */
+export function mineMountainTile(
+  terrainGrid: TerrainGrid,
+  gx: number,
+  gy: number
+): OreType | null {
+  const idx = gy * terrainGrid.cols + gx;
+  const mountainTypeId = getTerrainTypeId(TerrainType.MOUNTAIN);
+
+  // Check if this is actually a mountain tile
+  if (terrainGrid.terrain[idx] !== mountainTypeId) {
+    return null;
+  }
+
+  // Get the ore type before removing
+  const oreType = getOreTypeFromId(terrainGrid.ores[idx]);
+
+  // Convert to grass (or could be stone/dirt based on surrounding terrain)
+  terrainGrid.terrain[idx] = getTerrainTypeId(TerrainType.GRASS);
+  terrainGrid.ores[idx] = getOreTypeId(OreType.NONE);
+  terrainGrid.oreVisible[idx] = 0;
+
+  // Update visibility for neighboring mountain tiles (they might be newly exposed)
+  updateOreVisibilityAround(terrainGrid, gx, gy);
+
+  return oreType;
+}
+
+/**
+ * Update ore visibility for tiles around a specific location
+ * More efficient than full grid update when only one tile changed
+ */
+export function updateOreVisibilityAround(
+  terrainGrid: TerrainGrid,
+  gx: number,
+  gy: number,
+  radius: number = 1
+): void {
+  const { cols, rows } = terrainGrid;
+  const mountainTypeId = getTerrainTypeId(TerrainType.MOUNTAIN);
+
+  // Check tiles in radius
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const x = gx + dx;
+      const y = gy + dy;
+
+      if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+
+      const idx = y * cols + x;
+      if (terrainGrid.terrain[idx] !== mountainTypeId) continue;
+
+      // Check if this mountain tile is exposed
+      const neighbors = [
+        { dx: -1, dy: 0 },
+        { dx: 1, dy: 0 },
+        { dx: 0, dy: -1 },
+        { dx: 0, dy: 1 },
+      ];
+
+      let isExposed = false;
+      for (const { dx: ndx, dy: ndy } of neighbors) {
+        const nx = x + ndx;
+        const ny = y + ndy;
+
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) {
+          isExposed = true;
+          break;
+        }
+
+        const nIdx = ny * cols + nx;
+        if (terrainGrid.terrain[nIdx] !== mountainTypeId) {
+          isExposed = true;
+          break;
+        }
+      }
+
+      terrainGrid.oreVisible[idx] = isExposed ? 1 : 0;
+    }
+  }
+}
+
+/**
+ * Check if a grid position is a mountain tile
+ */
+export function isMountainTile(terrainGrid: TerrainGrid, gx: number, gy: number): boolean {
+  if (gx < 0 || gy < 0 || gx >= terrainGrid.cols || gy >= terrainGrid.rows) {
+    return false;
+  }
+  const idx = gy * terrainGrid.cols + gx;
+  return terrainGrid.terrain[idx] === getTerrainTypeId(TerrainType.MOUNTAIN);
+}
+
+/**
+ * Get ore type at a grid position (returns NONE if not a mountain or ore not visible)
+ */
+export function getVisibleOreAt(terrainGrid: TerrainGrid, gx: number, gy: number): OreType | null {
+  if (!isMountainTile(terrainGrid, gx, gy)) {
+    return null;
+  }
+
+  const idx = gy * terrainGrid.cols + gx;
+  
+  // Only return ore if it's visible (exposed)
+  if (terrainGrid.oreVisible[idx] === 0) {
+    return null;
+  }
+
+  return getOreTypeFromId(terrainGrid.ores[idx]);
+}
+

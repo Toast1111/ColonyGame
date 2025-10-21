@@ -1,11 +1,16 @@
+//Game.ts is really just the kid who eats paste, this script just keeps accumulating more and more code instead of putting things in the right place. 
+// Lots of stuff should be moved to appropriate managers/systems UGHHHHHHHHHH!!!!
+// UPDATE 2025: The Great Paste-Eating Intervention has begun! Health calculations extracted to HealthManager! 🎨✨
 import { clamp, dist2, rand, randi } from "../core/utils";
 import { makeGrid } from "../core/pathfinding";
-import { makeTerrainGrid, type TerrainGrid } from "./terrain";
+import { makeTerrainGrid, type TerrainGrid, generateMountains, getTerrainTypeId, getTerrainTypeFromId, TerrainType, isMountainTile, mineMountainTile, type OreType, ORE_PROPERTIES } from "./terrain";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
-import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, Message, Resources, Particle } from "./types";
+import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, Message, Resources, Particle, MiningZone } from "./types";
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { getZoneDef } from "./zones";
+import { HealthManager } from "./managers/HealthManager";
+import { InventoryManager } from "./managers/InventoryManager";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { WorkGiverManager } from './systems/workGiverManager';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
@@ -179,6 +184,9 @@ export class Game {
   get bullets(): Bullet[] { return this.state.bullets; }
   set bullets(value: Bullet[]) { this.state.bullets = value; }
   
+  // Mining zones for designating areas to mine
+  miningZones: MiningZone[] = [];
+  
   get particles(): Particle[] { return this.state.particles; }
   set particles(value: Particle[]) { this.state.particles = value; }
   
@@ -322,6 +330,8 @@ export class Game {
   // Systems
   private workGiverManager = new WorkGiverManager();
   public itemManager: ItemManager;
+  public healthManager = new HealthManager(); // Stop eating health paste! Delegate properly! 🎨
+  public inventoryManager = new InventoryManager(); // Equipment and item management - no more paste-eating! 🍝
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -334,6 +344,18 @@ export class Game {
     
     window.addEventListener('resize', () => this.handleResize());
     this.bindInput();
+    
+    // Initialize item database BEFORE newGame() (needed for stockpile creation)
+    itemDatabase.loadItems();
+    
+    // Initialize floor item + stockpile system BEFORE newGame() (needed for initial stockpiles)
+    this.itemManager = new ItemManager({
+      canvas: this.canvas,
+      enableAutoHauling: false, // We'll drive hauling via our WorkGiver so it fits FSM
+      defaultStockpileSize: this.defaultStockpileSize
+    } as ItemManagerConfig);
+    
+    // Now call newGame() - it will create initial stockpile zones
     this.newGame();
     
     // Link terrain grid to pathfinding grid
@@ -354,16 +376,6 @@ export class Game {
   this.cameraSystem.centerOn(HQ_POS.x, HQ_POS.y);
     
     this.clampCameraToWorld();
-    
-    // Initialize item database
-    itemDatabase.loadItems();
-    
-    // Initialize floor item + stockpile system (rendered between world and UI)
-    this.itemManager = new ItemManager({
-      canvas: this.canvas,
-      enableAutoHauling: false, // We'll drive hauling via our WorkGiver so it fits FSM
-      defaultStockpileSize: this.defaultStockpileSize
-    } as ItemManagerConfig);
   // Init debug console
   initDebugConsole(this);
     // Init performance HUD
@@ -390,59 +402,38 @@ export class Game {
     requestAnimationFrame(this.frame);
   }
 
-  // ===== Inventory & Item Helpers =====
-  // Aggregate equipped items
+  // ===== Inventory & Equipment System - NOW PROPERLY DELEGATED! =====
+  // Previously more paste-eating behavior (Game.ts lines 395-555).
+  // Now we delegate to InventoryManager - no more eating inventory paste! 🍝✨
+  
+  /** Get equipped items - DELEGATED to InventoryManager */
   private getEquippedItems(c: Colonist) {
-    const eq = c.inventory?.equipment || {} as any;
-    return [eq.helmet, eq.armor, eq.weapon, eq.tool, eq.accessory].filter(Boolean) as any[];
+    return this.inventoryManager.getEquippedItems(c);
   }
 
-  // Movement speed multiplier from equipment (armor penalties etc.)
+  /** Movement speed multiplier from equipment - DELEGATED to InventoryManager */
   getMoveSpeedMultiplier(c: Colonist): number {
-    let penalty = 0;
-    for (const it of this.getEquippedItems(c)) {
-      if (!it?.defName) continue;
-      const def = itemDatabase.getItemDef(it.defName);
-      if (def?.movementPenalty) penalty += def.movementPenalty;
-    }
-    // Clamp total penalty to 40% max
-    penalty = Math.min(0.4, Math.max(0, penalty));
-    const mult = 1 - penalty;
-    return Math.max(0.6, mult); // never slower than 60%
+    return this.inventoryManager.getMoveSpeedMultiplier(c);
   }
 
-  // Work speed multiplier based on equipped tools/clothes for a given work type label
+  /** Work speed multiplier from tools/equipment - DELEGATED to InventoryManager */
   getWorkSpeedMultiplier(c: Colonist, workType: 'Construction' | 'Woodcutting' | 'Mining' | 'Farming' | 'Harvest' | string): number {
-    let bonus = 0;
-    for (const it of this.getEquippedItems(c)) {
-      if (!it?.defName) continue;
-      const def = itemDatabase.getItemDef(it.defName);
-      if (!def?.workSpeedBonus) continue;
-      if (!def.workTypes || def.workTypes.includes(workType)) {
-        bonus += def.workSpeedBonus; // additive bonuses
-      }
-    }
-    // Modest cap to avoid extremes
-    bonus = Math.min(0.8, Math.max(0, bonus));
-    
-    // Apply health-based penalties
-    const manipulationMultiplier = (c as any).manipulationMultiplier || 1.0;
-    const consciousnessMultiplier = (c as any).consciousnessMultiplier || 1.0;
-    
-    return (1 + bonus) * manipulationMultiplier * consciousnessMultiplier;
+    return this.inventoryManager.getWorkSpeedMultiplier(c, workType);
   }
 
-  // Armor damage reduction from helmet/armor; returns fraction reduced (0..0.8)
+  /** Armor damage reduction - DELEGATED to InventoryManager */
   getArmorReduction(c: Colonist): number {
-    let armor = 0;
-    const eq = c.inventory?.equipment || {} as any;
-    const pieces = [eq.helmet, eq.armor];
-    for (const it of pieces) {
-      if (!it?.defName) continue;
-      const def = itemDatabase.getItemDef(it.defName);
-      if (def?.armorRating) armor += def.armorRating;
-    }
-    return Math.min(0.8, Math.max(0, armor));
+    return this.inventoryManager.getArmorReduction(c);
+  }
+
+  /** Try to consume food from inventory - DELEGATED to InventoryManager */
+  tryConsumeInventoryFood(c: Colonist): boolean {
+    return this.inventoryManager.tryConsumeInventoryFood(c, this.msg.bind(this));
+  }
+
+  /** Recalculate inventory weight - DELEGATED to InventoryManager */
+  recalcInventoryWeight(c: Colonist) {
+    this.inventoryManager.recalculateInventoryWeight(c);
   }
 
   // Enhanced combat damage system with armor reduction wrapper
@@ -479,140 +470,40 @@ export class Game {
     }
   }
 
-  // Helper methods for injury calculation
-  private calculatePainFromDamage(damageType: string, severity: number): number {
-    const basePain = {
-      'cut': 0.3,
-      'bruise': 0.1,
-      'burn': 0.4,
-      'bite': 0.35,
-      'gunshot': 0.5,
-      'fracture': 0.6
-    };
-    return Math.min(1.0, (basePain[damageType as keyof typeof basePain] || 0.2) * severity);
-  }
-
-  private calculateBleedingFromDamage(damageType: string, severity: number): number {
-    const baseBleed = {
-      'cut': 0.4,
-      'bruise': 0.0,
-      'burn': 0.1,
-      'bite': 0.3,
-      'gunshot': 0.5,
-      'fracture': 0.2
-    };
-    return Math.min(1.0, (baseBleed[damageType as keyof typeof baseBleed] || 0.1) * severity);
-  }
-
-  private calculateHealRate(damageType: string, severity: number): number {
-    const baseHealRate = {
-      'cut': 0.8,
-      'bruise': 1.2,
-      'burn': 0.6,
-      'bite': 0.7,
-      'gunshot': 0.4,
-      'fracture': 0.3
-    };
-    return (baseHealRate[damageType as keyof typeof baseHealRate] || 0.8) * (1.0 - severity * 0.5);
-  }
-
-  private calculateInfectionChance(damageType: string, severity: number): number {
-    const baseInfection = {
-      'cut': 0.15,
-      'bruise': 0.0,
-      'burn': 0.25,
-      'bite': 0.4,
-      'gunshot': 0.3,
-      'fracture': 0.1
-    };
-    return Math.min(0.8, (baseInfection[damageType as keyof typeof baseInfection] || 0.1) * severity);
-  }
-
-  private generateInjuryDescription(damageType: string, bodyPart: string, severity: number): string {
-    const severityDesc = severity < 0.2 ? 'minor' : severity < 0.5 ? 'moderate' : severity < 0.8 ? 'severe' : 'critical';
-    const descriptions = {
-      'cut': `${severityDesc} laceration on ${bodyPart}`,
-      'bruise': `${severityDesc} bruising on ${bodyPart}`,
-      'burn': `${severityDesc} burn on ${bodyPart}`,
-      'bite': `${severityDesc} bite wound on ${bodyPart}`,
-      'gunshot': `${severityDesc} gunshot wound in ${bodyPart}`,
-      'fracture': `${severityDesc} fracture in ${bodyPart}`
-    };
-    return descriptions[damageType as keyof typeof descriptions] || `${severityDesc} injury to ${bodyPart}`;
-  }
-
-  private recalculateColonistHealth(colonist: Colonist): void {
-    if (!colonist.health) return;
-
-    // Calculate total pain from all injuries
-    let totalPain = 0;
-    let totalBleeding = 0;
-    
-    for (const injury of colonist.health.injuries) {
-      totalPain += injury.pain;
-      totalBleeding += injury.bleeding;
-    }
-
-    colonist.health.totalPain = Math.min(1.0, totalPain);
-    colonist.health.bloodLevel = Math.max(0.0, 1.0 - totalBleeding);
-    
-    // Calculate consciousness (affected by pain and blood loss)
-    colonist.health.consciousness = Math.max(0.1, 1.0 - (totalPain * 0.3) - ((1.0 - colonist.health.bloodLevel) * 0.5));
-    
-    // Calculate mobility (movement speed)
-    const legInjuries = colonist.health.injuries.filter(i => i.bodyPart === 'left_leg' || i.bodyPart === 'right_leg');
-    let mobilityPenalty = 0;
-    for (const injury of legInjuries) {
-      mobilityPenalty += injury.severity * 0.3;
-    }
-    colonist.health.mobility = Math.max(0.2, 1.0 - mobilityPenalty - totalPain * 0.2);
-    
-    // Calculate manipulation (work speed)
-    const armInjuries = colonist.health.injuries.filter(i => i.bodyPart === 'left_arm' || i.bodyPart === 'right_arm');
-    let manipulationPenalty = 0;
-    for (const injury of armInjuries) {
-      manipulationPenalty += injury.severity * 0.4;
-    }
-    colonist.health.manipulation = Math.max(0.1, 1.0 - manipulationPenalty - totalPain * 0.3);
-  }
-
-  // Try to consume one Food item from inventory; returns true if eaten
-  tryConsumeInventoryFood(c: Colonist): boolean {
-    if (!c.inventory) return false;
-    const items = c.inventory.items;
-    for (let i = 0; i < items.length; i++) {
-      const it = items[i];
-      // Prefer explicit category when present; fallback to def lookup
-      const isFood = it.category === 'Food' || (!!it.defName && (itemDatabase.getItemDef(it.defName)?.category === 'Food'));
-      if (!isFood || it.quantity <= 0) continue;
-      // Determine nutrition -> hunger reduction (map roughly 1 nutrition = 3 hunger)
-      const nutrition = it.defName ? (itemDatabase.getItemDef(it.defName)?.nutrition || 10) : 10;
-      const hungerReduce = Math.max(20, Math.min(70, Math.round(nutrition * 3)));
-      c.hunger = Math.max(0, (c.hunger || 0) - hungerReduce);
-      // Small heal and mood bump via message
-      c.hp = Math.min(100, c.hp + 1.5);
-      this.msg(`${c.profile?.name || 'Colonist'} ate ${it.name}`, 'good');
-      // Decrement stack and cleanup
-      it.quantity -= 1;
-      if (it.quantity <= 0) items.splice(i, 1);
-      this.recalcInventoryWeight(c);
-      return true;
-    }
-    return false;
-  }
-
-  recalcInventoryWeight(c: Colonist) {
-    if (!c.inventory) return;
-    let total = 0;
-    for (const it of c.inventory.items) total += (it.weight || 0) * (it.quantity || 1);
-    const eq: any = c.inventory.equipment || {};
-    for (const slot of ['helmet','armor','weapon','tool','accessory']) {
-      const it = eq[slot];
-      if (it) total += it.weight || 0;
-    }
-    c.inventory.currentWeight = Math.round(total * 100) / 100;
-  }
+  // ===== Health System - NOW PROPERLY DELEGATED! =====
+  // Previously this was egregious paste-eating behavior (Game.ts lines 483-578).
+  // Now we properly pass the paste to HealthManager like responsible adults! 🎨✨
   
+  /** Calculate pain from damage - DELEGATED to HealthManager */
+  private calculatePainFromDamage(damageType: string, severity: number): number {
+    return this.healthManager.calculatePainFromDamage(damageType, severity);
+  }
+
+  /** Calculate bleeding from damage - DELEGATED to HealthManager */
+  private calculateBleedingFromDamage(damageType: string, severity: number): number {
+    return this.healthManager.calculateBleedingFromDamage(damageType, severity);
+  }
+
+  /** Calculate heal rate - DELEGATED to HealthManager */
+  private calculateHealRate(damageType: string, severity: number): number {
+    return this.healthManager.calculateHealRate(damageType, severity);
+  }
+
+  /** Calculate infection chance - DELEGATED to HealthManager */
+  private calculateInfectionChance(damageType: string, severity: number): number {
+    return this.healthManager.calculateInfectionChance(damageType, severity);
+  }
+
+  /** Generate injury description - DELEGATED to HealthManager */
+  private generateInjuryDescription(damageType: string, bodyPart: string, severity: number): string {
+    return this.healthManager.generateInjuryDescription(damageType, bodyPart, severity);
+  }
+
+  /** Recalculate colonist health stats - DELEGATED to HealthManager */
+  private recalculateColonistHealth(colonist: Colonist): void {
+    this.healthManager.recalculateColonistHealth(colonist);
+  }
+
   // Ensure camera remains within world bounds based on current zoom and canvas size
   private clampCameraToWorld() {
     const viewW = this.canvas.width / this.DPR / this.camera.zoom;
@@ -797,6 +688,24 @@ export class Game {
 
     this.itemManager.createStockpileZone(rect.x, rect.y, rect.width, rect.height, 'Stockpile');
     this.msg('Stockpile created', 'good');
+    return true;
+  }
+
+  private finalizeMiningZoneDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
+    const rect = this.computeStockpileRect(start, end, allowTapShortcut);
+    if (!rect) { return false; }
+
+    // Create a new mining zone
+    const miningZone: MiningZone = {
+      id: `mine_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      x: rect.x,
+      y: rect.y,
+      w: rect.width,
+      h: rect.height,
+      color: '#f59e0b' // Orange color
+    };
+    this.miningZones.push(miningZone);
+    this.msg('Mining zone created', 'good');
     return true;
   }
 
@@ -1120,8 +1029,8 @@ export class Game {
           return;
         }
 
-        // If stockpile designator selected, start a zone drag
-        if (this.selectedBuild === 'stock') {
+        // If stockpile or mining zone designator selected, start a zone drag
+        if (this.selectedBuild === 'stock' || this.selectedBuild === 'mine') {
           this.uiManager.zoneDragStart = { x: this.mouse.wx, y: this.mouse.wy };
         } else {
           this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
@@ -1139,8 +1048,12 @@ export class Game {
         this.pendingDragging = false;
       }
       if ((e as MouseEvent).button === 2) {
-        if (this.uiManager.zoneDragStart && this.selectedBuild === 'stock') {
-          this.finalizeStockpileDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
+        if (this.uiManager.zoneDragStart && (this.selectedBuild === 'stock' || this.selectedBuild === 'mine')) {
+          if (this.selectedBuild === 'stock') {
+            this.finalizeStockpileDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
+          } else if (this.selectedBuild === 'mine') {
+            this.finalizeMiningZoneDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
+          }
         } else if (this.eraseDragStart) {
           const x0 = Math.min(this.eraseDragStart.x, this.mouse.wx);
           const y0 = Math.min(this.eraseDragStart.y, this.mouse.wy);
@@ -1207,7 +1120,7 @@ export class Game {
         const wpt = this.screenToWorld(sx, sy);
         this.mouse.x = sx; this.mouse.y = sy; this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
 
-        if (this.selectedBuild === 'stock') {
+        if (this.selectedBuild === 'stock' || this.selectedBuild === 'mine') {
           this.touchZoneDragActive = true;
           this.touchZoneLastPos = { x: wpt.x, y: wpt.y };
           this.uiManager.zoneDragStart = { x: wpt.x, y: wpt.y };
@@ -1399,7 +1312,12 @@ export class Game {
           endWorld = { x: this.mouse.wx, y: this.mouse.wy };
         }
 
-        const created = this.finalizeStockpileDrag(this.uiManager.zoneDragStart, endWorld, true);
+        let created = false;
+        if (this.selectedBuild === 'stock') {
+          created = this.finalizeStockpileDrag(this.uiManager.zoneDragStart, endWorld, true);
+        } else if (this.selectedBuild === 'mine') {
+          created = this.finalizeMiningZoneDrag(this.uiManager.zoneDragStart, endWorld, true);
+        }
         this.touchZoneDragActive = false;
         this.touchZoneLastPos = null;
         this.uiManager.zoneDragStart = null;
@@ -1772,8 +1690,27 @@ export class Game {
 
   // World setup
   scatter() {
-    for (let i = 0; i < 220; i++) { const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 220) continue; this.trees.push({ x: p.x, y: p.y, r: 12, hp: 40, type: 'tree' }); }
-    for (let i = 0; i < 140; i++) { const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 200) continue; this.rocks.push({ x: p.x, y: p.y, r: 12, hp: 50, type: 'rock' }); }
+    // Beta feedback: Resources spawn closer to HQ for more convenient early game (120px = ~4 tiles)
+    // Check if position is on a mountain before spawning
+    const isMountainPos = (x: number, y: number): boolean => {
+      const gx = Math.floor(x / T);
+      const gy = Math.floor(y / T);
+      const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
+      return getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN;
+    };
+
+    for (let i = 0; i < 220; i++) { 
+      const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
+      if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
+      if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
+      this.trees.push({ x: p.x, y: p.y, r: 12, hp: 40, type: 'tree' }); 
+    }
+    for (let i = 0; i < 140; i++) { 
+      const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
+      if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
+      if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
+      this.rocks.push({ x: p.x, y: p.y, r: 12, hp: 50, type: 'rock' }); 
+    }
     // Rebuild navigation grid after scattering resources
     this.rebuildNavGridImmediate(); // Use immediate rebuild during game init
   }
@@ -1787,11 +1724,18 @@ export class Game {
       const tryOne = (kind: 'tree'|'rock') => {
         for (let k=0;k<6;k++) { // few tries
           const p = { x: rand(60, WORLD.w - 60), y: rand(60, WORLD.h - 60) };
-          if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 200) continue;
+          // Beta feedback: Resources respawn closer to HQ (150px = ~5 tiles)
+          if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 150) continue;
           // avoid too close to buildings
           let ok = true;
           for (const b of this.buildings) { if (p.x > b.x-24 && p.x < b.x+b.w+24 && p.y > b.y-24 && p.y < b.y+b.h+24) { ok=false; break; } }
           if (!ok) continue;
+          // Don't spawn on mountains
+          const gx = Math.floor(p.x / T);
+          const gy = Math.floor(p.y / T);
+          const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
+          if (getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN) continue;
+          
           if (kind==='tree') this.trees.push({ x:p.x, y:p.y, r:12, hp:40, type:'tree' }); else this.rocks.push({ x:p.x, y:p.y, r:12, hp:50, type:'rock' });
           // Use partial rebuild for new resource (only affects small area around spawn point)
           this.navigationManager.rebuildNavGridPartial(p.x, p.y, 12 + 32);
@@ -1810,6 +1754,7 @@ export class Game {
   }
   newGame() {
   this.colonists.length = this.enemies.length = this.trees.length = this.rocks.length = this.buildings.length = this.bullets.length = this.messages.length = 0;
+  this.miningZones.length = 0; // Clear mining zones
   this.buildReservations.clear();
   this.insideCounts.clear();
   this.sleepReservations.clear();
@@ -1817,7 +1762,20 @@ export class Game {
   // Clear colonist sprite cache on new game to ensure fresh sprite composition
   colonistSpriteCache.clear();
   
-  this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - (this.canvas.width / this.DPR) / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - (this.canvas.height / this.DPR) / (2 * this.camera.zoom);
+  this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; 
+  // Initialize ore resources
+  this.RES.coal = 0; this.RES.copper = 0; this.RES.steel = 0; this.RES.silver = 0; this.RES.gold = 0;
+  
+  this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - (this.canvas.width / this.DPR) / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - (this.canvas.height / this.DPR) / (2 * this.camera.zoom);
+    
+    // Generate procedural mountains BEFORE building HQ and scattering resources
+    const hqGridX = Math.floor(HQ_POS.x / T);
+    const hqGridY = Math.floor(HQ_POS.y / T);
+    generateMountains(this.terrainGrid, hqGridX, hqGridY, 15);
+    
+    // Mark world cache dirty so mountains render properly
+    this.renderManager?.invalidateWorldCache();
+    
     this.buildHQ();
     this.scatter();
   for (let i = 0; i < 3; i++) { const a = rand(0, Math.PI * 2); const r = 80 + rand(-10, 10); this.spawnColonist({ x: HQ_POS.x + Math.cos(a) * r, y: HQ_POS.y + Math.sin(a) * r }); }
@@ -1849,6 +1807,42 @@ export class Game {
         this.msg(`${c.profile?.name || 'Colonist'} starts with a pistol for defense.`, 'info');
       }
     }
+
+    // Create initial stockpile zones for resource hauling
+    // Without these, colonists won't haul chopped/mined resources!
+    const hqX = HQ_POS.x;
+    const hqY = HQ_POS.y;
+    
+    // General storage near HQ (accepts all items)
+    const generalZone = this.itemManager.createStockpileZone(
+      hqX - 160, // 5 tiles left of HQ
+      hqY - 160, // 5 tiles above HQ
+      128,       // 4x4 tiles
+      128,
+      'General Storage'
+    );
+    // Allow all items by default
+    generalZone.settings.allowAll = true;
+    
+    // Materials storage (wood, stone) - closer to HQ for construction
+    const materialsZone = this.itemManager.createStockpileZone(
+      hqX + 96,  // 3 tiles right of HQ  
+      hqY - 96,  // 3 tiles above HQ
+      96,        // 3x3 tiles
+      96,
+      'Materials'
+    );
+    this.itemManager.updateStockpileItems(materialsZone.id, ['wood', 'stone']);
+    
+    // Food storage - separate zone for organization
+    const foodZone = this.itemManager.createStockpileZone(
+      hqX - 96,  // 3 tiles left of HQ
+      hqY + 96,  // 3 tiles below HQ
+      64,        // 2x2 tiles
+      64,
+      'Food Storage'
+    );
+    this.itemManager.updateStockpileItems(foodZone.id, ['food', 'wheat', 'bread']);
     this.msg("Welcome! Build farms before night, then turrets.");
   }
 
@@ -1913,6 +1907,7 @@ export class Game {
 
   // AI
   assignedTargets = new WeakSet<object>();
+  assignedTiles = new Set<string>(); // For tracking mountain tile assignments by "gx,gy" key
   // Limit how many colonists work on one build site concurrently
   buildReservations = new Map<Building, number>();
   // Track how many colonists are inside a building (for capacity)
@@ -2044,7 +2039,16 @@ export class Game {
     }
 
     // release old reserved target
-    if (c.target && (c.target as any).type && this.assignedTargets.has(c.target)) this.assignedTargets.delete(c.target);
+    if (c.target) {
+      const oldTarget = c.target as any;
+      // Handle mountain tile keys
+      if (oldTarget.gx !== undefined && oldTarget.gy !== undefined) {
+        const oldTileKey = `${oldTarget.gx},${oldTarget.gy}`;
+        if (this.assignedTiles.has(oldTileKey)) this.assignedTiles.delete(oldTileKey);
+      } else if (oldTarget.type && this.assignedTargets.has(oldTarget)) {
+        this.assignedTargets.delete(oldTarget);
+      }
+    }
     // release old build reservation if changing away from that building
     if (c.reservedBuildFor && c.reservedBuildFor !== target) this.releaseBuildReservation(c);
     c.task = task;
@@ -2099,8 +2103,15 @@ export class Game {
       };
     }
     
-    // reserve resources so only one colonist picks the same tree/rock
-    if (target && (target as any).type && ((target as any).type === 'tree' || (target as any).type === 'rock')) this.assignedTargets.add(target);
+    // reserve resources so only one colonist picks the same tree/rock/mountain
+    const targetObj = target as any;
+    if (targetObj && targetObj.type && (targetObj.type === 'tree' || targetObj.type === 'rock')) {
+      this.assignedTargets.add(target);
+    } else if (targetObj && targetObj.gx !== undefined && targetObj.gy !== undefined) {
+      // Mountain tile assignment
+      const tileKey = `${targetObj.gx},${targetObj.gy}`;
+      this.assignedTiles.add(tileKey);
+    }
     // reserve a build slot
     if (task === 'build' && target && (target as Building).w != null && !c.reservedBuildFor) {
       const b = target as Building; const cur = this.buildReservations.get(b) || 0; const maxCrew = this.getMaxCrew(b);

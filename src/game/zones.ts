@@ -23,6 +23,14 @@ export const ZONE_TYPES: Record<string, ZoneDef> = {
     color: COLORS.stock,
     isZone: true
   },
+  mine: {
+    category: 'Zones',
+    name: 'Mining Zone',
+    description: 'Drag to designate an area for mining. Colonists will mine mountains and rocks within this zone.',
+    key: '6',
+    color: '#f59e0b', // Orange/amber color
+    isZone: true
+  },
   // Future zones can be added here (growing zones, dumping zones, etc.)
 };
 

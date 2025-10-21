@@ -16,6 +16,12 @@ export interface Resources {
   herbal: number;
   wheat: number;
   bread: number;
+  // Ore resources from mountains
+  coal: number;
+  copper: number;
+  steel: number;
+  silver: number;
+  gold: number;
 }
 
 export type ResourceType = keyof Resources;
@@ -28,7 +34,12 @@ export class ResourceSystem {
     medicine: 5,
     herbal: 3,
     wheat: 0,
-    bread: 0
+    bread: 0,
+    coal: 0,
+    copper: 0,
+    steel: 0,
+    silver: 0,
+    gold: 0
   };
   
   private baseStorage = 200;
@@ -170,7 +181,12 @@ export class ResourceSystem {
       medicine: 5,
       herbal: 3,
       wheat: 0,
-      bread: 0
+      bread: 0,
+      coal: 0,
+      copper: 0,
+      steel: 0,
+      silver: 0,
+      gold: 0
     };
     this.storageFullWarned = false;
   }

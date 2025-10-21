@@ -58,90 +58,183 @@ function pickTarget(game: Game, origin: { x: number; y: number }, range: number)
 
 export function updateTurret(game: Game, b: Building, dt: number) {
   if (!('range' in b) || !(b as any).range) return;
-  (b as any).cooldown = Math.max(0, ((b as any).cooldown || 0) - dt);
-
-  // Update flash timer
-  if ('flashTimer' in b) {
-    (b as any).flashTimer = Math.max(0, ((b as any).flashTimer || 0) - dt);
+  
+  // Initialize turret state
+  if (!(b as any).turretState) {
+    (b as any).turretState = {
+      cooldown: 0,
+      flashTimer: 0,
+      target: null,
+      currentBurst: 0,
+      burstDelay: 0,
+      rotation: 0  // Angle in radians toward target
+    };
   }
-
+  
+  const state = (b as any).turretState;
   const bc = game.centerOf(b);
-  const range = (b as any).range || 160;
-  const fireRate = (b as any).fireRate || 0.6;
-  const dps = (b as any).dps || 12;
-
-  // Target persistence to reduce thrashing
-  let target: Enemy | null = (b as any).target || null;
+  
+  // Get turret weapon stats from itemDatabase
+  const weaponDefName = (b as any).weaponDefName || 'TurretGun';
+  const weaponDef = itemDatabase.getItemDef(weaponDefName);
+  
+  if (!weaponDef) {
+    console.warn(`Turret weapon "${weaponDefName}" not found in itemDatabase`);
+    return;
+  }
+  
+  const range = (b as any).range || 924.8; // 28.9 tiles
+  const burstCount = weaponDef.burstCount || 2;
+  const cooldownSeconds = weaponDef.cooldownTicks ? (weaponDef.cooldownTicks / 30) : 4.8; // Convert RimWorld ticks to game seconds
+  const damage = weaponDef.damage || 30;
+  const armorPenetration = weaponDef.armorPenetration || 0.20;
+  const stoppingPower = weaponDef.stoppingPower || 1.0;
+  const burstDelaySeconds = 0.1; // 0.1 second between burst shots
+  
+  // Update timers
+  state.cooldown = Math.max(0, state.cooldown - dt);
+  state.flashTimer = Math.max(0, state.flashTimer - dt);
+  state.burstDelay = Math.max(0, state.burstDelay - dt);
+  
+  // Target acquisition
+  let target: Enemy | null = state.target;
   if (!target || target.hp <= 0 || Math.hypot(target.x - bc.x, target.y - bc.y) > range || !hasLineOfFire(game, bc, target)) {
     target = pickTarget(game, bc, range);
-    (b as any).target = target || null;
+    state.target = target || null;
   }
   if (!target) return;
-
-  if (((b as any).cooldown || 0) <= 0) {
-    // Accuracy model: closer = more accurate; base 75% at mid-range
-    const dist = Math.hypot(target.x - bc.x, target.y - bc.y);
-    const accuracy = Math.max(0.35, Math.min(0.95, 0.85 - (dist / range) * 0.3));
-    
-    // Roll for hit/miss
-    const hitRoll = Math.random();
-    const ang = Math.atan2(target.y - bc.y, target.x - bc.x);
-    let ax: number, ay: number;
-    
-    if (hitRoll <= accuracy) {
-      // Hit! Aim at target with minor spread
-      const minorSpread = (1 - accuracy) * 8; // degrees
-      const spreadRad = (minorSpread * Math.PI) / 180;
-      const jitter = (Math.random() - 0.5) * spreadRad;
-      const aimAng = ang + jitter;
-      ax = bc.x + Math.cos(aimAng) * dist;
-      ay = bc.y + Math.sin(aimAng) * dist;
-    } else {
-      // Miss! Shot goes wide
-      const missSpread = 30; // degrees
-      const spreadRad = (missSpread * Math.PI) / 180;
-      const jitter = (Math.random() - 0.5) * spreadRad;
-      const aimAng = ang + jitter;
-      const missDist = dist * (1.2 + Math.random() * 0.6); // 120-180% of target distance
-      ax = bc.x + Math.cos(aimAng) * missDist;
-      ay = bc.y + Math.sin(aimAng) * missDist;
+  
+  // Update rotation to face target
+  state.rotation = Math.atan2(target.y - bc.y, target.x - bc.x);
+  
+  // Handle burst firing
+  if (state.currentBurst > 0) {
+    // Still firing burst
+    if (state.burstDelay <= 0) {
+      fireTurretShot(game, b, bc, target, state, weaponDef, damage, armorPenetration, stoppingPower, range);
+      state.currentBurst--;
+      state.burstDelay = burstDelaySeconds;
+      
+      if (state.currentBurst === 0) {
+        // Burst complete, start cooldown
+        state.cooldown = cooldownSeconds;
+      }
     }
+  } else if (state.cooldown <= 0) {
+    // Ready to start new burst
+    state.currentBurst = burstCount;
+    state.burstDelay = 0; // Fire first shot immediately
+  }
+}
 
-    // Create a fast projectile
-    const bullet: Bullet = {
-      x: bc.x, y: bc.y,
-      tx: ax, ty: ay,
-      t: 0.12,
-      speed: 700,
-      dmg: dps, // apply per shot (approximate RimWorld burst by fireRate)
-      life: 0,
-      maxLife: Math.max(0.12, dist / 700 + 0.1),
-      owner: 'turret'
-    };
-    // Compute velocity toward aim
-    const dx = ax - bc.x, dy = ay - bc.y; const L = Math.hypot(dx, dy) || 1;
-    bullet.vx = (dx / L) * (bullet.speed as number);
-    bullet.vy = (dy / L) * (bullet.speed as number);
-    (bullet as any).particles = createProjectileTrail(bullet);
-    game.bullets.push(bullet);
-
-    // Muzzle flash
-    const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang);
-    game.particles.push(...muzzleFlash);
-    (b as any).flashTimer = 0.08;
-    
-    // Play turret fire sound (use default autopistol fire)
-    const turretAudioKey = getWeaponAudioByDefName(itemDatabase, undefined, true);
-    if (turretAudioKey) {
-      game.playAudio(turretAudioKey, { 
-        volume: 0.7, 
-        rng: Math.random,
-        position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
-        listenerPosition: game.audioManager.getListenerPosition()
-      });
-    }
-    
-  (b as any).cooldown = fireRate;
+function fireTurretShot(
+  game: Game, 
+  b: Building, 
+  bc: { x: number; y: number }, 
+  target: Enemy, 
+  state: any,
+  weaponDef: any,
+  damage: number,
+  armorPenetration: number,
+  stoppingPower: number,
+  range: number
+) {
+  const dist = Math.hypot(target.x - bc.x, target.y - bc.y);
+  const distTiles = dist / 32; // Convert pixels to tiles
+  
+  // Calculate accuracy based on distance
+  // Interpolate between accuracy ranges
+  let baseAccuracy = 0.96; // Default
+  if (distTiles <= 3) {
+    baseAccuracy = weaponDef.accuracyTouch || 0.96;
+  } else if (distTiles <= 12) {
+    // Interpolate between touch and short
+    const t = (distTiles - 3) / (12 - 3);
+    const accTouch = weaponDef.accuracyTouch || 0.96;
+    const accShort = weaponDef.accuracyShort || 0.96;
+    baseAccuracy = accTouch + (accShort - accTouch) * t;
+  } else if (distTiles <= 25) {
+    // Interpolate between short and medium
+    const t = (distTiles - 12) / (25 - 12);
+    const accShort = weaponDef.accuracyShort || 0.96;
+    const accMedium = weaponDef.accuracyMedium || 0.96;
+    baseAccuracy = accShort + (accMedium - accShort) * t;
+  } else if (distTiles <= 40) {
+    // Interpolate between medium and long
+    const t = (distTiles - 25) / (40 - 25);
+    const accMedium = weaponDef.accuracyMedium || 0.96;
+    const accLong = weaponDef.accuracyLong || 0.96;
+    baseAccuracy = accMedium + (accLong - accMedium) * t;
+  } else {
+    baseAccuracy = weaponDef.accuracyLong || 0.96;
+  }
+  
+  // Per-tile accuracy penalty (shooting skill 8 equivalent already in base accuracy)
+  const finalAccuracy = Math.max(0.1, Math.min(0.99, baseAccuracy));
+  
+  // Roll for hit/miss
+  const hitRoll = Math.random();
+  const ang = state.rotation;
+  let ax: number, ay: number;
+  let targetPawn: Enemy | undefined = undefined;
+  
+  if (hitRoll <= finalAccuracy) {
+    // Hit! Aim at target with minor spread
+    const minorSpread = (1 - finalAccuracy) * 5; // degrees
+    const spreadRad = (minorSpread * Math.PI) / 180;
+    const jitter = (Math.random() - 0.5) * spreadRad;
+    const aimAng = ang + jitter;
+    ax = target.x + (Math.random() - 0.5) * 10; // Small spread on target
+    ay = target.y + (Math.random() - 0.5) * 10;
+    targetPawn = target; // Mark for damage application
+  } else {
+    // Miss! Shot goes wide
+    const missSpread = 35; // degrees
+    const spreadRad = (missSpread * Math.PI) / 180;
+    const jitter = (Math.random() - 0.5) * spreadRad;
+    const aimAng = ang + jitter;
+    const missDist = dist * (1.2 + Math.random() * 0.8); // 120-200% of target distance
+    ax = bc.x + Math.cos(aimAng) * missDist;
+    ay = bc.y + Math.sin(aimAng) * missDist;
+  }
+  
+  // Create projectile
+  const bullet: Bullet = {
+    x: bc.x, y: bc.y,
+    tx: ax, ty: ay,
+    t: 0.08,
+    speed: 850, // Fast turret rounds
+    dmg: damage,
+    life: 0,
+    maxLife: Math.max(0.08, dist / 850 + 0.15),
+    owner: 'turret',
+    armorPenetration: armorPenetration,
+    stoppingPower: stoppingPower,
+    targetPawn: targetPawn // For friendly fire tracking
+  };
+  
+  // Compute velocity
+  const dx = ax - bc.x, dy = ay - bc.y;
+  const L = Math.hypot(dx, dy) || 1;
+  bullet.vx = (dx / L) * (bullet.speed as number);
+  bullet.vy = (dy / L) * (bullet.speed as number);
+  (bullet as any).particles = createProjectileTrail(bullet);
+  game.bullets.push(bullet);
+  
+  // Muzzle flash
+  const muzzleFlash = createMuzzleFlash(bc.x, bc.y, ang);
+  game.particles.push(...muzzleFlash);
+  state.flashTimer = 0.15; // Longer flash for visibility
+  
+  // Play turret fire sound
+  const turretAudioKey = getWeaponAudioByDefName(itemDatabase, weaponDef.defName, true);
+  if (turretAudioKey) {
+    game.playAudio(turretAudioKey, { 
+      volume: 0.75, 
+      rng: Math.random,
+      position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
+      listenerPosition: game.audioManager.getListenerPosition()
+    });
   }
 }
 
@@ -169,7 +262,10 @@ export function updateProjectiles(game: Game, dt: number) {
 
       // Collision with enemies
       let hitEnemy: Enemy | null = null;
+      let hitColonist: any | null = null;
+      
       if (!hitBlocked) {
+        // Check enemy collision
         for (const e of game.enemies) {
           // Segment-circle intersection
           const dx = b.x - prevX, dy = b.y - prevY;
@@ -185,44 +281,40 @@ export function updateProjectiles(game: Game, dt: number) {
             if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)) { hitEnemy = e; break; }
           }
         }
+        
+        // Check colonist collision (friendly fire from turrets)
+        if (!hitEnemy && b.owner === 'turret') {
+          for (const col of game.colonists) {
+            const colRadius = (col as any).r || 12;
+            const dx = b.x - prevX, dy = b.y - prevY;
+            const fx = prevX - col.x, fy = prevY - col.y;
+            const a = dx*dx + dy*dy;
+            const b2 = 2 * (fx*dx + fy*dy);
+            const c = fx*fx + fy*fy - (colRadius * colRadius);
+            let disc = b2*b2 - 4*a*c;
+            if (disc >= 0) {
+              disc = Math.sqrt(disc);
+              const t1 = (-b2 - disc) / (2*a);
+              const t2 = (-b2 + disc) / (2*a);
+              if ((t1 >= 0 && t1 <= 1) || (t2 >= 0 && t2 <= 1)) { hitColonist = col; break; }
+            }
+          }
+        }
       }
 
       if (hitEnemy) {
         let dmg = Math.max(1, Math.round((b.dmg || 10)));
         
-        // Check if this is hitting a colonist (for friendly fire)
-        const isColonist = (game.colonists as any[]).includes(hitEnemy);
+        // Apply armor penetration if armor exists
+        const ap = (b as any).armorPenetration || 0;
+        // Enemies don't have armor yet, but keep the system ready
         
-        // Apply armor penetration if target has armor
-        if (isColonist) {
-          const colonist = hitEnemy as any;
-          const armorItem = colonist.inventory?.equipment?.armor;
-          if (armorItem && armorItem.defName) {
-            const armorDef = (game as any).itemDatabase?.getItemDef?.(armorItem.defName);
-            if (armorDef && armorDef.armorRating) {
-              const ap = (b as any).armorPenetration || 0;
-              const effectiveArmor = Math.max(0, armorDef.armorRating - ap);
-              dmg = Math.round(dmg * (1 - effectiveArmor));
-            }
-          }
-          
-          // Apply damage to colonist
-          (game as any).applyDamageToColonist(hitEnemy, dmg, 'gunshot');
-          
-          // Apply stopping power (stagger effect)
-          const sp = (b as any).stoppingPower || 0;
-          if (sp >= 1) {
-            colonist.staggeredUntil = (colonist.t || 0) + 1.58; // 95 ticks at 60fps = 1.58 seconds
-          }
-        } else {
-          // Regular enemy damage (enemies don't have armor yet)
-          hitEnemy.hp -= dmg;
-          
-          // Apply stopping power to enemies
-          const sp = (b as any).stoppingPower || 0;
-          if (sp >= 1) {
-            (hitEnemy as any).staggeredUntil = performance.now() / 1000 + 1.58;
-          }
+        hitEnemy.hp -= dmg;
+        
+        // Apply stopping power to enemies
+        const sp = (b as any).stoppingPower || 0;
+        if (sp >= 1) {
+          (hitEnemy as any).staggeredUntil = performance.now() / 1000 + 1.58;
         }
         
         // Shooting XP for the colonist who fired this bullet
@@ -235,7 +327,37 @@ export function updateProjectiles(game: Game, dt: number) {
             }
           }
         }
+        
         const impact = createImpactEffect(hitEnemy.x, hitEnemy.y);
+        game.particles.push(...impact);
+        game.bullets.splice(i, 1);
+        continue;
+      }
+      
+      if (hitColonist) {
+        // Friendly fire!
+        let dmg = Math.max(1, Math.round((b.dmg || 10)));
+        
+        // Apply armor penetration
+        const ap = (b as any).armorPenetration || 0;
+        const colonist = hitColonist;
+        const armorReduction = game.getArmorReduction(colonist);
+        const effectiveArmor = Math.max(0, armorReduction - ap);
+        dmg = Math.round(dmg * (1 - effectiveArmor));
+        
+        // Apply damage to colonist (gunshot type)
+        game.applyDamageToColonist(colonist, dmg, 'gunshot');
+        
+        // Apply stopping power (stagger effect)
+        const sp = (b as any).stoppingPower || 0;
+        if (sp >= 1 && colonist.state !== 'downed') {
+          colonist.staggeredUntil = (colonist.t || 0) + 1.58; // 95 ticks at 60fps = 1.58 seconds
+        }
+        
+        // Warning message
+        game.msg(`Turret hit ${colonist.profile?.name || 'Colonist'}! Friendly fire!`, 'warn');
+        
+        const impact = createImpactEffect(colonist.x, colonist.y);
         game.particles.push(...impact);
         game.bullets.splice(i, 1);
         continue;

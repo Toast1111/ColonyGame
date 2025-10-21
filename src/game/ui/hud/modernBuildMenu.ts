@@ -138,6 +138,9 @@ export function drawModernBuildMenu(
   selectedCategory: string | null,
   game: any
 ): BuildMenuRects {
+  // Save canvas state to prevent text alignment leaks
+  ctx.save();
+  
   const hotbarHeight = getModernHotbarHeight(canvas, game);
   const {
     menuHeight,
@@ -401,6 +404,9 @@ export function drawModernBuildMenu(
     );
   }
 
+  // Restore canvas state to prevent text alignment leaks
+  ctx.restore();
+  
   return rects;
 }
 

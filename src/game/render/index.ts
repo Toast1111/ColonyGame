@@ -1,7 +1,7 @@
 import { COLORS, T, WORLD } from "../constants";
 import type { Building, Bullet, Camera, Particle } from "../types";
 import type { TerrainGrid } from "../terrain";
-import { getFloorTypeFromId, FloorType, FLOOR_VISUALS } from "../terrain";
+import { getFloorTypeFromId, FloorType, FLOOR_VISUALS, getTerrainTypeFromId, TerrainType, getOreTypeFromId, OreType, ORE_PROPERTIES } from "../terrain";
 import { ImageAssets } from "../../assets/images";
 import { getColonistMood } from "../colonist_systems/colonistGenerator";
 import { drawParticles } from "../../core/particles";
@@ -42,18 +42,14 @@ export function applyWorldTransform(ctx: CanvasRenderingContext2D, cam: Camera) 
 }
 
 // Simple ground renderer with grid
-export function drawGround(ctx: CanvasRenderingContext2D, camera?: Camera) {
+// Now integrated with terrain system - draws ground and mountains together
+export function drawGround(ctx: CanvasRenderingContext2D, camera?: Camera, terrainGrid?: TerrainGrid) {
   ctx.save();
-  // Base ground
-  ctx.fillStyle = COLORS.ground;
-  ctx.fillRect(0, 0, WORLD.w, WORLD.h);
-  
-  // High-contrast grid that stays ~1px in screen space
-  const tr = (ctx as any).getTransform ? (ctx.getTransform() as DOMMatrix) : null;
-  const zoom = tr ? Math.max(0.001, tr.a) : 1;
-  ctx.lineWidth = Math.max(1 / zoom, 0.75 / zoom);
   
   // Calculate visible bounds for grid culling
+  const tr = (ctx as any).getTransform ? (ctx.getTransform() as DOMMatrix) : null;
+  const zoom = tr ? Math.max(0.001, tr.a) : 1;
+  
   let startX = 0, endX = WORLD.w, startY = 0, endY = WORLD.h;
   if (camera) {
     const canvasWidth = ctx.canvas.width / zoom;
@@ -63,6 +59,37 @@ export function drawGround(ctx: CanvasRenderingContext2D, camera?: Camera) {
     startY = Math.max(0, Math.floor(camera.y / T) * T);
     endY = Math.min(WORLD.h, Math.ceil((camera.y + canvasHeight) / T) * T);
   }
+  
+  // If we have terrain grid, draw tile-by-tile to respect mountains
+  if (terrainGrid) {
+    const startGX = Math.floor(startX / T);
+    const startGY = Math.floor(startY / T);
+    const endGX = Math.ceil(endX / T);
+    const endGY = Math.ceil(endY / T);
+    
+    for (let gy = startGY; gy < endGY; gy++) {
+      for (let gx = startGX; gx < endGX; gx++) {
+        if (gx < 0 || gy < 0 || gx >= terrainGrid.cols || gy >= terrainGrid.rows) continue;
+        
+        const idx = gy * terrainGrid.cols + gx;
+        const terrainType = getTerrainTypeFromId(terrainGrid.terrain[idx]);
+        
+        // Skip mountain tiles - they'll be drawn by drawMountains()
+        if (terrainType === TerrainType.MOUNTAIN) continue;
+        
+        // Draw ground tile
+        ctx.fillStyle = COLORS.ground;
+        ctx.fillRect(gx * T, gy * T, T, T);
+      }
+    }
+  } else {
+    // Fallback: draw entire ground as before
+    ctx.fillStyle = COLORS.ground;
+    ctx.fillRect(0, 0, WORLD.w, WORLD.h);
+  }
+  
+  // High-contrast grid that stays ~1px in screen space
+  ctx.lineWidth = Math.max(1 / zoom, 0.75 / zoom);
   
   // Use rgba() instead of globalAlpha for better performance
   ctx.strokeStyle = 'rgba(30, 41, 59, 0.5)'; // #1e293b with 0.5 alpha
@@ -128,6 +155,94 @@ export function drawFloors(ctx: CanvasRenderingContext2D, terrainGrid: TerrainGr
       // Subtle border to distinguish tiles
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
       ctx.lineWidth = 1;
+      ctx.strokeRect(wx, wy, T, T);
+    }
+  }
+  
+  ctx.restore();
+}
+
+// Render mountains and ore deposits
+export function drawMountains(ctx: CanvasRenderingContext2D, terrainGrid: TerrainGrid, camera: Camera) {
+  if (!terrainGrid) return;
+  
+  ctx.save();
+  
+  // Calculate visible bounds for performance
+  const startX = Math.max(0, Math.floor(camera.x / T));
+  const startY = Math.max(0, Math.floor(camera.y / T));
+  const endX = Math.min(terrainGrid.cols, Math.ceil((camera.x + ctx.canvas.width / camera.zoom) / T) + 1);
+  const endY = Math.min(terrainGrid.rows, Math.ceil((camera.y + ctx.canvas.height / camera.zoom) / T) + 1);
+  
+  // Draw each mountain tile
+  for (let gy = startY; gy < endY; gy++) {
+    for (let gx = startX; gx < endX; gx++) {
+      const idx = gy * terrainGrid.cols + gx;
+      const terrainType = getTerrainTypeFromId(terrainGrid.terrain[idx]);
+      
+      // Skip non-mountain tiles
+      if (terrainType !== TerrainType.MOUNTAIN) continue;
+      
+      const wx = gx * T;
+      const wy = gy * T;
+      
+      // Check if ore is visible (exposed)
+      const isOreVisible = terrainGrid.oreVisible[idx] === 1;
+      const oreType = getOreTypeFromId(terrainGrid.ores[idx]);
+      
+      // Draw base mountain color
+      let baseColor = '#3f3f46'; // Dark gray
+      let accentColor = '#27272a'; // Darker gray
+      
+      // If ore is visible, use ore colors
+      if (isOreVisible && oreType !== OreType.NONE) {
+        const oreProps = ORE_PROPERTIES[oreType];
+        baseColor = oreProps.color;
+        accentColor = oreProps.secondaryColor || oreProps.color;
+      }
+      
+      // Draw mountain tile with texture
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(wx, wy, T, T);
+      
+      // Add rocky texture (diagonal stripes)
+      ctx.fillStyle = accentColor;
+      ctx.globalAlpha = 0.3;
+      for (let i = 0; i < 4; i++) {
+        const offset = (gx + gy + i) % 4;
+        ctx.fillRect(wx + offset * 8, wy, 4, T);
+      }
+      ctx.globalAlpha = 1;
+      
+      // Draw ore veins if visible (more prominent than texture)
+      if (isOreVisible && oreType !== OreType.NONE) {
+        const oreProps = ORE_PROPERTIES[oreType];
+        ctx.fillStyle = oreProps.color;
+        ctx.globalAlpha = 0.7;
+        
+        // Draw ore vein pattern (diagonal veins)
+        ctx.beginPath();
+        const veinOffset = (gx * 123 + gy * 456) % T;
+        ctx.moveTo(wx + veinOffset, wy);
+        ctx.lineTo(wx + veinOffset + 8, wy);
+        ctx.lineTo(wx + veinOffset - 8, wy + T);
+        ctx.lineTo(wx + veinOffset - 16, wy + T);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Add ore sparkle effect
+        ctx.fillStyle = oreProps.secondaryColor || oreProps.color;
+        ctx.globalAlpha = 0.5;
+        const sparkleX = wx + ((gx * 789) % (T - 4)) + 2;
+        const sparkleY = wy + ((gy * 321) % (T - 4)) + 2;
+        ctx.fillRect(sparkleX, sparkleY, 3, 3);
+        
+        ctx.globalAlpha = 1;
+      }
+      
+      // Draw mountain edge shadows (darker on unexposed sides)
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+      ctx.lineWidth = 2;
       ctx.strokeRect(wx, wy, T, T);
     }
   }
@@ -295,9 +410,51 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.strokeRect(b.x + .5, b.y + .5, b.w - 1, b.h - 1);
     
     // Turret flash effect when firing
-    if (b.kind === 'turret' && (b as any).flashTimer > 0) {
-      ctx.fillStyle = '#ffffff88';
-      ctx.fillRect(b.x, b.y, b.w, b.h);
+    if (b.kind === 'turret') {
+      const turretState = (b as any).turretState;
+      if (turretState && turretState.flashTimer > 0) {
+        // Brighter flash with pulsing effect
+        const flashIntensity = Math.min(1, turretState.flashTimer / 0.15);
+        const alpha = Math.floor(flashIntensity * 200).toString(16).padStart(2, '0');
+        ctx.fillStyle = `#ffaa00${alpha}`; // Orange flash
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+        
+        // Add gun barrel visual (rotated toward target)
+        if (turretState.rotation !== undefined) {
+          ctx.save();
+          const cx = b.x + b.w / 2;
+          const cy = b.y + b.h / 2;
+          ctx.translate(cx, cy);
+          ctx.rotate(turretState.rotation);
+          
+          // Draw barrel
+          ctx.fillStyle = '#666';
+          ctx.fillRect(6, -2, 12, 4);
+          
+          // Draw barrel tip (muzzle)
+          ctx.fillStyle = '#333';
+          ctx.fillRect(16, -1, 2, 2);
+          
+          ctx.restore();
+        }
+      } else if (turretState && turretState.rotation !== undefined) {
+        // Draw turret barrel even when not firing
+        ctx.save();
+        const cx = b.x + b.w / 2;
+        const cy = b.y + b.h / 2;
+        ctx.translate(cx, cy);
+        ctx.rotate(turretState.rotation);
+        
+        // Draw barrel
+        ctx.fillStyle = '#555';
+        ctx.fillRect(6, -2, 12, 4);
+        
+        // Draw barrel tip
+        ctx.fillStyle = '#333';
+        ctx.fillRect(16, -1, 2, 2);
+        
+        ctx.restore();
+      }
     }
   }
 

@@ -243,7 +243,12 @@ export function getResourceDisplayName(resourceType: keyof Resources): string {
     wheat: 'Wheat',
     bread: 'Bread',
     medicine: 'Medicine',
-    herbal: 'Herbal Medicine'
+    herbal: 'Herbal Medicine',
+    coal: 'Coal',
+    copper: 'Copper',
+    steel: 'Steel',
+    silver: 'Silver',
+    gold: 'Gold'
   };
   
   return names[resourceType] || resourceType;
@@ -260,7 +265,12 @@ export function getResourceIcon(resourceType: keyof Resources): string {
     wheat: '🌾',
     bread: '🍞',
     medicine: '💊',
-    herbal: '🌿'
+    herbal: '🌿',
+    coal: '⚫',
+    copper: '🟤',
+    steel: '⚙️',
+    silver: '⚪',
+    gold: '🟡'
   };
   
   return icons[resourceType] || '📦';

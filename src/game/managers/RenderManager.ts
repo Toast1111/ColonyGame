@@ -5,7 +5,7 @@
 
 import type { Game } from '../Game';
 import { COLORS, T, WORLD } from '../constants';
-import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render/index';
+import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawMountains, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render/index';
 import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/panels/colonistProfile';
@@ -45,6 +45,13 @@ export class RenderManager {
       // Clear cache when disabled
       worldBackgroundCache.markDirty();
     }
+  }
+
+  /**
+   * Invalidate world cache (e.g., after terrain changes like mountain generation)
+   */
+  public invalidateWorldCache(): void {
+    worldBackgroundCache.markDirty();
   }
 
   /**
@@ -131,8 +138,9 @@ export class RenderManager {
       ctx.drawImage(worldCanvas, 0, 0);
     } else {
       // Legacy rendering (hundreds of fillRect calls)
-      drawGround(ctx, game.camera);
+      drawGround(ctx, game.camera, game.terrainGrid); // Pass terrainGrid so it can skip mountain tiles
       drawFloors(ctx, game.terrainGrid, game.camera);
+      drawMountains(ctx, game.terrainGrid, game.camera); // Draw mountains after floors
     }
 
     // Render stockpile zones and floor items between terrain and entities
@@ -142,6 +150,29 @@ export class RenderManager {
       (game as any).itemManager.renderer.renderStockpileZones(zones, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
       const stacks = (game as any).itemManager.floorItems.getVisualStacks();
       (game as any).itemManager.renderer.renderFloorItems(stacks, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
+    }
+
+    // Render mining zones
+    if ((game as any).miningZones) {
+      this.renderMiningZones();
+    }
+  }
+
+  /**
+   * Render mining zones with orange overlay
+   */
+  private renderMiningZones(): void {
+    const { game } = this;
+    const { ctx } = game;
+    const miningZones = (game as any).miningZones || [];
+
+    for (const zone of miningZones) {
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.15)'; // Orange with transparency
+      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
+      
+      ctx.strokeStyle = '#f59e0b'; // Solid orange border
+      ctx.lineWidth = 2;
+      ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
     }
   }
 
