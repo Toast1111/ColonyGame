@@ -227,7 +227,7 @@ export function adjustColor(hexColor: string, amount: number): string {
   g = adjust(g);
   b = adjust(b);
 
-  const toHex = (value: number) => value.toString(16).padStart(2, '0');
+  const toHex = (value: number) => Math.round(value).toString(16).padStart(2, '0');
 
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
