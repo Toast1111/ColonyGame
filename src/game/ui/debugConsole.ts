@@ -300,10 +300,10 @@ export function initDebugConsole(game: Game) {
 
   // NEW COMMANDS
 
-  // Drop floor items using RimWorld system
+  // Drop floor items using floor item system
   reg("drop", (g, args) => {
-    const rim = (g as any).rimWorld;
-    if (!rim) return "RimWorld system not initialized";
+    const rim = (g as any).itemManager;
+    if (!rim) return "Floor item system not initialized";
     const itemType = (args[0] || "").toLowerCase();
     const allowed = ['wood','stone','food','metal','cloth','medicine'];
     if (!allowed.includes(itemType)) {
@@ -373,8 +373,8 @@ export function initDebugConsole(game: Game) {
 
   // Stockpile zone management
   reg("stockpile", (g, args) => {
-    const rim = (g as any).rimWorld;
-    if (!rim) return "RimWorld system not initialized";
+    const rim = (g as any).itemManager;
+    if (!rim) return "Floor item system not initialized";
     const sub = (args[0] || '').toLowerCase();
 
     // Helper to resolve zone id or 'last'
@@ -448,8 +448,8 @@ export function initDebugConsole(game: Game) {
 
   // Floor items debug/info
   reg("items", (g, args) => {
-    const rim = (g as any).rimWorld;
-    if (!rim) return "RimWorld system not initialized";
+    const rim = (g as any).itemManager;
+    if (!rim) return "Floor item system not initialized";
     const sub = (args[0] || 'list').toLowerCase();
 
     if (sub === 'list') {

@@ -17,8 +17,10 @@ import { drawWorkPriorityPanel } from '../ui/panels/workPriorityPanel';
 import { drawBuildingInventoryPanel } from '../ui/panels/buildingInventoryPanel';
 import { drawModernHotbar, type HotbarTabRect } from '../ui/hud/modernHotbar';
 import { drawModernBuildMenu, type BuildMenuRects } from '../ui/hud/modernBuildMenu';
+import { drawControlPanel, type ControlPanelRect } from '../ui/hud/controlPanel';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
+import { getZoneDef, isZone } from '../zones';
 import { drawDebugConsole } from '../ui/debugConsole';
 import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/panels/performanceHUD';
@@ -133,13 +135,13 @@ export class RenderManager {
       drawFloors(ctx, game.terrainGrid, game.camera);
     }
 
-    // Render RimWorld stockpile zones and floor items between terrain and entities
-    if ((game as any).rimWorld) {
+    // Render stockpile zones and floor items between terrain and entities
+    if ((game as any).itemManager) {
       // We are already in world space (applyWorldTransform active)
-      const zones = (game as any).rimWorld.stockpiles.getAllZones();
-      (game as any).rimWorld.renderer.renderStockpileZones(zones, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
-      const stacks = (game as any).rimWorld.floorItems.getVisualStacks();
-      (game as any).rimWorld.renderer.renderFloorItems(stacks, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
+      const zones = (game as any).itemManager.stockpiles.getAllZones();
+      (game as any).itemManager.renderer.renderStockpileZones(zones, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
+      const stacks = (game as any).itemManager.floorItems.getVisualStacks();
+      (game as any).itemManager.renderer.renderFloorItems(stacks, game.camera.x, game.camera.y, { isWorldTransformed: true, zoom: game.camera.zoom });
     }
   }
 
@@ -444,13 +446,17 @@ export class RenderManager {
     // Ghost building preview
     if (game.selectedBuild && !game.pendingPlacement) {
       const def = BUILD_TYPES[game.selectedBuild];
-      const gx = Math.floor(game.mouse.wx / T) * T;
-      const gy = Math.floor(game.mouse.wy / T) * T;
-      const can = canPlacePlacement(game, { ...def, size: def.size } as any, gx, gy) && hasCost(game.RES, def.cost);
-      // Use rgba() in fillStyle instead of globalAlpha for better performance
-      // COLORS.ghost or #ff6b6b with 0.6 alpha built into the color
-      ctx.fillStyle = can ? (typeof COLORS.ghost === 'string' && COLORS.ghost.includes('rgba') ? COLORS.ghost : 'rgba(100, 200, 100, 0.6)') : 'rgba(255, 107, 107, 0.53)'; // 0.53 = 0.88 * 0.6
-      ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T);
+      
+      // Only show ghost preview for buildings (not zones)
+      if (def && def.size) {
+        const gx = Math.floor(game.mouse.wx / T) * T;
+        const gy = Math.floor(game.mouse.wy / T) * T;
+        const can = canPlacePlacement(game, { ...def, size: def.size } as any, gx, gy) && hasCost(game.RES, def.cost);
+        // Use rgba() in fillStyle instead of globalAlpha for better performance
+        // COLORS.ghost or #ff6b6b with 0.6 alpha built into the color
+        ctx.fillStyle = can ? (typeof COLORS.ghost === 'string' && COLORS.ghost.includes('rgba') ? COLORS.ghost : 'rgba(100, 200, 100, 0.6)') : 'rgba(255, 107, 107, 0.53)'; // 0.53 = 0.88 * 0.6
+        ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T);
+      }
     }
 
     // Right-drag erase rectangle
@@ -884,6 +890,10 @@ export class RenderManager {
     
     // Store hotbar click regions for the new system
     (game as any).modernHotbarRects = hotbarRects;
+
+    // Control Panel (speed, pause, zoom, delete) - always visible
+    const controlPanelRects = drawControlPanel(ctx, canvas, game);
+    (game as any).controlPanelRects = controlPanelRects;
 
     // Show panel based on active tab
     if (game.uiManager.activeHotbarTab === 'build') {

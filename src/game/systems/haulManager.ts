@@ -1,15 +1,15 @@
-import type { Vec2 } from "../../../core/utils";
-import type { ItemType, FloorItem } from "../items/floorItems";
-import type { StockpileZone } from "../stockpiles/stockpileZones";
+import type { Vec2 } from "../../core/utils";
+import type { ItemType, FloorItem } from "../types/items";
+import type { StockpileZone } from "../types/stockpiles";
 
 export interface HaulingJob {
   id: string;
   type: 'haul_to_stockpile' | 'deliver_to_construction' | 'cleanup_items';
   priority: number;
   targetItem: FloorItem;
-  destination?: Vec2; // Where to take the item
-  destinationZone?: StockpileZone; // Which stockpile zone to use
-  assignedColonist?: string; // Colonist ID who took this job
+  destination?: Vec2;
+  destinationZone?: StockpileZone;
+  assignedColonist?: string;
   status: 'available' | 'assigned' | 'in_progress' | 'completed' | 'failed';
   createdAt: number;
 }
@@ -17,12 +17,12 @@ export interface HaulingJob {
 export interface ConstructionMaterialRequest {
   buildingId: string;
   position: Vec2;
-  requiredMaterials: Map<ItemType, number>; // item type -> quantity needed
-  deliveredMaterials: Map<ItemType, number>; // item type -> quantity delivered
+  requiredMaterials: Map<ItemType, number>;
+  deliveredMaterials: Map<ItemType, number>;
   priority: number;
 }
 
-export class LogisticsManager {
+export class HaulManager {
   private haulingJobs: HaulingJob[] = [];
   private constructionRequests: ConstructionMaterialRequest[] = [];
   private nextJobId = 1;

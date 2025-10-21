@@ -1,24 +1,7 @@
-import type { Vec2 } from "../../../core/utils";
-import type { ItemType } from "../items/floorItems";
-import { T } from "../../constants";
-
-export interface StockpileZone {
-  id: string;
-  name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  allowedItems: Set<ItemType>; // What items can be stored here
-  priority: number; // Higher priority zones get filled first
-  settings: StockpileSettings;
-}
-
-export interface StockpileSettings {
-  allowAll: boolean; // If true, ignore allowedItems filter
-  maxStacks: number; // Maximum number of item stacks in this zone
-  organized: boolean; // If true, try to organize items by type
-}
+import type { Vec2 } from "../../core/utils";
+import type { ItemType } from "../types/items";
+import type { StockpileZone, StockpileSettings } from "../types/stockpiles";
+import { T } from "../constants";
 
 export class StockpileManager {
   private zones: StockpileZone[] = [];
@@ -103,25 +86,94 @@ export class StockpileManager {
     return bestZone;
   }
 
-  // Find a good position within a zone to place an item
-  findStoragePositionInZone(zone: StockpileZone, itemType: ItemType): Vec2 | null {
-    // For now, use a simple grid-based approach aligned to tile size
+  /**
+   * Find a good position within a zone to place an item
+   * Returns the center of an available tile, or null if zone is full
+   * @param zone - The stockpile zone to search
+   * @param itemType - The type of item to store
+   * @param existingItems - Array of floor items to check for occupancy (optional, for external use)
+   */
+  findStoragePositionInZone(
+    zone: StockpileZone, 
+    itemType: ItemType, 
+    existingItems?: Array<{ position: Vec2; type: ItemType; quantity: number; stackLimit: number }>
+  ): Vec2 | null {
     const gridSize = T;
     const cols = Math.floor(zone.width / gridSize);
     const rows = Math.floor(zone.height / gridSize);
 
-    // Try to find an empty spot
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const x = zone.x + col * gridSize + gridSize / 2;
-        const y = zone.y + row * gridSize + gridSize / 2;
+    // Build a map of occupied tiles (tile key -> items in that tile)
+    const tileOccupancy = new Map<string, Array<{ type: ItemType; quantity: number; stackLimit: number }>>();
+    
+    if (existingItems) {
+      for (const item of existingItems) {
+        // Calculate which tile this item is in
+        const tileCol = Math.floor((item.position.x - zone.x) / gridSize);
+        const tileRow = Math.floor((item.position.y - zone.y) / gridSize);
         
-        // TODO: Check if this position is already occupied by items
-        // For now, just return the first valid position
-        return { x, y };
+        // Skip items outside zone bounds
+        if (tileCol < 0 || tileCol >= cols || tileRow < 0 || tileRow >= rows) continue;
+        
+        const tileKey = `${tileCol},${tileRow}`;
+        if (!tileOccupancy.has(tileKey)) {
+          tileOccupancy.set(tileKey, []);
+        }
+        tileOccupancy.get(tileKey)!.push({
+          type: item.type,
+          quantity: item.quantity,
+          stackLimit: item.stackLimit
+        });
       }
     }
 
+    // Strategy 1: Find a tile with matching item type that's not at stack limit
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const tileKey = `${col},${row}`;
+        const items = tileOccupancy.get(tileKey);
+        
+        if (items) {
+          // Check if there's a matching item type that can accept more
+          for (const item of items) {
+            if (item.type === itemType && item.quantity < item.stackLimit) {
+              // Found a tile with stackable item of same type
+              const x = zone.x + col * gridSize + gridSize / 2;
+              const y = zone.y + row * gridSize + gridSize / 2;
+              return { x, y };
+            }
+          }
+        }
+      }
+    }
+
+    // Strategy 2: Find a completely empty tile
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const tileKey = `${col},${row}`;
+        if (!tileOccupancy.has(tileKey)) {
+          // Empty tile found!
+          const x = zone.x + col * gridSize + gridSize / 2;
+          const y = zone.y + row * gridSize + gridSize / 2;
+          return { x, y };
+        }
+      }
+    }
+
+    // Strategy 3: Find a tile that's not completely full (different item types)
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const tileKey = `${col},${row}`;
+        const items = tileOccupancy.get(tileKey);
+        
+        if (items && items.length < 3) { // Allow up to 3 different stacks per tile
+          const x = zone.x + col * gridSize + gridSize / 2;
+          const y = zone.y + row * gridSize + gridSize / 2;
+          return { x, y };
+        }
+      }
+    }
+
+    // Zone is completely full
     return null;
   }
 

@@ -1,6 +1,7 @@
 import { T, COLORS } from "./constants";
 import type { Building, BuildingDef, Resources } from "./types";
 import { initializeBuildingInventory, shouldHaveInventory, getDefaultInventoryCapacity } from "./systems/buildingInventory";
+import { ZONE_TYPES } from "./zones";
 
 export const BUILD_TYPES: Record<string, BuildingDef> = {
   house: { 
@@ -52,18 +53,8 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     build: 40, 
     color: COLORS.wall 
   },
-  stock: { 
-    category:'Utility', 
-    name: 'Stockpile', 
-    description: 'Increases resource storage capacity by 100. Colonists will store materials here.',
-    key: '5', 
-    cost: { wood: 10 }, 
-    hp: 140, 
-    size: { w: 2, h: 2 }, 
-    build: 60, 
-    color: COLORS.stock,
-    storageBonus: 100
-  },
+  // NOTE: 'stock' (Stockpile) removed - now zone-only, not a building
+  // NOTE: 'warehouse' removed - now zone-only, not a building
   tent: { 
     category:'Utility', 
     name: 'Recruit Tent', 
@@ -74,18 +65,6 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     size: { w: 2, h: 2 }, 
     build: 80, 
     color: COLORS.tent 
-  },
-  warehouse: { 
-    category:'Utility', 
-    name: 'Warehouse', 
-    description: 'Large storage facility. Increases resource capacity by 300.',
-    key:'7', 
-    cost: { wood: 40, stone: 20 }, 
-    hp: 260, 
-    size: { w: 3, h: 2 }, 
-    build: 160, 
-    color: COLORS.stock,
-    storageBonus: 300
   },
   well: { 
     category:'Production', 
@@ -258,12 +237,28 @@ export function costText(cost: Partial<Resources>): string {
   return parts.join(' ');
 }
 
+/**
+ * Group buildings and zones by category for the build menu
+ * Zones are drag-to-create areas (like stockpiles) that aren't physical buildings
+ */
 export function groupByCategory(defs: Record<string, BuildingDef>) {
   const out: Record<string, Array<[string, BuildingDef]>> = {};
+  
+  // Add buildings
   for (const k of Object.keys(defs)) {
     const d = defs[k]; const cat = d.category || 'Other';
     (out[cat] ||= []).push([k, d]);
   }
+  
+  // Add zones (these are drag-to-create areas, not physical buildings)
+  for (const k of Object.keys(ZONE_TYPES)) {
+    const z = ZONE_TYPES[k];
+    const cat = z.category || 'Other';
+    // Zones use the same structure as BuildingDef for UI purposes
+    (out[cat] ||= []).push([k, z as any]);
+  }
+  
+  // Sort each category alphabetically
   for (const c of Object.keys(out)) out[c].sort((a,b)=>a[1].name.localeCompare(b[1].name));
   return out;
 }

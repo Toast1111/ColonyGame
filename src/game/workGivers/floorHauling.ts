@@ -1,15 +1,15 @@
 import type { WorkGiver, WorkGiverContext, WorkCandidate } from './types';
-import type { FloorItem } from '../rimworld-systems';
+import type { FloorItem } from '../types/items';
 
-// Haul ground items to appropriate stockpile zone (RimWorld-style floor items)
+// Haul ground items to appropriate stockpile zone (floor item system)
 export const FloorHaulingWorkGiver: WorkGiver = {
   getCandidates(ctx: WorkGiverContext): WorkCandidate[] {
     const { game, colonist, getWorkPriority, canDoWork } = ctx as any;
     const out: WorkCandidate[] = [];
     if (!canDoWork('Hauling')) return out;
 
-    const rim = (game as any).rimWorld;
-    if (!rim) return out; // RimWorld system not initialized
+    const rim = (game as any).itemManager;
+    if (!rim) return out; // Floor item system not initialized
 
     // Get items that need hauling (outside allowed zones)
     const items: FloorItem[] = rim.getItemsNeedingHauling();

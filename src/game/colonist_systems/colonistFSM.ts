@@ -1419,7 +1419,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       */
       c.lastDistToNode = distToTarget;
       
-      if (game.moveAlongPath(c, dt, pt, interactRadius)) {
+      // Check if colonist is within interaction range first
+      const currentDist = Math.hypot(c.x - pt.x, c.y - pt.y);
+      
+      // Only move if not in range - prevents infinite repathing when already at destination
+      if (currentDist > interactRadius) {
+        game.moveAlongPath(c, dt, pt, interactRadius);
+      }
+      
+      // Build if within interaction range
+      if (currentDist <= interactRadius) {
         // Apply equipment work speed bonuses (Construction) and skill multiplier
         const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Construction') : 1;
         const lvl = c.skills ? skillLevel(c, 'Construction') : 0;
@@ -1600,13 +1609,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             if (added < wheatAmount) {
               const remainder = wheatAmount - added;
               const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
-              (game as any).rimWorld?.dropItems('wheat', remainder, dropAt);
+              (game as any).itemManager?.dropItems('wheat', remainder, dropAt);
               game.msg(`Farm full! Dropped ${remainder} wheat`, 'info');
             }
           } else {
             // Fallback: no inventory, drop wheat on the ground at the farm
             const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
-            (game as any).rimWorld?.dropItems('wheat', wheatAmount, dropAt);
+            (game as any).itemManager?.dropItems('wheat', wheatAmount, dropAt);
             game.msg(`Farm harvested (dropped ${wheatAmount} wheat)`, 'good');
           }
           
@@ -1656,7 +1665,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const amount = Math.round(6 * yieldMult);
           // Drop wood on the ground at the tree position
           const dropAt = { x: t.x, y: t.y };
-          (game as any).rimWorld?.dropItems('wood', amount, dropAt);
+          (game as any).itemManager?.dropItems('wood', amount, dropAt);
           (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
           if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
           game.msg(`Dropped ${amount} wood`, 'good');
@@ -1736,7 +1745,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const amount = Math.round(5 * yieldMult);
           // Drop stone on the ground at the rock position
           const dropAt = { x: r.x, y: r.y };
-          (game as any).rimWorld?.dropItems('stone', amount, dropAt);
+          (game as any).itemManager?.dropItems('stone', amount, dropAt);
           (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
           if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
           game.msg(`Dropped ${amount} stone`, 'good');
@@ -2128,9 +2137,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     
     case 'haulFloorItem': {
-      // Haul a ground item from RimWorld floor item system to a stockpile destination
+      // Haul a ground item from floor item system to a stockpile destination
       const data = (c as any).taskData as any;
-      const rim = (game as any).rimWorld;
+      const rim = (game as any).itemManager;
       if (!data || !rim) {
         c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'no hauling data');
         break;

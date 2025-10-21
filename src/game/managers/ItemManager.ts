@@ -1,55 +1,64 @@
-import { FloorItemManager, type FloorItem, type ItemType } from "./items/floorItems";
-import { StockpileManager, type StockpileZone } from "./stockpiles/stockpileZones";
-import { LogisticsManager, type HaulingJob } from "./logistics/haulManager";
-import { EnhancedLogisticsManager, type ColonistWorkSettings, type WorkType } from "./logistics/enhancedHaulManager";
-import { RimWorldRenderer } from "./rendering/rimWorldRenderer";
+import { FloorItemManager } from "../systems/floorItems";
+import { StockpileManager } from "../systems/stockpileZones";
+import { HaulManager, type HaulingJob } from "../systems/haulManager";
+import { ItemRenderer } from "../rendering/itemRenderer";
+import type { ItemType, FloorItem } from "../types/items";
+import type { StockpileZone } from "../types/stockpiles";
 import type { Vec2 } from "../../core/utils";
 
-export interface RimWorldSystemConfig {
+export interface ItemManagerConfig {
   canvas: HTMLCanvasElement;
   enableAutoHauling: boolean;
-  defaultStockpileSize: number;
-  useEnhancedLogistics: boolean; // Use RimWorld-style job assignment
 }
 
 /**
- * Main manager for the RimWorld-style item and stockpile system
- * Integrates floor items, stockpile zones, hauling jobs, and rendering
+ * Item Manager - Manages floor-based items, stockpile zones, and hauling
+ * Provides visual floor item storage like RimWorld instead of abstract resource pools
  */
-export class RimWorldSystemManager {
+export class ItemManager {
   public floorItems: FloorItemManager;
   public stockpiles: StockpileManager;
-  public logistics: LogisticsManager;
-  public enhancedLogistics: EnhancedLogisticsManager;
-  public renderer: RimWorldRenderer;
+  public hauling: HaulManager;
+  public renderer: ItemRenderer;
   
-  private config: RimWorldSystemConfig;
   private autoHaulingEnabled: boolean;
 
-  constructor(config: RimWorldSystemConfig) {
-    this.config = config;
+  constructor(config: ItemManagerConfig) {
     this.autoHaulingEnabled = config.enableAutoHauling;
 
     // Initialize subsystems
     this.floorItems = new FloorItemManager();
     this.stockpiles = new StockpileManager();
-    this.logistics = new LogisticsManager();
-    this.enhancedLogistics = new EnhancedLogisticsManager(this.floorItems, this.stockpiles);
-    this.renderer = new RimWorldRenderer(config.canvas);
+    this.hauling = new HaulManager();
+    this.renderer = new ItemRenderer(config.canvas);
   }
 
   // === ITEM MANAGEMENT ===
 
   /**
    * Drop items on the floor at a specific position
+   * If position is in a stockpile zone, will use tile-based positioning
    */
   dropItems(itemType: ItemType, quantity: number, position: Vec2, metadata?: { [key: string]: any }): FloorItem {
-    const item = this.floorItems.createItem(itemType, quantity, position, metadata);
-    
-    // Check if item is in a stockpile zone
+    // Check if we're dropping in a stockpile zone
     const zone = this.stockpiles.getZoneAtPosition(position);
-    if (!zone || (!zone.settings.allowAll && !zone.allowedItems.has(itemType))) {
-      // Item dropped outside stockpile or in wrong stockpile - create hauling job
+    
+    // If in a zone that accepts this item, find the proper tile-based position
+    let finalPosition = position;
+    if (zone && (zone.settings.allowAll || zone.allowedItems.has(itemType))) {
+      // Get all existing items for tile occupancy check
+      const allItems = this.floorItems.getAllItems();
+      const betterPosition = this.stockpiles.findStoragePositionInZone(zone, itemType, allItems);
+      if (betterPosition) {
+        finalPosition = betterPosition;
+      }
+    }
+    
+    const item = this.floorItems.createItem(itemType, quantity, finalPosition, metadata);
+    
+    // If item is outside stockpile or in wrong stockpile, create hauling job
+    const itemZone = this.stockpiles.getZoneAtPosition(item.position);
+    if (!itemZone || (!itemZone.settings.allowAll && !itemZone.allowedItems.has(itemType))) {
       if (this.autoHaulingEnabled) {
         this.createHaulingJobForItem(item);
       }
@@ -120,117 +129,50 @@ export class RimWorldSystemManager {
    * Request materials for construction
    */
   requestConstructionMaterials(buildingId: string, position: Vec2, materials: Map<ItemType, number>, priority: number = 1): void {
-    this.logistics.createConstructionRequest(buildingId, position, materials, priority);
+    this.hauling.createConstructionRequest(buildingId, position, materials, priority);
   }
 
   /**
    * Check if construction has all required materials
    */
   isConstructionReady(buildingId: string): boolean {
-    return this.logistics.isConstructionReady(buildingId);
+    return this.hauling.isConstructionReady(buildingId);
   }
 
   /**
    * Complete construction (cleanup material requests)
    */
   completeConstruction(buildingId: string): void {
-    this.logistics.removeConstructionRequest(buildingId);
+    this.hauling.removeConstructionRequest(buildingId);
   }
 
   // === HAULING SYSTEM ===
 
   /**
-   * Get the next hauling job for a colonist (legacy method)
+   * Get the next hauling job for a colonist
    */
   assignHaulingJob(colonistId: string, colonistPosition: Vec2): HaulingJob | null {
-    return this.logistics.getNextHaulingJob(colonistId, colonistPosition);
-  }
-
-  /**
-   * RimWorld-style job assignment (enhanced version)
-   */
-  assignWork(colonist: any): HaulingJob | null {
-    if (this.config.useEnhancedLogistics) {
-      const job = this.enhancedLogistics.tryAssignJob(colonist);
-      // Convert enhanced job to legacy format if needed
-      return job as any;
-    } else {
-      return this.logistics.getNextHaulingJob(colonist.id, colonist.position);
-    }
-  }
-
-  /**
-   * Configure colonist work settings
-   */
-  setColonistWorkSettings(colonist: any, settings: Partial<ColonistWorkSettings>): void {
-    if (!colonist.workSettings) {
-      colonist.workSettings = {
-        workPriorities: new Map([
-          ['hauling', 3],
-          ['construction', 2],
-          ['cleaning', 1],
-          ['repair', 2],
-          ['mining', 1],
-          ['growing', 1]
-        ]),
-        workTypesInOrder: ['construction', 'hauling', 'repair', 'cleaning', 'mining', 'growing'],
-        canDoWork: true,
-        emergencyMode: false
-      };
-    }
-
-    Object.assign(colonist.workSettings, settings);
-  }
-
-  /**
-   * Set work priority for a specific work type
-   */
-  setWorkPriority(colonist: any, workType: WorkType, priority: number): void {
-    if (!colonist.workSettings) {
-      this.setColonistWorkSettings(colonist, {});
-    }
-    
-    colonist.workSettings.workPriorities.set(workType, priority);
-    
-    // Update work types in order
-    const entries: [WorkType, number][] = Array.from(colonist.workSettings.workPriorities.entries());
-    const workTypes = entries
-      .filter((entry: [WorkType, number]) => entry[1] > 0)
-      .sort((a: [WorkType, number], b: [WorkType, number]) => b[1] - a[1])
-      .map((entry: [WorkType, number]) => entry[0]);
-    
-    colonist.workSettings.workTypesInOrder = workTypes;
-  }
-
-  /**
-   * Force assign a specific job (player right-click command)
-   */
-  forceAssignWork(colonist: any, position: Vec2, workType?: WorkType): void {
-    colonist.priorityWork = {
-      isForced: true,
-      cell: position,
-      workType: workType
-    };
+    return this.hauling.getNextHaulingJob(colonistId, colonistPosition);
   }
 
   /**
    * Mark a hauling job as completed
    */
   completeHaulingJob(jobId: string): boolean {
-    return this.logistics.completeJob(jobId);
+    return this.hauling.completeJob(jobId);
   }
 
   /**
    * Mark a hauling job as failed
    */
   failHaulingJob(jobId: string): boolean {
-    return this.logistics.failJob(jobId);
+    return this.hauling.failJob(jobId);
   }
 
   // === RENDERING ===
 
   /**
-   * Render all RimWorld systems (call this in your main render loop)
+   * Render all systems (call this in your main render loop)
    */
   render(cameraX: number = 0, cameraY: number = 0): void {
     // Render stockpile zones first (background)
@@ -246,9 +188,7 @@ export class RimWorldSystemManager {
    * Render debug information (hauling paths, job assignments, etc.)
    */
   renderDebugInfo(cameraX: number = 0, cameraY: number = 0): void {
-    // TODO: Render hauling paths, job indicators, etc.
-    // Prefer legacy logistics jobs for debug until enhanced is fully wired to renderer
-    const availableJobs = this.logistics?.getAvailableJobs?.() || [];
+    const availableJobs = this.hauling.getAvailableJobs();
     if (!availableJobs.length) return;
 
     for (const job of availableJobs) {
@@ -268,12 +208,17 @@ export class RimWorldSystemManager {
 
   /**
    * Find the best storage location for an item
+   * Takes into account existing items to find proper tile-based positions
    */
   findBestStorageLocation(itemType: ItemType): { zone: StockpileZone; position: Vec2 } | null {
     const bestZone = this.stockpiles.findBestZoneForItem(itemType);
     if (!bestZone) return null;
 
-    const position = this.stockpiles.findStoragePositionInZone(bestZone, itemType);
+    // Get all existing items to check tile occupancy
+    const allItems = this.floorItems.getAllItems();
+    
+    // Pass existing items to find a proper tile-based position
+    const position = this.stockpiles.findStoragePositionInZone(bestZone, itemType, allItems);
     if (!position) return null;
 
     return { zone: bestZone, position };
@@ -305,7 +250,7 @@ export class RimWorldSystemManager {
    */
   update(): void {
     // Clean up old completed jobs
-    this.logistics.cleanupOldJobs();
+    this.hauling.cleanupOldJobs();
 
     // Auto-generate hauling jobs for misplaced items
     if (this.autoHaulingEnabled) {
@@ -318,7 +263,7 @@ export class RimWorldSystemManager {
   private createHaulingJobForItem(item: FloorItem): void {
     const bestStorage = this.findBestStorageLocation(item.type);
     if (bestStorage) {
-      const job = this.logistics.createHaulingJob(item, bestStorage.zone);
+      const job = this.hauling.createHaulingJob(item, bestStorage.zone);
       job.destination = bestStorage.position;
     }
   }
@@ -338,17 +283,17 @@ export class RimWorldSystemManager {
   }
 
   private cancelHaulingJobsForItem(itemId: string): void {
-    const jobs = this.logistics.getAvailableJobs();
+    const jobs = this.hauling.getAvailableJobs();
     for (const job of jobs) {
       if (job.targetItem.id === itemId) {
-        this.logistics.cancelJob(job.id);
+        this.hauling.cancelJob(job.id);
       }
     }
   }
 
   private generateAutoHaulingJobs(): void {
     const itemsNeedingHauling = this.getItemsNeedingHauling();
-    const existingJobs = new Set(this.logistics.getAvailableJobs().map(job => job.targetItem.id));
+    const existingJobs = new Set(this.hauling.getAvailableJobs().map(job => job.targetItem.id));
 
     for (const item of itemsNeedingHauling) {
       // Only create job if one doesn't already exist for this item
@@ -362,9 +307,5 @@ export class RimWorldSystemManager {
 
   setAutoHauling(enabled: boolean): void {
     this.autoHaulingEnabled = enabled;
-  }
-
-  getConfig(): RimWorldSystemConfig {
-    return { ...this.config };
   }
 }

@@ -1,7 +1,7 @@
-import type { FloorItem, ItemStack } from "../items/floorItems";
-import type { StockpileZone } from "../stockpiles/stockpileZones";
+import type { ItemStack, FloorItem } from "../types/items";
+import type { StockpileZone } from "../types/stockpiles";
 
-export class RimWorldRenderer {
+export class ItemRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private debug = false;
@@ -89,8 +89,8 @@ export class RimWorldRenderer {
     const zoom = options?.zoom ?? 1;
 
     for (const stack of stacks) {
-      const screenX = isWorld ? stack.centerX : (stack.centerX - cameraX);
-      const screenY = isWorld ? stack.centerY : (stack.centerY - cameraY);
+      const screenX = isWorld ? stack.position.x : (stack.position.x - cameraX);
+      const screenY = isWorld ? stack.position.y : (stack.position.y - cameraY);
 
       // Skip if off-screen
       if (isWorld) {
@@ -100,7 +100,7 @@ export class RimWorldRenderer {
         const minY = cameraY - 32;
         const maxX = cameraX + viewW + 32;
         const maxY = cameraY + viewH + 32;
-        if (stack.centerX < minX || stack.centerX > maxX || stack.centerY < minY || stack.centerY > maxY) {
+        if (stack.position.x < minX || stack.position.x > maxX || stack.position.y < minY || stack.position.y > maxY) {
           continue;
         }
       } else {
@@ -110,12 +110,8 @@ export class RimWorldRenderer {
         }
       }
 
-      // Get the primary item type for this stack
-      const primaryItem = stack.items[0];
-      if (!primaryItem) continue;
-
       // Draw item representation
-      this.drawItemStack(screenX, screenY, primaryItem.type, stack.totalQuantity, stack.items.length > 1);
+      this.drawItemStack(screenX, screenY, stack.type, stack.totalQuantity, stack.itemIds.length > 1);
 
       // Optional debug marker
       if (this.debug) {
@@ -176,7 +172,6 @@ export class RimWorldRenderer {
 
   private drawItemTypeIcon(x: number, y: number, type: string, size: number): void {
     const iconSize = Math.floor(size * 0.6);
-    const offset = Math.floor(iconSize / 2);
 
     this.ctx.fillStyle = 'white';
     this.ctx.strokeStyle = 'black';
@@ -186,24 +181,14 @@ export class RimWorldRenderer {
 
     let icon = '?';
     switch (type) {
-      case 'wood': icon = '🪵'; break;
-      case 'stone': icon = '🪨'; break;
-      case 'food': icon = '🍖'; break;
-      case 'metal': icon = '⚙️'; break;
-      case 'cloth': icon = '🧵'; break;
-      case 'medicine': icon = '💊'; break;
-    }
-
-    // If emojis don't work, use text alternatives
-    if (icon.length > 1) {
-      switch (type) {
-        case 'wood': icon = 'W'; break;
-        case 'stone': icon = 'S'; break;
-        case 'food': icon = 'F'; break;
-        case 'metal': icon = 'M'; break;
-        case 'cloth': icon = 'C'; break;
-        case 'medicine': icon = '+'; break;
-      }
+      case 'wood': icon = 'W'; break;
+      case 'stone': icon = 'S'; break;
+      case 'food': icon = 'F'; break;
+      case 'wheat': icon = 'W'; break;
+      case 'bread': icon = 'B'; break;
+      case 'metal': icon = 'M'; break;
+      case 'cloth': icon = 'C'; break;
+      case 'medicine': icon = '+'; break;
     }
 
     this.ctx.strokeText(icon, x, y);
@@ -213,11 +198,13 @@ export class RimWorldRenderer {
   private getItemColor(type: string): string {
     switch (type) {
       case 'wood': return '#8B4513'; // Brown
-      case 'stone': return '#696969'; // Dark gray
-      case 'food': return '#D2691E'; // Chocolate
+      case 'stone': return '#708090'; // Dark gray
+      case 'food': return '#90EE90'; // Light green
+      case 'wheat': return '#F0E68C'; // Khaki
+      case 'bread': return '#DEB887'; // Burlywood
       case 'metal': return '#C0C0C0'; // Silver
-      case 'cloth': return '#DDA0DD'; // Plum
-      case 'medicine': return '#FF69B4'; // Hot pink
+      case 'cloth': return '#F5F5DC'; // Beige
+      case 'medicine': return '#FF6347'; // Tomato
       default: return '#808080'; // Gray
     }
   }

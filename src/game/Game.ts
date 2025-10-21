@@ -5,6 +5,7 @@ import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, Message, Resources, Particle } from "./types";
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
+import { getZoneDef } from "./zones";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { WorkGiverManager } from './systems/workGiverManager';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
@@ -13,6 +14,7 @@ import { updateEnemyFSM } from "../ai/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
 import { handleHotbarClick } from "./ui/hud/modernHotbar";
 import { handleBuildMenuClick as handleModernBuildMenuClick } from "./ui/hud/modernBuildMenu";
+import { handleControlPanelClick } from "./ui/hud/controlPanel";
 import { drawColonistProfile as drawColonistProfileUI } from "./ui/panels/colonistProfile";
 import { drawContextMenu as drawContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
 import { showColonistContextMenu } from "./ui/contextMenus/colonistMenu";
@@ -52,7 +54,7 @@ import { initPerformanceHUD, drawPerformanceHUD, togglePerformanceHUD } from './
 import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
-import { RimWorldSystemManager, type RimWorldSystemConfig } from './rimworld-systems';
+import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
 import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
@@ -319,7 +321,7 @@ export class Game {
   debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
   // Systems
   private workGiverManager = new WorkGiverManager();
-  public rimWorld: RimWorldSystemManager;
+  public itemManager: ItemManager;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -356,13 +358,12 @@ export class Game {
     // Initialize item database
     itemDatabase.loadItems();
     
-    // Initialize RimWorld-style floor item + stockpile system (rendered between world and UI)
-    this.rimWorld = new RimWorldSystemManager({
+    // Initialize floor item + stockpile system (rendered between world and UI)
+    this.itemManager = new ItemManager({
       canvas: this.canvas,
       enableAutoHauling: false, // We'll drive hauling via our WorkGiver so it fits FSM
-      defaultStockpileSize: this.defaultStockpileSize,
-      useEnhancedLogistics: false
-    } as RimWorldSystemConfig);
+      defaultStockpileSize: this.defaultStockpileSize
+    } as ItemManagerConfig);
   // Init debug console
   initDebugConsole(this);
     // Init performance HUD
@@ -790,11 +791,11 @@ export class Game {
   }
 
   private finalizeStockpileDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
-    if (!this.rimWorld) { return false; }
+    if (!this.itemManager) { return false; }
     const rect = this.computeStockpileRect(start, end, allowTapShortcut);
     if (!rect) { return false; }
 
-    this.rimWorld.createStockpileZone(rect.x, rect.y, rect.width, rect.height, 'Stockpile');
+    this.itemManager.createStockpileZone(rect.x, rect.y, rect.width, rect.height, 'Stockpile');
     this.msg('Stockpile created', 'good');
     return true;
   }
@@ -985,6 +986,12 @@ export class Game {
           return;
         }
         
+        // Check for control panel clicks (speed, pause, zoom, delete)
+        const controlPanelRects = (this as any).controlPanelRects || [];
+        if (handleControlPanelClick(mx, my, controlPanelRects, this)) {
+          return; // Click was handled by control panel
+        }
+        
         // Check for modern build menu clicks
         if (this.uiManager.activeHotbarTab === 'build') {
           const buildMenuRects = (this as any).modernBuildMenuRects;
@@ -996,11 +1003,16 @@ export class Game {
                 this.uiManager.setSelectedBuildCategory(clickResult.value);
                 void this.audioManager.play('ui.click.primary').catch(() => {});
               } else if (clickResult.type === 'building') {
-                // Building clicked - select it and close menus
+                // Building or zone clicked - select it and close menus
                 this.selectedBuild = clickResult.value;
                 void this.audioManager.play('ui.click.primary').catch(() => {});
                 this.uiManager.setHotbarTab(null); // Close the build menu
-                this.toast('Selected: ' + BUILD_TYPES[clickResult.value].name);
+                
+                // Get name from either BUILD_TYPES or ZONE_TYPES
+                const def = BUILD_TYPES[clickResult.value] || getZoneDef(clickResult.value);
+                if (def) {
+                  this.toast('Selected: ' + def.name);
+                }
               }
               return;
             }
@@ -1558,6 +1570,12 @@ export class Game {
     if (touchedTab) {
       this.uiManager.setHotbarTab(touchedTab);
       return;
+    }
+
+    // Control panel (speed, pause, zoom, delete) - touch events
+    const controlPanelRects = (this as any).controlPanelRects || [];
+    if (handleControlPanelClick(mx, my, controlPanelRects, this)) {
+      return; // Click was handled by control panel
     }
 
     // Legacy hotbar fallback (desktop-only UI still available in some screens)
@@ -2881,8 +2899,8 @@ export class Game {
     
     for (let i = this.messages.length - 1; i >= 0; i--) { const m = this.messages[i]; m.t -= dt; if (m.t <= 0) this.messages.splice(i, 1); }
     
-    // Update RimWorld floor item/stockpile systems
-    if (this.rimWorld) this.rimWorld.update();
+    // Update floor item/stockpile systems
+    if (this.itemManager) this.itemManager.update();
 
     // Process queued navmesh rebuilds at END of frame (deferred rebuild system)
     this.deferredRebuildSystem.processQueue();
@@ -3540,7 +3558,7 @@ export class Game {
     return skill;
   }
 
-  // Context menu drawing moved to src/game/ui/contextMenu.ts
+  // Context menu drawing moved to src/game/ui/contextMenu.ts SO WHY IS drawLongPressProgress HERE???
 
   drawLongPressProgress() {
     if (!this.longPressStartTime || !this.longPressTarget || !this.longPressStartPos) return;
