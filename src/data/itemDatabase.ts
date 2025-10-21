@@ -433,6 +433,28 @@ export class ItemDatabase {
           value: 5,
           weight: 1.5
         },
+        {
+          defName: 'Coal',
+          label: 'coal',
+          description: 'Black combustible rock, useful as fuel.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 2,
+          weight: 0.8
+        },
+        {
+          defName: 'Copper',
+          label: 'copper',
+          description: 'Reddish-brown metal used in wiring and construction.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 4,
+          weight: 1.2
+        },
         
         // Food
         {
