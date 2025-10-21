@@ -37,8 +37,11 @@ export function clear(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, 
 
 // Apply camera transform for world rendering
 export function applyWorldTransform(ctx: CanvasRenderingContext2D, cam: Camera) {
-  ctx.translate(-cam.x * cam.zoom, -cam.y * cam.zoom);
-  ctx.scale(cam.zoom, cam.zoom);
+  // Align the transformed world to physical pixels so we avoid sub-pixel jitter
+  // when the camera moves with fractional coordinates.
+  const offsetX = Math.round(-cam.x * cam.zoom);
+  const offsetY = Math.round(-cam.y * cam.zoom);
+  ctx.setTransform(cam.zoom, 0, 0, cam.zoom, offsetX, offsetY);
 }
 
 // Simple ground renderer with grid
@@ -165,7 +168,7 @@ export function drawFloors(ctx: CanvasRenderingContext2D, terrainGrid: TerrainGr
 // Render mountains and ore deposits
 export function drawMountains(ctx: CanvasRenderingContext2D, terrainGrid: TerrainGrid, camera: Camera) {
   if (!terrainGrid) return;
-  
+
   ctx.save();
   
   // Calculate visible bounds for performance
@@ -190,64 +193,144 @@ export function drawMountains(ctx: CanvasRenderingContext2D, terrainGrid: Terrai
       const isOreVisible = terrainGrid.oreVisible[idx] === 1;
       const oreType = getOreTypeFromId(terrainGrid.ores[idx]);
       
-      // Draw base mountain color
-      let baseColor = '#3f3f46'; // Dark gray
-      let accentColor = '#27272a'; // Darker gray
-      
-      // If ore is visible, use ore colors
-      if (isOreVisible && oreType !== OreType.NONE) {
-        const oreProps = ORE_PROPERTIES[oreType];
-        baseColor = oreProps.color;
-        accentColor = oreProps.secondaryColor || oreProps.color;
-      }
-      
-      // Draw mountain tile with texture
-      ctx.fillStyle = baseColor;
+      // Deterministic pseudo random helper for variation per tile
+      const rand = (seed: number) => {
+        const x = (gx * 73856093) ^ (gy * 19349663) ^ seed;
+        const hashed = (x >>> 0) % 10000;
+        return hashed / 10000;
+      };
+
+      // Draw base mountain color using a gradient for depth
+      const baseColor = isOreVisible && oreType !== OreType.NONE
+        ? ORE_PROPERTIES[oreType].color
+        : '#4b5563';
+      const shadowColor = adjustColor(baseColor, -0.35);
+      const highlightColor = adjustColor(baseColor, 0.2);
+
+      const gradient = ctx.createLinearGradient(wx, wy + T, wx, wy);
+      gradient.addColorStop(0, shadowColor);
+      gradient.addColorStop(0.55, baseColor);
+      gradient.addColorStop(1, highlightColor);
+      ctx.fillStyle = gradient;
       ctx.fillRect(wx, wy, T, T);
-      
-      // Add rocky texture (diagonal stripes)
-      ctx.fillStyle = accentColor;
-      ctx.globalAlpha = 0.3;
-      for (let i = 0; i < 4; i++) {
-        const offset = (gx + gy + i) % 4;
-        ctx.fillRect(wx + offset * 8, wy, 4, T);
-      }
+
+      // Create an angular ridge to break up the grid silhouette
+      const ridgePeakX = wx + T * (0.35 + rand(1) * 0.3);
+      const ridgePeakY = wy + T * (0.15 + rand(2) * 0.1);
+      const ridgeBaseLeft = wx + T * (0.1 + rand(3) * 0.1);
+      const ridgeBaseRight = wx + T * (0.9 - rand(4) * 0.1);
+
+      ctx.beginPath();
+      ctx.moveTo(ridgePeakX, ridgePeakY);
+      ctx.lineTo(ridgeBaseLeft, wy + T);
+      ctx.lineTo(ridgeBaseRight, wy + T);
+      ctx.closePath();
+      ctx.fillStyle = shadowColor;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+
+      // Highlighted side of the ridge
+      ctx.beginPath();
+      const ridgeSplit = wx + T * (0.5 + (rand(5) - 0.5) * 0.2);
+      ctx.moveTo(ridgePeakX, ridgePeakY);
+      ctx.lineTo(ridgeSplit, wy + T * (0.55 + rand(6) * 0.15));
+      ctx.lineTo(ridgeBaseRight, wy + T);
+      ctx.closePath();
+      ctx.fillStyle = highlightColor;
+      ctx.globalAlpha = 0.65;
+      ctx.fill();
       ctx.globalAlpha = 1;
-      
-      // Draw ore veins if visible (more prominent than texture)
+
+      // Subtle edge darkening to anchor the tile without drawing hard grid lines
+      ctx.fillStyle = adjustColor(baseColor, -0.45);
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(wx, wy + T - 3, T, 3);
+      ctx.fillRect(wx, wy, 3, T);
+      ctx.globalAlpha = 1;
+
+      // Draw ore veins if visible (overlay organic streaks)
       if (isOreVisible && oreType !== OreType.NONE) {
         const oreProps = ORE_PROPERTIES[oreType];
-        ctx.fillStyle = oreProps.color;
+        const orePrimary = oreProps.color;
+        const oreSecondary = oreProps.secondaryColor || adjustColor(orePrimary, 0.25);
+
+        ctx.strokeStyle = orePrimary;
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+
+        const veinCount = 2 + Math.floor(rand(7) * 2);
+        for (let v = 0; v < veinCount; v++) {
+          const startX = wx + T * (0.2 + rand(8 + v) * 0.6);
+          const startY = wy + T * (0.2 + rand(12 + v) * 0.4);
+          const endX = startX + T * 0.3 * (rand(16 + v) - 0.5);
+          const endY = wy + T * (0.75 + rand(20 + v) * 0.2);
+
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.quadraticCurveTo(
+            startX + T * 0.15 * (rand(24 + v) - 0.5),
+            wy + T * (0.45 + rand(28 + v) * 0.2),
+            endX,
+            endY
+          );
+          ctx.stroke();
+        }
+
+        // Add small sparkles to emphasise exposed ore without flicker
+        ctx.fillStyle = oreSecondary;
         ctx.globalAlpha = 0.7;
-        
-        // Draw ore vein pattern (diagonal veins)
-        ctx.beginPath();
-        const veinOffset = (gx * 123 + gy * 456) % T;
-        ctx.moveTo(wx + veinOffset, wy);
-        ctx.lineTo(wx + veinOffset + 8, wy);
-        ctx.lineTo(wx + veinOffset - 8, wy + T);
-        ctx.lineTo(wx + veinOffset - 16, wy + T);
-        ctx.closePath();
-        ctx.fill();
-        
-        // Add ore sparkle effect
-        ctx.fillStyle = oreProps.secondaryColor || oreProps.color;
-        ctx.globalAlpha = 0.5;
-        const sparkleX = wx + ((gx * 789) % (T - 4)) + 2;
-        const sparkleY = wy + ((gy * 321) % (T - 4)) + 2;
-        ctx.fillRect(sparkleX, sparkleY, 3, 3);
-        
+        const sparkleCount = 1 + Math.floor(rand(60) * 2);
+        for (let s = 0; s < sparkleCount; s++) {
+          const sparkleX = wx + T * (0.15 + rand(64 + s) * 0.7);
+          const sparkleY = wy + T * (0.25 + rand(68 + s) * 0.6);
+          const size = 2 + rand(72 + s) * 2;
+          ctx.fillRect(sparkleX, sparkleY, size, size);
+        }
         ctx.globalAlpha = 1;
       }
-      
-      // Draw mountain edge shadows (darker on unexposed sides)
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(wx, wy, T, T);
     }
   }
-  
+
   ctx.restore();
+}
+
+/**
+ * Adjust a hex color by the supplied delta (-1 to 1)
+ */
+function adjustColor(hexColor: string, amount: number): string {
+  let color = hexColor.trim();
+  if (color.startsWith('#')) {
+    color = color.slice(1);
+  }
+
+  if (color.length === 3) {
+    color = color
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  }
+
+  const num = parseInt(color, 16);
+  let r = (num >> 16) & 0xff;
+  let g = (num >> 8) & 0xff;
+  let b = num & 0xff;
+
+  const clamp = (value: number) => Math.min(255, Math.max(0, value));
+
+  const adjust = (component: number) => {
+    const delta = amount >= 0
+      ? (255 - component) * amount
+      : component * amount;
+    return clamp(component + delta);
+  };
+
+  r = adjust(r);
+  g = adjust(g);
+  b = adjust(b);
+
+  const toHex = (value: number) => value.toString(16).padStart(2, '0');
+
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 // Utility to draw a filled circle

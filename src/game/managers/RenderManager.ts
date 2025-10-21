@@ -165,14 +165,20 @@ export class RenderManager {
     const { game } = this;
     const { ctx } = game;
     const miningZones = (game as any).miningZones || [];
+    const zoom = game.camera.zoom;
 
     for (const zone of miningZones) {
+      const x = Math.round(zone.x * zoom) / zoom;
+      const y = Math.round(zone.y * zoom) / zoom;
+      const w = Math.round(zone.w * zoom) / zoom;
+      const h = Math.round(zone.h * zoom) / zoom;
+
       ctx.fillStyle = 'rgba(245, 158, 11, 0.15)'; // Orange with transparency
-      ctx.fillRect(zone.x, zone.y, zone.w, zone.h);
-      
+      ctx.fillRect(x, y, w, h);
+
       ctx.strokeStyle = '#f59e0b'; // Solid orange border
-      ctx.lineWidth = 2;
-      ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+      ctx.lineWidth = 2 / zoom;
+      ctx.strokeRect(x, y, w, h);
     }
   }
 
