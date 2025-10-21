@@ -14,8 +14,16 @@ import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
 
 
-// Helper function to check if a position would collide with buildings
+// Helper function to check if a position would collide with buildings or mountains
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
+  // Check mountain collision first (most important for getting stuck)
+  const gx = Math.floor(x / T);
+  const gy = Math.floor(y / T);
+  if (game.terrainGrid && checkIsMountainTile(game.terrainGrid, gx, gy)) {
+    return true; // Mountains block movement
+  }
+  
+  // Check building collisions
   for (const b of game.buildings) {
     // Skip HQ, paths, houses, and farms as they don't block movement
     // Skip doors that are open

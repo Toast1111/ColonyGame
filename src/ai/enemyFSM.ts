@@ -3,9 +3,18 @@ import { T } from "../game/constants";
 import type { Building, Enemy, Colonist } from "../game/types";
 import { isDoorBlocking, isNearDoor, attackDoor } from "../game/systems/doorSystem";
 import { computeEnemyPath } from "../core/pathfinding";
+import { isMountainTile } from "../game/terrain";
 
-// Helper function to check if a position would collide with buildings (for enemies)
+// Helper function to check if a position would collide with buildings or mountains (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
+  // Check mountain collision first
+  const gx = Math.floor(x / T);
+  const gy = Math.floor(y / T);
+  if (game.terrainGrid && isMountainTile(game.terrainGrid, gx, gy)) {
+    return true; // Mountains block enemies too
+  }
+  
+  // Check building collisions
   for (const b of game.buildings) {
     // Enemies can walk through HQ, paths, houses, and farms, but not other buildings
     // Doors block enemies unless they're destroyed
