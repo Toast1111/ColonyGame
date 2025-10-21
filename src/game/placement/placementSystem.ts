@@ -1,7 +1,7 @@
 import { BUILD_TYPES, hasCost, makeBuilding, payCost, refundCost } from "../buildings";
 import { T, WORLD } from "../constants";
 import { clamp } from "../../core/utils";
-import { setFloorRect, FloorType, getFloorTypeId, getFloorTypeFromId } from "../terrain";
+import { setFloorRect, FloorType, getFloorTypeId, getFloorTypeFromId, isMountainTile } from "../terrain";
 import { syncTerrainToGrid } from "../../core/pathfinding";
 import type { Building } from "../types";
 import type { Game } from "../Game";
@@ -23,6 +23,21 @@ export function canPlace(game: Game, def: Building, x: number, y: number) {
   };
   for (const t of game.trees) { if (circleRectOverlap(t, rect)) return false; }
   for (const r of game.rocks) { if (circleRectOverlap(r, rect)) return false; }
+  
+  // Check if building overlaps any mountain tiles
+  const startGX = Math.floor(rect.x / T);
+  const startGY = Math.floor(rect.y / T);
+  const endGX = Math.floor((rect.x + rect.w - 1) / T);
+  const endGY = Math.floor((rect.y + rect.h - 1) / T);
+  
+  for (let gy = startGY; gy <= endGY; gy++) {
+    for (let gx = startGX; gx <= endGX; gx++) {
+      if (isMountainTile(game.terrainGrid, gx, gy)) {
+        return false; // Cannot place building on mountain tiles
+      }
+    }
+  }
+  
   return true;
 }
 

@@ -1,6 +1,7 @@
 import { dist2, norm, sub } from "../../core/utils";
 import { T, WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState, Resources } from "../types";
+import type { ItemType } from "../types/items";
 import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "../skills/skills";
 import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
@@ -1798,18 +1799,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               const yieldMult = 1 + Math.min(0.5, miningLvl * 0.02);
               const amount = Math.round(oreProps.miningYield * yieldMult);
               
-              // Determine resource type from ore
-              let resourceType: keyof Resources;
-              switch (oreType.toString()) {
-                case 'coal': resourceType = 'coal'; break;
-                case 'copper': resourceType = 'copper'; break;
-                case 'steel': resourceType = 'steel'; break;
-                case 'silver': resourceType = 'silver'; break;
-                case 'gold': resourceType = 'gold'; break;
-                default: resourceType = 'stone'; break; // Plain stone
+              // Determine resource type from ore - oreType enum values match ItemType
+              let resourceType: ItemType;
+              switch (oreType) {
+                case OreType.COAL: resourceType = 'coal'; break;
+                case OreType.COPPER: resourceType = 'copper'; break;
+                case OreType.STEEL: resourceType = 'steel'; break;
+                case OreType.SILVER: resourceType = 'silver'; break;
+                case OreType.GOLD: resourceType = 'gold'; break;
+                default: resourceType = 'stone'; break; // Plain stone or none
               }
               
-              // Drop resources on the ground
+              // Drop resources on the ground as floor items
               const dropAt = { x: worldX, y: worldY };
               (game as any).itemManager?.dropItems(resourceType, amount, dropAt);
               game.msg(`Mined ${amount} ${oreProps.name}`, 'good');

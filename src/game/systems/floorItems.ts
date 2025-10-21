@@ -50,6 +50,37 @@ const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: number; s
     stackLimit: 10,
     stackRadius: 16,
     color: '#FF6347'
+  },
+  // Ore resources from mining mountains
+  coal: {
+    weight: 0.8,
+    stackLimit: 75,
+    stackRadius: 22,
+    color: '#1f2937' // Dark gray/black
+  },
+  copper: {
+    weight: 1.2,
+    stackLimit: 75,
+    stackRadius: 22,
+    color: '#b45309' // Reddish-brown
+  },
+  steel: {
+    weight: 1.5,
+    stackLimit: 75,
+    stackRadius: 22,
+    color: '#64748b' // Blue-gray steel
+  },
+  silver: {
+    weight: 0.008,
+    stackLimit: 500,
+    stackRadius: 20,
+    color: '#d4d4d8' // Light silver
+  },
+  gold: {
+    weight: 0.8,
+    stackLimit: 25,
+    stackRadius: 18,
+    color: '#fbbf24' // Golden yellow
   }
 };
 

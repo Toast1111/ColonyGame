@@ -1,6 +1,6 @@
 import type { Vec2 } from "../../core/utils";
 
-export type ItemType = 'wood' | 'stone' | 'food' | 'wheat' | 'bread' | 'medicine' | 'metal' | 'cloth';
+export type ItemType = 'wood' | 'stone' | 'food' | 'wheat' | 'bread' | 'medicine' | 'metal' | 'cloth' | 'coal' | 'copper' | 'steel' | 'silver' | 'gold';
 
 export interface FloorItem {
   id: string;
