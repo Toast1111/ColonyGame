@@ -13,6 +13,7 @@ import { WORLD, T, COLORS } from '../game/constants';
 import type { Camera, Colonist } from '../game/types';
 import type { TerrainGrid } from '../game/terrain';
 import { getFloorTypeFromId, FloorType, FLOOR_VISUALS, getTerrainTypeFromId, TerrainType } from '../game/terrain';
+import { drawMountainTile } from '../game/render/index';
 
 /**
  * World background cache - renders static world tiles to a canvas once
@@ -51,7 +52,7 @@ export class WorldBackgroundCache {
 
     const cacheCtx = this.canvas.getContext('2d')!;
     
-    // Draw ground and floors tile-by-tile, skipping mountains
+    // Draw ground, floors, and mountains tile-by-tile
     if (terrainGrid) {
       for (let gy = 0; gy < terrainGrid.rows; gy++) {
         for (let gx = 0; gx < terrainGrid.cols; gx++) {
@@ -60,10 +61,13 @@ export class WorldBackgroundCache {
           const wx = gx * T;
           const wy = gy * T;
           
-          // Skip mountain tiles - they'll be drawn dynamically with ores
-          if (terrainType === TerrainType.MOUNTAIN) continue;
+          // Mountains are drawn with their special rendering
+          if (terrainType === TerrainType.MOUNTAIN) {
+            drawMountainTile(cacheCtx, terrainGrid, gx, gy);
+            continue;
+          }
           
-          // Draw ground tile
+          // Draw ground tile for non-mountain terrain
           cacheCtx.fillStyle = COLORS.ground;
           cacheCtx.fillRect(wx, wy, T, T);
           

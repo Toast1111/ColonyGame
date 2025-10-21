@@ -26,10 +26,10 @@ export const MiningWorkGiver: WorkGiver = {
         for (let gy = startGY; gy <= endGY; gy++) {
           for (let gx = startGX; gx <= endGX; gx++) {
             // Check if this tile is a mountain
-            if (!isMountainTile(game, gx, gy)) continue;
+            if (!isMountainTile(game.terrainGrid, gx, gy)) continue;
 
             // Check if ore is visible (exposed)
-            const oreType = getVisibleOreAt(game, gx, gy);
+            const oreType = getVisibleOreAt(game.terrainGrid, gx, gy);
             if (oreType === null) continue; // Not exposed yet
 
             // Check if already assigned
