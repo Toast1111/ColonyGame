@@ -1878,7 +1878,60 @@ export class Game {
     return c;
   }
   spawnEnemy() {
-    const edge = randi(0, 4); let x, y; if (edge === 0) { x = rand(0, WORLD.w); y = -80; } else if (edge === 1) { x = rand(0, WORLD.w); y = WORLD.h + 80; } else if (edge === 2) { x = -80; y = rand(0, WORLD.h); } else { x = WORLD.w + 80; y = rand(0, WORLD.h); }
+    // Try multiple times to find a valid spawn position
+    const MAX_ATTEMPTS = 20;
+    let x = 0, y = 0;
+    let validSpawn = false;
+    
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // Pick a random edge
+      const edge = randi(0, 4);
+      if (edge === 0) { 
+        x = rand(0, WORLD.w); 
+        y = -80; 
+      } else if (edge === 1) { 
+        x = rand(0, WORLD.w); 
+        y = WORLD.h + 80; 
+      } else if (edge === 2) { 
+        x = -80; 
+        y = rand(0, WORLD.h); 
+      } else { 
+        x = WORLD.w + 80; 
+        y = rand(0, WORLD.h); 
+      }
+      
+      // Check if this position is on a mountain tile
+      const gx = Math.floor(x / T);
+      const gy = Math.floor(y / T);
+      if (isMountainTile(this.terrainGrid, gx, gy)) {
+        continue; // Skip mountain tiles
+      }
+      
+      // Check if there's a valid path from this position to the HQ
+      // Use a quick reachability check instead of full pathfinding
+      const hqX = HQ_POS.x;
+      const hqY = HQ_POS.y;
+      
+      // Simple validation: check if spawn grid tile is passable
+      if (gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows) {
+        const idx = gy * this.grid.cols + gx;
+        if (!this.grid.solid[idx]) {
+          validSpawn = true;
+          break;
+        }
+      }
+    }
+    
+    // If we couldn't find a valid spawn after MAX_ATTEMPTS, spawn near HQ edge
+    if (!validSpawn) {
+      const angle = rand(0, Math.PI * 2);
+      const distance = 200; // Safe distance from HQ
+      x = HQ_POS.x + Math.cos(angle) * distance;
+      y = HQ_POS.y + Math.sin(angle) * distance;
+      x = Math.max(0, Math.min(x, WORLD.w));
+      y = Math.max(0, Math.min(y, WORLD.h));
+    }
+    
     const e: Enemy = { x, y, r: 9, hp: 60 + this.day * 6, speed: 48 + this.day * 2, dmg: 8 + this.day, target: null, color: COLORS.enemy };
     this.enemies.push(e); return e;
   }
