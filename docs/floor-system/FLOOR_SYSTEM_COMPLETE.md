@@ -52,7 +52,7 @@
 
 2. **Integration in Game**
    - Debug flag: `game.debug.terrain`
-   - Renders after regions, before nav grid
+   - Renders with terrain visualization
    - Shows movement costs visually
 
 ### ✅ Floor Types Available
@@ -220,9 +220,8 @@ Path through mud with stone road:
 1. **`FLOOR_SYSTEM.md`** - Complete floor system guide
 2. **`TERRAIN_SYSTEM.md`** - Terrain architecture
 3. **`TERRAIN_MIGRATION_GUIDE.md`** - Migration steps
-4. **`COMPLETE_NAVIGATION_SYSTEM.md`** - All 3 layers (regions + terrain + grid)
-5. **`REGION_INTEGRATION_SUMMARY.md`** - Region system benefits
-6. **This file** - Implementation summary
+4. **`COMPLETE_NAVIGATION_SYSTEM.md`** - Navigation layers (terrain + grid)
+5. **This file** - Implementation summary
 
 ## Breaking Changes
 
@@ -266,7 +265,6 @@ Old saves with path buildings will still work (backward compatibility in rebuild
 - ✅ **Future-proof** - Easy to extend
 
 ### Performance:
-- **50x faster pathfinding** (region system)
 - **40-50% faster movement** on floors
 - **Minimal memory overhead** (~56 KB)
 - **Pre-computed costs** (no runtime overhead)
