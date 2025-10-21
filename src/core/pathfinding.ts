@@ -663,22 +663,19 @@ export function aStar(
  * - No smoothing or interpolation
  * - 8-directional movement for more natural diagonal paths
  * - No road optimization (enemies don't prefer roads)
- * - REGION-AWARE: Checks reachability before running A* (major optimization!)
  * 
  * @param g - Pathfinding grid
  * @param fx - Start X (world coordinates)
  * @param fy - Start Y (world coordinates)
  * @param tx - Target X (world coordinates)
  * @param ty - Target Y (world coordinates)
- * @param regionManager - Optional region manager for reachability check (highly recommended!)
  */
 export function computeEnemyPath(
   g: Grid,
   fx: number,
   fy: number,
   tx: number,
-  ty: number,
-  regionManager?: any  // RegionManager type (avoiding circular dependency)
+  ty: number
 ): { x: number; y: number }[] | null {
   const { cols, rows } = g;
 
@@ -698,16 +695,6 @@ export function computeEnemyPath(
 
   // Check if start or goal is blocked
   if (g.solid[sId] || g.solid[gId]) return null;
-
-  // OPTIMIZATION: Check region reachability BEFORE running expensive A*
-  // This prevents wasting CPU on impossible paths (e.g., enemy in different region)
-  if (regionManager && regionManager.isEnabled && regionManager.isEnabled()) {
-    const reachable = regionManager.isReachable(fx, fy, tx, ty);
-    if (!reachable) {
-      // Target is in a different, unreachable region - no path exists
-      return null;
-    }
-  }
 
   // A* data structures
   const gScore = new Float32Array(cols * rows).fill(Infinity);

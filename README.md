@@ -51,7 +51,6 @@ All technical documentation has been organized into the `docs/` folder by system
 - 🏥 **Medical** - Health and treatment systems
 - 🎯 **Work Priority** - RimWorld-style work assignment
 - 🗺️ **Navigation** - Enemy AI and pathfinding
-- 🌍 **Regions** - Region-based pathfinding
 - ⚔️ **Combat** - Combat mechanics
 - And more...
 
