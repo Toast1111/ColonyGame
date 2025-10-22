@@ -15,6 +15,7 @@ import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, draw
 import { WorkGiverManager } from './systems/workGiverManager';
 import { ReservationManager } from './managers/ReservationManager';
 import { TaskManager } from './managers/TaskManager';
+import { createEnemyWithProfile } from './enemy_systems/enemyGenerator';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
@@ -1937,8 +1938,13 @@ export class Game {
       y = Math.max(0, Math.min(y, WORLD.h));
     }
     
-    const e: Enemy = { x, y, r: 9, hp: 60 + this.day * 6, speed: 48 + this.day * 2, dmg: 8 + this.day, target: null, color: COLORS.enemy };
-    this.enemies.push(e); return e;
+    // Use enemy generator for visual variety and equipment
+    // Threat level increases every 5 days
+    const threatLevel = Math.floor(this.day / 5) + 1;
+    const e = createEnemyWithProfile(x, y, threatLevel, this.day);
+    
+    this.enemies.push(e); 
+    return e;
   }
 
   // Placement

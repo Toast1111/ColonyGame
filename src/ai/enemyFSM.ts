@@ -113,6 +113,11 @@ function moveEnemyAlongPath(game: any, e: Enemy, dt: number): number {
   const dy = node.y - e.y;
   const dist = Math.hypot(dx, dy);
 
+  // Update direction for sprite rendering (only when actually moving)
+  if (dist > 0.1) {
+    e.direction = Math.atan2(dy, dx);
+  }
+
   let speed = e.speed;
   if (game.grid) {
     const gx = Math.floor(e.x / T);
@@ -179,6 +184,9 @@ function moveDirectlyWithCollision(game: any, e: Enemy, target: { x: number; y: 
   const distance = Math.hypot(dx, dy);
   if (distance < 1e-3) return false;
 
+  // Update direction for sprite rendering
+  e.direction = Math.atan2(dy, dx);
+
   const step = e.speed * dt;
   const nx = dx / distance;
   const ny = dy / distance;
@@ -200,6 +208,8 @@ function moveDirectlyWithCollision(game: any, e: Enemy, target: { x: number; y: 
   if (!wouldCollideWithBuildings(game, slideRightX, slideRightY, e.r)) {
     e.x = slideRightX;
     e.y = slideRightY;
+    // Update direction for slide movement too
+    e.direction = Math.atan2(perpY, perpX);
     return true;
   }
 
@@ -208,6 +218,8 @@ function moveDirectlyWithCollision(game: any, e: Enemy, target: { x: number; y: 
   if (!wouldCollideWithBuildings(game, slideLeftX, slideLeftY, e.r)) {
     e.x = slideLeftX;
     e.y = slideLeftY;
+    // Update direction for slide movement too
+    e.direction = Math.atan2(-perpY, -perpX);
     return true;
   }
 

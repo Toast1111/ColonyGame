@@ -72,7 +72,13 @@ export const EYE_COLORS: ColorVariant[] = [
 export const HAIR_STYLES = [
   'afro', 'bob', 'bowlcut', 'braidbun', 'bravo', 'burgundy',
   'cleopatra', 'curly', 'cute', 'decent', 'elder', 'fancybun',
-  'firestarter', 'flowy', 'fringe'
+  'firestarter', 'flowy', 'fringe', 'frozen', 'gaston', 'greasyswoop',
+  'junkie', 'keeper', 'lackland', 'locks', 'long', 'mess',
+  'mohawk', 'mop', 'pigtails', 'ponytails', 'primal', 'princess',
+  'randy', 'recruit', 'revolt', 'rockstar', 'rookie', 'savage',
+  'scat', 'scorpiontail', 'scrapper', 'senorita', 'shaved', 'shavetopbraid',
+  'snazzy', 'spikes', 'sticky', 'topdog', 'troubadour', 'tuft',
+  'warden', 'wavy'
 ];
 
 // Body Types

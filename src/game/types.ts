@@ -316,6 +316,8 @@ export type Enemy = {
   id?: string;                       // Unique identifier for door queue management
   // Stagger/stopping power effects
   staggeredUntil?: number;           // Game time until stagger effect ends (speed reduced to 1/6th)
+  // Movement direction for sprite rendering
+  direction?: number;                // Direction in radians (for directional sprite rendering)
 };
 
 export type Bullet = {

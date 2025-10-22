@@ -453,11 +453,18 @@ export class RenderManager {
     // Long press progress circle
     (game as any).drawLongPressProgress();
 
-    // Enemies (with culling)
+    // Enemies (with culling) - now use sprite rendering like colonists
     for (let i = 0; i < game.enemies.length; i++) {
       const e = game.enemies[i];
       if (!inViewport(e.x, e.y, e.r + 5)) continue;
-      drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
+      
+      // If enemy has a profile (generated with enemyGenerator), render with sprites
+      if ((e as any).profile) {
+        drawColonistAvatar(ctx, e.x, e.y, e as any, e.r, false);
+      } else {
+        // Fallback for old enemies without profiles - simple triangle
+        drawPoly(ctx, e.x, e.y, e.r + 2, 3, COLORS.enemy, -Math.PI / 2);
+      }
     }
 
     // Bullets (with culling)
