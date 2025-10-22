@@ -1,26 +1,21 @@
-# Complete Navigation System - Grid + Terrain + Regions
+# Complete Navigation System - Grid + Terrain ~~+ Regions~~
 
-## Three-Layer Optimization Stack
+> **⚠️ UPDATE (October 2025)**: The region system has been removed from the codebase due to performance issues and complexity. This document is kept for historical reference but **Layer 1 (Region System) is no longer active**. See `docs/archived/REGION_SYSTEM_REMOVAL_SUMMARY.md` for details.
 
-The navigation system now has three complementary layers that work together:
+## Two-Layer Optimization Stack
+
+The navigation system now has two complementary layers that work together:
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│  1. REGION SYSTEM (Reachability Check)              │
-│     - Checks if target is reachable before A*       │
-│     - 50x faster for unreachable targets            │
-│     - O(r) where r = ~20 regions                    │
-└──────────────────┬──────────────────────────────────┘
-                   ↓ (if reachable)
-┌─────────────────────────────────────────────────────┐
-│  2. TERRAIN SYSTEM (Movement Costs)                 │
+│  1. TERRAIN SYSTEM (Movement Costs)                 │
 │     - Calculates cost per tile (mud, sand, etc.)    │
 │     - Formula: terrain_cost × floor_cost            │
 │     - Synced to pathfinding grid                    │
 └──────────────────┬──────────────────────────────────┘
                    ↓ (with costs)
 ┌─────────────────────────────────────────────────────┐
-│  3. GRID-BASED A* (Actual Pathfinding)              │
+│  2. GRID-BASED A* (Actual Pathfinding)              │
 │     - 8-directional movement                        │
 │     - Grid-aligned paths (no snap-back)             │
 │     - Respects terrain costs                        │
@@ -36,28 +31,20 @@ The navigation system now has three complementary layers that work together:
 // 1. Enemy needs to path to target
 const target = colonist;
 
-// 2. Call pathfinding with ALL systems
+// 2. Call pathfinding with grid system
 const path = computeEnemyPath(
   game.grid,              // Has terrain costs
   enemy.x, enemy.y,
-  target.x, target.y,
-  game.regionManager      // Reachability check
+  target.x, target.y
 );
 
 // Inside computeEnemyPath:
 
-// LAYER 1: Region check (fast rejection)
-if (regionManager?.isEnabled()) {
-  if (!regionManager.isReachable(fx, fy, tx, ty)) {
-    return null;  // ← 50x faster exit!
-  }
-}
-
-// LAYER 2: Terrain costs (already in grid.cost[])
+// LAYER 1: Terrain costs (already in grid.cost[])
 // Calculated by: syncTerrainToGrid(grid)
 // Each tile has: TERRAIN_COST × FLOOR_COST
 
-// LAYER 3: Grid-based A* with costs
+// LAYER 2: Grid-based A* with costs
 for (each neighbor) {
   const stepCost = moveCost × g.cost[ni];  // ← Uses terrain!
   // ... A* algorithm with costs ...
@@ -74,55 +61,35 @@ for (each neighbor) {
 Enemy → Smooth A* → Snap-back on recalc → Terrible performance
 
 Issues:
-- No region check → wastes CPU on unreachable targets
 - No terrain costs → enemies ignore mud/obstacles
 - Non-grid movement → constant snap-back
 - Frequent recalc → 70% wasted pathfinding
+- Region system overhead → slower nav grid rebuilds
 
 Result: Enemies take DAYS to reach HQ, terrible FPS
 ```
 
-### New System (All Three Layers)
+### New System (Current: Two Layers)
 
 ```
-Enemy → Region check → Terrain-aware A* → Grid path → Success!
+Enemy → Terrain-aware A* → Grid path → Success!
 
 Benefits:
-✅ Region check: 50x faster rejection
 ✅ Terrain costs: Realistic movement (avoid mud)
 ✅ Grid-aligned: No snap-back ever
 ✅ Smart recalc: 70% fewer pathfinding calls
+✅ Simple architecture: Faster nav grid rebuilds
 
 Result: Enemies reach HQ in <1 day, smooth movement, great FPS
 ```
 
-## Layer 1: Region System
+## ~~Layer 1: Region System~~ (REMOVED)
 
-### Purpose
-Fast reachability checks to avoid wasted pathfinding.
+> **⚠️ DEPRECATED**: The region system was removed in October 2025 due to performance issues. It added 30-50% overhead to nav grid rebuilds while providing minimal benefit. A* pathfinding already handles unreachable targets efficiently.
+>
+> See `docs/archived/REGION_SYSTEM_REMOVAL_SUMMARY.md` for full details.
 
-### How It Works
-- Map divided into connected regions
-- BFS through ~20 regions vs A* through ~57,600 tiles
-- Early exit if target unreachable
-
-### Performance
-- **Unreachable target**: <1ms (vs 50ms without)
-- **Reachable target**: <1ms overhead on top of A*
-
-### Example
-```typescript
-Enemy outside walls → Colonist inside
-Region check: No connection → Return null in <1ms
-Saved: 50ms of A* computation
-```
-
-### Files
-- `src/game/navigation/regionManager.ts` - Manager
-- `src/game/navigation/regionBuilder.ts` - Building regions
-- `src/game/navigation/regionPathfinding.ts` - Integration
-
-## Layer 2: Terrain System
+## Layer 1: Terrain System (Current)
 
 ### Purpose
 Realistic movement costs for different ground types (biomes).
@@ -148,7 +115,7 @@ Pathfinding naturally avoids slow terrain
 - `src/game/terrain.ts` - Terrain types and costs
 - `src/core/pathfinding.ts` - Terrain integration
 
-## Layer 3: Grid-Based Navigation
+## Layer 2: Grid-Based Navigation
 
 ### Purpose
 Fix snap-back bug, predictable movement.

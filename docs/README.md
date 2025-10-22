@@ -38,15 +38,6 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 - [Quick Reference](./navigation/ENEMY_NAV_QUICKREF.md) - Quick lookup
 - [Testing](./navigation/ENEMY_NAV_TESTING.md) - Test procedures
 
-### 🌍 [Regions](./regions/)
-**Region-based pathfinding and door systems**
-- [System Overview](./regions/REGION_SYSTEM.md) - Region architecture
-- [Implementation](./regions/REGION_IMPLEMENTATION_SUMMARY.md) - Core implementation
-- [Integration](./regions/REGION_INTEGRATION_SUMMARY.md) - System integration
-- [Door System](./regions/REGION_DOOR_UPDATE.md) - Door integration
-- [Visual Guide](./regions/REGION_VISUAL_GUIDE.md) - Debugging and visualization
-- [Quick Start](./regions/REGION_QUICK_START.md) - Getting started
-
 ### 🧭 [Pathfinding](./pathfinding/)
 **A* pathfinding and grid optimization**
 - [Bug Fixes](./pathfinding/PATHFINDING_BUG_FIX.md) - Critical pathfinding fixes
@@ -94,17 +85,15 @@ General bug fixes and patches
 
 ### System Guides
 - [Medical System Complete](./medical/MEDICAL_SYSTEM_COMPLETE.md) - Full medical implementation
-- [Region Quick Start](./regions/REGION_QUICK_START.md) - Region system overview
 - [Combat Manager Complete](./combat/COMBAT_MANAGER_COMPLETE.md) - Combat system guide
 
 ## 📊 Documentation Count
 
 ```
-Total Documents: 60+
+Total Documents: 51+
 ├── Refactoring:    6 docs
 ├── Work Priority:  8 docs
 ├── Medical:       14 docs  
-├── Regions:        9 docs
 ├── Navigation:     5 docs
 ├── Pathfinding:    4 docs
 ├── Terrain:        4 docs
@@ -120,7 +109,7 @@ Total Documents: 60+
 - **Adding new buildings?** → See refactoring docs for architecture
 - **Fixing colonist behavior?** → See medical or work priority
 - **Enemy AI issues?** → See navigation docs
-- **Pathfinding problems?** → See pathfinding or regions
+- **Pathfinding problems?** → See pathfinding or navigation
 - **UI/Input bugs?** → See refactoring (InputManager/UIManager)
 
 ### By Task
@@ -158,7 +147,7 @@ src/game/
 ├── colonist_systems/    - Colonist AI & FSM
 ├── combat/              - Combat mechanics
 ├── health/              - Medical systems
-├── navigation/          - Pathfinding & regions
+├── navigation/          - Pathfinding & enemy AI
 ├── rimworld-systems/    - RimWorld-inspired features
 └── ui/                  - UI rendering
 ```
