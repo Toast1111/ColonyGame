@@ -235,7 +235,7 @@ export class RenderManager {
       const centerY = b.y + b.h / 2;
       if (!inViewport(centerX, centerY, radius)) continue;
 
-      const numInside = game.insideCounts.get(b) || 0;
+      const numInside = game.reservationManager.getInsideCount(b);
       if (numInside > 0 && (b.kind === 'hq' || b.kind === 'house')) {
         // Draw person icon(s) in top-right corner of building
         const iconSize = 10;

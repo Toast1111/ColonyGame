@@ -38,17 +38,24 @@ export const CookingWorkGiver: WorkGiver = {
     if (colonist.carryingBread && colonist.carryingBread > 0) {
       const pantries = game.buildings.filter((b: any) => b.kind === 'pantry' && b.done);
       if (pantries.length > 0) {
-        const nearestPantry = pantries.reduce((closest: any, p: any) => {
+        // Find nearest pantry - safe because we checked length > 0
+        let nearestPantry = pantries[0];
+        let minDist = Math.hypot(colonist.x - (nearestPantry.x + nearestPantry.w / 2), colonist.y - (nearestPantry.y + nearestPantry.h / 2));
+        
+        for (let i = 1; i < pantries.length; i++) {
+          const p = pantries[i];
           const dist = Math.hypot(colonist.x - (p.x + p.w / 2), colonist.y - (p.y + p.h / 2));
-          const closestDist = Math.hypot(colonist.x - (closest.x + closest.w / 2), colonist.y - (closest.y + closest.h / 2));
-          return dist < closestDist ? p : closest;
-        });
-        const distance = Math.hypot(colonist.x - (nearestPantry.x + nearestPantry.w / 2), colonist.y - (nearestPantry.y + nearestPantry.h / 2));
+          if (dist < minDist) {
+            minDist = dist;
+            nearestPantry = p;
+          }
+        }
+        
         out.push({
           workType: 'Cooking',
           task: 'storeBread',
           target: nearestPantry,
-          distance,
+          distance: minDist,
           priority: getWorkPriority('Cooking') - 1 // Slight bias to finish the job
         });
       }

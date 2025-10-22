@@ -26,6 +26,10 @@ export const HaulingWorkGiver: WorkGiver = {
         // Prefer pantries with space for bread
         const pantriesWithSpace = pantries.filter((p: any) => hasInventorySpace(p, 'bread'));
         const candidatePantries = pantriesWithSpace.length > 0 ? pantriesWithSpace : pantries;
+        
+        // Find nearest pantry with safety check for empty array
+        if (candidatePantries.length === 0) continue; // Skip if no pantries available
+        
         const nearestPantry = candidatePantries.reduce((closest: any, p: any) => {
           const dist = Math.hypot(colonist.x - (p.x + p.w / 2), colonist.y - (p.y + p.h / 2));
           const closestDist = Math.hypot(colonist.x - (closest.x + closest.w / 2), colonist.y - (closest.y + closest.h / 2));

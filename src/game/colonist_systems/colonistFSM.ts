@@ -997,7 +997,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           .map(house => {
             const distance = Math.sqrt(dist2(c as any, game.centerOf(house) as any));
             const capacity = game.buildingCapacity(house);
-            const current = game.insideCounts.get(house) || 0;
+            const current = game.reservationManager.getInsideCount(house);
             const spaceAvailable = Math.max(0, capacity - current);
             const score = spaceAvailable * 100 - distance;
             return { house, score };
@@ -1825,6 +1825,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               
               // Update pathfinding (mountain is now passable)
               game.navigationManager.rebuildNavGridPartial(worldX, worldY, T * 2);
+              
+              // Invalidate world cache so the mined mountain disappears from rendering
+              game.renderManager?.invalidateWorldCache();
             }
             
             const tileKey = `${gx},${gy}`;
@@ -2275,6 +2278,20 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const dest = data.destination as { x: number; y: number };
       if (!itemId || !dest) {
         c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'invalid hauling data');
+        break;
+      }
+
+      // Timeout check - if stuck for too long, abandon the hauling task
+      if (c.stateSince > 30) {
+        console.log(`Floor item hauling timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
+        // Drop any carried items at current position before abandoning
+        const carried = (c as any).carryingItem;
+        if (carried && carried.qty > 0) {
+          rim.dropItems(carried.type, carried.qty, { x: c.x, y: c.y });
+          (c as any).carryingItem = null;
+        }
+        c.task = null; c.target = null; c.taskData = null; 
+        changeState('seekTask', 'hauling timeout');
         break;
       }
 

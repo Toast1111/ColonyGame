@@ -13,6 +13,8 @@ import { HealthManager } from "./managers/HealthManager";
 import { InventoryManager } from "./managers/InventoryManager";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { WorkGiverManager } from './systems/workGiverManager';
+import { ReservationManager } from './managers/ReservationManager';
+import { TaskManager } from './managers/TaskManager';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
@@ -328,7 +330,9 @@ export class Game {
   // Debug flags (keep as is - not part of managers)
   debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
   // Systems
-  private workGiverManager = new WorkGiverManager();
+  public workGiverManager = new WorkGiverManager();
+  public reservationManager = new ReservationManager();
+  public taskManager!: TaskManager; // Initialized in constructor after this is fully constructed
   public itemManager: ItemManager;
   public healthManager = new HealthManager(); // Stop eating health paste! Delegate properly! 🎨
   public inventoryManager = new InventoryManager(); // Equipment and item management - no more paste-eating! 🍝
@@ -341,6 +345,9 @@ export class Game {
     
     // Initialize dirty rect tracker with canvas dimensions
     this.dirtyRectTracker = new DirtyRectTracker(canvas.width, canvas.height);
+    
+    // Initialize task manager (requires reservationManager to be constructed)
+    this.taskManager = new TaskManager(this, this.reservationManager);
     
     window.addEventListener('resize', () => this.handleResize());
     this.bindInput();
@@ -1755,9 +1762,7 @@ export class Game {
   newGame() {
   this.colonists.length = this.enemies.length = this.trees.length = this.rocks.length = this.buildings.length = this.bullets.length = this.messages.length = 0;
   this.miningZones.length = 0; // Clear mining zones
-  this.buildReservations.clear();
-  this.insideCounts.clear();
-  this.sleepReservations.clear();
+  this.reservationManager.clearAll(); // Clear all reservations via manager
   
   // Clear colonist sprite cache on new game to ensure fresh sprite composition
   colonistSpriteCache.clear();
@@ -1958,344 +1963,23 @@ export class Game {
 
   evictColonistsFrom(b: Building) { evictColonistsFromPlacement(this, b); }
 
-  // AI
-  assignedTargets = new WeakSet<object>();
-  assignedTiles = new Set<string>(); // For tracking mountain tile assignments by "gx,gy" key
-  // Limit how many colonists work on one build site concurrently
-  buildReservations = new Map<Building, number>();
-  // Track how many colonists are inside a building (for capacity)
-  insideCounts = new Map<Building, number>();
-  // Hold pending sleep assignments so colonists don't steal beds mid-walk
-  sleepReservations = new Map<Building, Set<Colonist>>();
-  buildingCapacity(b: Building): number {
-    if (b.kind === 'hq') return 8; // generous lobby
-    if (b.kind === 'house') return 3; // requested: 3 slots per house
-    if (typeof b.popCap === 'number') return b.popCap;
-    return 1;
-  }
-  private getReservedSleepCount(b: Building, ignoreColonist?: Colonist): number {
-    const reservations = this.sleepReservations.get(b);
-    if (!reservations || reservations.size === 0) return 0;
-    if (ignoreColonist && reservations.has(ignoreColonist)) {
-      return Math.max(0, reservations.size - 1);
-    }
-    return reservations.size;
-  }
-  buildingHasSpace(b: Building, ignoreColonist?: Colonist): boolean {
-    const cap = this.buildingCapacity(b);
-    const cur = this.insideCounts.get(b) || 0;
-    const reserved = this.getReservedSleepCount(b, ignoreColonist);
-    return cur + reserved < cap;
-  }
-  reserveSleepSpot(c: Colonist, b: Building): boolean {
-    if (!b.done) return false;
-    if (c.reservedSleepFor === b) return true;
-    if (c.reservedSleepFor && c.reservedSleepFor !== b) {
-      this.releaseSleepReservation(c);
-    }
-    const cap = this.buildingCapacity(b);
-    const inside = this.insideCounts.get(b) || 0;
-    const reservations = this.sleepReservations.get(b) || new Set<Colonist>();
-    if (inside + reservations.size >= cap) {
-      return false;
-    }
-    reservations.add(c);
-    this.sleepReservations.set(b, reservations);
-    c.reservedSleepFor = b;
-    return true;
-  }
-  releaseSleepReservation(c: Colonist) {
-    const b = c.reservedSleepFor;
-    if (!b) return;
-    const reservations = this.sleepReservations.get(b);
-    if (reservations) {
-      reservations.delete(c);
-      if (reservations.size === 0) this.sleepReservations.delete(b);
-    }
-    c.reservedSleepFor = null;
-  }
-  tryEnterBuilding(c: Colonist, b: Building): boolean {
-    if (!b.done) return false;
-    if (!this.buildingHasSpace(b, c)) return false;
-    this.insideCounts.set(b, (this.insideCounts.get(b) || 0) + 1);
-    this.releaseSleepReservation(c);
-    c.inside = b; c.hideTimer = 0;
-    if (b.kind === 'bed') {
-      const center = this.centerOf(b);
-      c.x = center.x;
-      c.y = center.y;
-      c.restingOn = b;
-      // Align sprite to a horizontal pose while sleeping
-      (c as any).sleepFacing = Math.PI / 2;
-    } else {
-      c.restingOn = null;
-    }
-    return true;
-  }
-  leaveBuilding(c: Colonist) {
-    const b = c.inside;
-    if (b) {
-      const cur = (this.insideCounts.get(b) || 1) - 1;
-      if (cur <= 0) this.insideCounts.delete(b); else this.insideCounts.set(b, cur);
-    }
-    if (b && b.kind === 'bed') {
-      c.restingOn = null;
-      (c as any).sleepFacing = undefined;
-    }
-    c.inside = null; c.hideTimer = 0;
-  }
-  private getMaxCrew(b: Building): number {
-    // Simple heuristic: small builds 1, medium 2, large 3
-    const areaTiles = (b.w / T) * (b.h / T);
-    if (areaTiles <= 1) return 1;
-    if (areaTiles <= 4) return 2;
-    return 3;
-  }
-  releaseBuildReservation(c: Colonist) {
-    if (!c.reservedBuildFor) return;
-    const b = c.reservedBuildFor; const cur = (this.buildReservations.get(b) || 1) - 1;
-    if (cur <= 0) this.buildReservations.delete(b); else this.buildReservations.set(b, cur);
-    c.reservedBuildFor = null;
-  }
-  clearPath(c: Colonist) {
-    c.path = undefined;
-    c.pathIndex = undefined; // RE-ENABLED
-    // c.repath = 0; // REPATH TIMER STILL DISABLED
-    if (c.pendingPathRequest) c.pendingPathRequest = undefined;
-    if (c.pendingPathPromise) c.pendingPathPromise = null;
-  }
-  setTask(c: Colonist, task: string, target: any, options?: { isPlayerCommand?: boolean; extraData?: any }) {
-    const isPlayerCommand = options?.isPlayerCommand ?? false;
-    const extraData = options?.extraData;
-
-    // Normalize high level commands into concrete tasks
-    if (task === 'work') {
-      if (target && typeof target === 'object' && 'buildLeft' in target && typeof (target as any).buildLeft === 'number' && !(target as Building).done) {
-        task = 'build';
-      } else {
-        task = 'goto';
-      }
-    }
-
-    let commandIntent: ColonistCommandIntent | null = null;
-    switch (task) {
-      case 'goto':
-      case 'rest':
-      case 'medical':
-      case 'seekMedical':
-      case 'guard':
-        commandIntent = task;
-        break;
-      default:
-        commandIntent = null;
-        break;
-    }
-
-    // release old reserved target
-    if (c.target) {
-      const oldTarget = c.target as any;
-      // Handle mountain tile keys
-      if (oldTarget.gx !== undefined && oldTarget.gy !== undefined) {
-        const oldTileKey = `${oldTarget.gx},${oldTarget.gy}`;
-        if (this.assignedTiles.has(oldTileKey)) this.assignedTiles.delete(oldTileKey);
-      } else if (oldTarget.type && this.assignedTargets.has(oldTarget)) {
-        this.assignedTargets.delete(oldTarget);
-      }
-    }
-    // release old build reservation if changing away from that building
-    if (c.reservedBuildFor && c.reservedBuildFor !== target) this.releaseBuildReservation(c);
-    c.task = task;
-    c.target = target;
-    c.taskData = extraData ?? null;
-    this.clearPath(c);
-
-    // Reset any lingering door interactions when task changes
-    const releaseDoorIfQueued = (door: any) => {
-      if (!door || door.kind !== 'door' || !c.id) return;
-      releaseDoorQueue(door, c.id);
-    };
-    if (c.waitingForDoor) {
-      releaseDoorIfQueued(c.waitingForDoor);
-    }
-    if (c.doorPassingThrough && c.doorPassingThrough !== c.waitingForDoor) {
-      releaseDoorIfQueued(c.doorPassingThrough);
-    }
-    c.waitingForDoor = null;
-    c.doorPassingThrough = null;
-    c.doorApproachVector = null;
-    c.doorWaitStart = undefined;
-
-    // Track direct-command metadata
-    if (commandIntent) {
-      c.commandIntent = commandIntent;
-      c.commandData = extraData ?? null;
-      if (commandIntent === 'guard') {
-        if (target && typeof target === 'object' && 'x' in target && 'y' in target && !('w' in target)) {
-          c.guardAnchor = { x: target.x, y: target.y };
-        } else if (target && typeof target === 'object' && 'x' in target && 'y' in target && 'w' in target && 'h' in target) {
-          c.guardAnchor = { x: (target as Building).x + (target as Building).w / 2, y: (target as Building).y + (target as Building).h / 2 };
-        } else {
-          c.guardAnchor = null;
-        }
-      } else {
-        c.guardAnchor = null;
-      }
-    } else {
-      c.commandIntent = null;
-      c.commandData = null;
-      c.guardAnchor = null;
-    }
-    
-    // Mark player-issued commands with a timestamp and expiration
-    if (isPlayerCommand) {
-      c.playerCommand = {
-        issued: true,
-        timestamp: c.t || 0,
-        task: task,
-        expires: (c.t || 0) + 300 // Commands expire after 5 minutes (300 seconds) of game time
-      };
-    }
-    
-    // reserve resources so only one colonist picks the same tree/rock/mountain
-    const targetObj = target as any;
-    if (targetObj && targetObj.type && (targetObj.type === 'tree' || targetObj.type === 'rock')) {
-      this.assignedTargets.add(target);
-    } else if (targetObj && targetObj.gx !== undefined && targetObj.gy !== undefined) {
-      // Mountain tile assignment
-      const tileKey = `${targetObj.gx},${targetObj.gy}`;
-      this.assignedTiles.add(tileKey);
-    }
-    // reserve a build slot
-    if (task === 'build' && target && (target as Building).w != null && !c.reservedBuildFor) {
-      const b = target as Building; const cur = this.buildReservations.get(b) || 0; const maxCrew = this.getMaxCrew(b);
-      if (cur < maxCrew) { this.buildReservations.set(b, cur + 1); c.reservedBuildFor = b; }
-    }
-  }
-  pickTask(c: Colonist) {
-    // Ensure colonist has work priorities initialized
-    if (!(c as any).workPriorities) {
-      initializeWorkPriorities(c);
-    }
-    
-    // During night time, don't assign new tasks - colonists should be sleeping
-    if (this.isNight()) {
-      this.setTask(c, 'idle', { x: c.x, y: c.y }); // Stay in place, FSM will handle sleep transition
-      return;
-    }
-    
-    // Build a list of available work with priorities
-    const candidates: any[] = [];
-    
-    // Helper to get work priority
-    const getWorkPriority = (workType: string): number => {
-      const priorities = (c as any).workPriorities;
-      if (!priorities || !priorities[workType]) return 3; // Default priority
-      const p = priorities[workType];
-      return p === 0 ? 999 : p; // 0 = disabled
-    };
-    
-    // Helper to check if colonist can do work
-    const canDoWork = (workType: string): boolean => {
-      const priorities = (c as any).workPriorities;
-      if (!priorities) return true;
-      const p = priorities[workType];
-      return p !== 0; // Can do if not disabled
-    };
-    
-    // Gather candidates from Work Givers (Construction, Growing, WaterCollection, PlantCutting, Mining, Cooking, Hauling, ...)
-    const produced = this.workGiverManager.getCandidates({
-      game: this,
-      colonist: c,
-      getWorkPriority,
-      canDoWork
-    });
-    if (produced && produced.length) candidates.push(...produced);
-    
-    // Sort candidates by priority (lower = better), then by same work type preference, then distance
-    // Get current work type if colonist has an active task
-    const currentWorkType = getWorkTypeForTask(c.task);
-    
-    candidates.sort((a, b) => {
-      // First: Sort by priority (lower number = higher priority)
-      if (a.priority !== b.priority) return a.priority - b.priority;
-      
-      // Second: Prefer continuing the same work type (work type affinity)
-      // This ensures colonists finish similar tasks before switching to different work
-      if (currentWorkType) {
-        const aIsSameType = a.workType === currentWorkType ? 1 : 0;
-        const bIsSameType = b.workType === currentWorkType ? 1 : 0;
-        if (aIsSameType !== bIsSameType) return bIsSameType - aIsSameType; // Prefer same type
-      }
-      
-      // Third: Sort by distance (closer is better)
-      return a.distance - b.distance;
-    });
-    
-    if (candidates.length > 0) {
-      // Reachability-gated assignment: ensure we can reach the target before assigning
-      const MAX_REACH_CHECKS = 5; // Budget path checks per assignment
-      let assigned = false;
-      for (let i = 0, checks = 0; i < candidates.length && checks < MAX_REACH_CHECKS; i++) {
-        const cand = candidates[i];
-        
-        // Construction can be built from adjacent tiles; center may be blocked. Skip reachability check for build tasks.
-        const skipCheck = cand.task === 'build';
-        let reachable = true;
-        if (!skipCheck) {
-          // Identify a reasonable approach point (center for most targets)
-          let tx: number | null = null, ty: number | null = null;
-          const tgt: any = cand.target;
-          if (tgt && typeof tgt.x === 'number' && typeof tgt.y === 'number') {
-            if (typeof tgt.w === 'number' && typeof tgt.h === 'number') {
-              tx = tgt.x + tgt.w / 2; ty = tgt.y + tgt.h / 2;
-            } else {
-              tx = tgt.x; ty = tgt.y;
-            }
-          }
-          if (tx != null && ty != null) {
-            checks++;
-            try {
-              const path = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, tx, ty);
-              reachable = !!(path && path.length);
-            } catch {
-              reachable = false;
-            }
-          }
-        }
-        if (reachable) {
-          this.setTask(c, cand.task, cand.target, { extraData: cand.extraData });
-          assigned = true;
-          // Debug logging
-          if (Math.random() < 0.1) {
-            console.log(`Colonist ${c.profile?.name || 'Unknown'} assigned ${cand.workType} (priority ${cand.priority}): ${cand.task}`);
-          }
-          break;
-        }
-      }
-      if (!assigned) {
-        // Fallback: if none validated within budget, assign the top candidate (legacy behavior)
-        const bestWork = candidates[0];
-        this.setTask(c, bestWork.task, bestWork.target, { extraData: bestWork.extraData });
-        if (Math.random() < 0.05) {
-          console.log(`Assigned without reachability validation due to budget: ${bestWork.task}`);
-        }
-      }
-    } else {
-      // No work available - idle
-      this.setTask(c, 'idle', { x: c.x + rand(-80, 80), y: c.y + rand(-80, 80) });
-      if (Math.random() < 0.05) {
-        console.log(`Colonist ${c.profile?.name || 'Unknown'} has no available work (idling)`);
-      }
-    }
-  }
-  nearestCircle<T extends { x: number; y: number }>(p: { x: number; y: number }, arr: T[]): T | null {
-    let best: T | null = null, bestD = 1e9; for (const o of arr) { const d = dist2(p as any, o as any); if (d < bestD) { bestD = d; best = o; } } return best;
-  }
+  // AI Methods - Delegated to managers (extracted from 500-line monolith!)
+  buildingCapacity(b: Building): number { return this.reservationManager.getBuildingCapacity(b); }
+  buildingHasSpace(b: Building, ignoreColonist?: Colonist): boolean { return this.reservationManager.buildingHasSpace(b, ignoreColonist); }
+  reserveSleepSpot(c: Colonist, b: Building): boolean { return this.reservationManager.reserveSleepSpot(c, b); }
+  releaseSleepReservation(c: Colonist) { this.reservationManager.releaseSleepReservation(c); }
+  tryEnterBuilding(c: Colonist, b: Building): boolean { return this.reservationManager.enterBuilding(c, b, this.centerOf(b)); }
+  leaveBuilding(c: Colonist) { this.reservationManager.leaveBuilding(c); }
+  releaseBuildReservation(c: Colonist) { this.reservationManager.releaseBuildReservation(c); }
+  clearPath(c: Colonist) { this.taskManager.clearPath(c); }
+  setTask(c: Colonist, task: string, target: any, options?: { isPlayerCommand?: boolean; extraData?: any }) { this.taskManager.setTask(c, task, target, options); }
+  pickTask(c: Colonist) { this.taskManager.pickTask(c); }
+  nearestCircle<T extends { x: number; y: number }>(p: { x: number; y: number }, arr: T[]): T | null { return this.taskManager.nearestCircle(p, arr); }
+  nearestSafeCircle<T extends { x: number; y: number }>(c: Colonist, p: { x: number; y: number }, arr: T[]): T | null { return this.taskManager.nearestSafeCircle(c, p, arr); }
   
-  nearestSafeCircle<T extends { x: number; y: number }>(c: Colonist, p: { x: number; y: number }, arr: T[]): T | null {
-    // Danger memory system removed - just use nearest circle
-    return this.nearestCircle(p, arr);
-  }
+  // Expose reservation state for work givers (backward compatibility)
+  get assignedTargets(): WeakSet<object> { return this.reservationManager.getAssignedTargets(); }
+  get assignedTiles(): Set<string> { return this.reservationManager.getAssignedTiles(); }
   moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
     // Check if colonist is using async pathfinding mode (via PathRequestQueue)
     const colonistAny = c as any;

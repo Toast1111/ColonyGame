@@ -313,8 +313,7 @@ export function eraseInRect(game: Game, rect: { x: number; y: number; w: number;
       }
       
       game.buildings.splice(i, 1); 
-      game.buildReservations.delete(b); 
-      game.insideCounts.delete(b); 
+      game.reservationManager.clearBuildingReservations(b);
     }
   }
   const removed = before - game.buildings.length;
