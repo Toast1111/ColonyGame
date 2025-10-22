@@ -161,12 +161,15 @@ export function drawColonistAvatar(
     }
     
     // 2. Apparel (clothing) - tinted with clothing color
-    const apparelSprite = imageAssets.getColonistSprite('apparel', sprites.apparelType, spriteDirection);
-    if (apparelSprite) {
-      const tintedApparel = createTintedSprite(apparelSprite, profile.avatar.clothing);
-      ctx.drawImage(tintedApparel, -spriteWidth/2, -offsetY);
-    } else if (Math.random() < 0.01) {
-      console.warn(`Apparel sprite not found: apparel_${sprites.apparelType}_${spriteDirection}`);
+    // Skip apparel rendering if it's a body type (naked_male) instead of actual apparel
+    if (sprites.apparelType && sprites.apparelType !== 'naked_male') {
+      const apparelSprite = imageAssets.getColonistSprite('apparel', sprites.apparelType, spriteDirection);
+      if (apparelSprite) {
+        const tintedApparel = createTintedSprite(apparelSprite, profile.avatar.clothing);
+        ctx.drawImage(tintedApparel, -spriteWidth/2, -offsetY);
+      } else if (Math.random() < 0.01) {
+        console.warn(`Apparel sprite not found: apparel_${sprites.apparelType}_${spriteDirection}`);
+      }
     }
     
     // 3. Head (tinted with skin tone)

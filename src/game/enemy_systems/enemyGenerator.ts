@@ -62,8 +62,8 @@ export interface EnemyProfile {
 const WEAPON_POOLS = {
   low: ['Club', 'Knife'],
   medium: ['Autopistol', 'Revolver'],
-  high: ['AssaultRifle', 'Shotgun'],
-  elite: ['SniperRifle']
+  high: ['AssaultRifle', 'SniperRifle'],
+  elite: ['SniperRifle', 'AssaultRifle']
 };
 
 /**
@@ -174,7 +174,7 @@ function selectWeaponForEnemy(role: EnemyRole, threatLevel: number, dayNumber: n
       }
       break;
     case 'bruiser':
-      weaponPool = ['Club', 'Knife', 'Shotgun'];
+      weaponPool = ['Club', 'Knife', 'AssaultRifle'];
       break;
     case 'scout':
       weaponPool = ['Autopistol', 'Knife'];

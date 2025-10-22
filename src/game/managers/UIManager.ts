@@ -289,6 +289,14 @@ export class UIManager {
       if (tab === 'work') {
         closeWorkPriorityPanel();
       }
+      
+      // Close research panel if we're closing research tab
+      if (tab === 'research') {
+        const game = (window as any).game;
+        if (game?.researchUI) {
+          game.researchUI.hide();
+        }
+      }
   // UI audio: hotbar close (single-variant)
   void audio.play('ui.hotbar.close').catch(() => {});
     } else {
@@ -305,6 +313,14 @@ export class UIManager {
       if (tab === 'work') {
         if (!isWorkPriorityPanelOpen()) {
           toggleWorkPriorityPanel();
+        }
+      }
+      
+      // Open research panel if we're opening research tab
+      if (tab === 'research') {
+        const game = (window as any).game;
+        if (game?.researchUI) {
+          game.researchUI.show();
         }
       }
   // UI audio: hotbar open (single-variant)

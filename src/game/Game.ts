@@ -11,6 +11,8 @@ import { BUILD_TYPES, hasCost } from "./buildings";
 import { getZoneDef } from "./zones";
 import { HealthManager } from "./managers/HealthManager";
 import { InventoryManager } from "./managers/InventoryManager";
+import { ResearchManager } from "./research/ResearchManager";
+import { ResearchUI } from "./ui/dom/ResearchUI";
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { WorkGiverManager } from './systems/workGiverManager';
 import { ReservationManager } from './managers/ReservationManager';
@@ -337,6 +339,8 @@ export class Game {
   public itemManager: ItemManager;
   public healthManager = new HealthManager(); // Stop eating health paste! Delegate properly! 🎨
   public inventoryManager = new InventoryManager(); // Equipment and item management - no more paste-eating! 🍝
+  public researchManager!: ResearchManager; // Research system - technology progression
+  public researchUI!: ResearchUI; // Research UI panel
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -377,6 +381,10 @@ export class Game {
     // Initialize systems with starting resources and time
     this.resourceSystem.reset(); // Sets starting resources
     this.timeSystem.reset(); // Sets day 1, tDay 0
+    
+    // Initialize research system
+    this.researchManager = new ResearchManager();
+    this.researchUI = new ResearchUI(this.researchManager, this);
     
     // Initialize camera system
     this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
@@ -2416,6 +2424,11 @@ export class Game {
     // Toggle work tab - this will automatically sync with the work priority panel
     this.uiManager.setHotbarTab(this.uiManager.activeHotbarTab === 'work' ? null : 'work');
   }
+  if (!consoleOpen && this.keyPressed('r')) { 
+    // Toggle research panel
+    this.researchUI.toggle();
+    void this.audioManager.play('ui.panel.open');
+  }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }
     if (!consoleOpen && this.keyPressed('t')) { this.debug.terrain = !this.debug.terrain; this.toast(this.debug.terrain ? 'Debug: terrain ON' : 'Debug: terrain OFF'); }
@@ -2558,6 +2571,10 @@ export class Game {
       }
     } 
   }
+  
+  // Update research system with current researcher count
+  const researcherCount = this.colonists.filter(c => c.alive && c.state === 'research').length;
+  this.researchManager.updateResearcherCount(researcherCount);
   
   // Enemy AI with adaptive tick rates
   for (let i = this.enemies.length - 1; i >= 0; i--) { 

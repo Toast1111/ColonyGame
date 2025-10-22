@@ -45,7 +45,7 @@ export function drawModernHotbar(
     { id: 'build', label: 'Build', enabled: true },
     { id: 'work', label: 'Work', enabled: true },
     { id: 'schedule', label: 'Schedule', enabled: false },
-    { id: 'research', label: 'Research', enabled: false },
+    { id: 'research', label: 'Research', enabled: true },
     { id: 'animals', label: 'Animals', enabled: false },
     { id: 'quests', label: 'Quests', enabled: false },
   ];

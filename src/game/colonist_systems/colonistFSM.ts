@@ -536,6 +536,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'storingBread': return 45; // Complete current cooking job
         case 'haulBread': return 43; // Hauling is productive work
         case 'cooking': return 42; // Cooking is productive work
+        case 'research': return 41; // Research is productive work
         case 'build':
         case 'chop':
         case 'mine':
@@ -1242,6 +1243,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'haulBread': changeState('haulBread', 'assigned haul task'); break;
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
         case 'storeBread': changeState('storingBread', 'assigned bread storage task'); break;
+        case 'research': changeState('research', 'assigned research task'); break;
         case 'goto':
         case 'rest':
         case 'medical':
@@ -2462,6 +2464,58 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.commandData = null;
         c.guardAnchor = null;
         changeState('seekTask', 'guard command expired');
+      }
+      break;
+    }
+    
+    case 'research': {
+      // Research state - colonist works at research bench
+      const bench = c.target as Building;
+      if (!bench || bench.kind !== 'research_bench' || !bench.done) {
+        // Research bench was destroyed or doesn't exist
+        c.target = null;
+        game.clearPath(c);
+        changeState('seekTask', 'research bench no longer available');
+        break;
+      }
+      
+      // Check if research is still active
+      if (!game.researchManager?.getCurrentResearch()) {
+        c.target = null;
+        changeState('seekTask', 'no active research');
+        break;
+      }
+      
+      const pt = { x: bench.x + bench.w / 2, y: bench.y + bench.h / 2 };
+      const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
+      
+      // Move to research bench
+      if (distance > 20) {
+        game.moveAlongPath(c, dt, pt, 20);
+        break;
+      }
+      
+      // At research bench - do research work
+      if (game.pointInRect(c, bench)) {
+        // Reserve spot
+        game.reservationManager.reserveInside(bench);
+        
+        // Generate research points based on colonist's research skill (or use base rate)
+        const researchSpeed = 5; // Base research points per second
+        const points = researchSpeed * dt;
+        
+        // Add progress to research manager
+        const completed = game.researchManager.addProgress(points);
+        
+        if (completed) {
+          // Research completed!
+          game.msg(`Research completed!`, 'success');
+          c.target = null;
+          changeState('seekTask', 'research completed');
+        }
+      } else {
+        // Not in correct position, try to move there
+        game.moveAlongPath(c, dt, pt, 0);
       }
       break;
     }

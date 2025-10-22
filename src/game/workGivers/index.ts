@@ -7,6 +7,7 @@ import { MiningWorkGiver } from './mining';
 import { CookingWorkGiver } from './cooking';
 import { HaulingWorkGiver } from './hauling';
 import { FloorHaulingWorkGiver } from './floorHauling';
+import { ResearchWorkGiver } from './research';
 
 export const WORK_GIVERS: WorkGiver[] = [
   // Order can influence tie-breakers before distance sort
@@ -18,5 +19,6 @@ export const WORK_GIVERS: WorkGiver[] = [
   CookingWorkGiver,
   HaulingWorkGiver,
   FloorHaulingWorkGiver,
+  ResearchWorkGiver,
   // Add more: ConstructionWorkGiver, MiningWorkGiver, HaulingWorkGiver, etc.
 ];

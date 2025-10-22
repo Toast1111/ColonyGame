@@ -176,6 +176,18 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     build: 50,
     color: '#daa520'
   },
+  research_bench: {
+    category: 'Utility',
+    name: 'Research Bench',
+    description: 'Allows colonists to research new technologies. Essential for colony advancement.',
+    key: 'R',
+    cost: { wood: 30, stone: 15 },
+    hp: 150,
+    size: { w: 2, h: 1 },
+    build: 100,
+    color: '#3b82f6',
+    popCap: 1  // One researcher at a time
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {

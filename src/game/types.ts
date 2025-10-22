@@ -20,7 +20,7 @@ export type Resources = {
 
 export type Circle = { x: number; y: number; r: number; hp: number; type: "tree" | "rock" };
 
-export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door" | "stove" | "pantry";
+export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door" | "stove" | "pantry" | "research_bench";
 
 export type BuildingDef = {
   name: string;
@@ -93,7 +93,7 @@ export interface BuildingInventory {
 
 export type ColonistCommandIntent = 'goto' | 'rest' | 'medical' | 'seekMedical' | 'guard';
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted' | 'research';
 
 // Inventory and equipment types
 export interface InventoryItem {
