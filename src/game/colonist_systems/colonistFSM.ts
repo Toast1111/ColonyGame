@@ -7,7 +7,6 @@ import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOve
 import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor, findBlockingDoor } from "../systems/doorSystem";
-import { addItemToInventory, removeItemFromInventory, getInventoryItemCount } from "../systems/buildingInventory";
 import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
@@ -533,10 +532,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'sleep': return 80; // Sleep in progress (already in bed)
         case 'goToSleep': return 55; // Base priority at 60% fatigue, scales to 95+ at 100% fatigue with night bonus
         case 'eat': return 65;
-        case 'storingBread': return 45; // Complete current cooking job
-        case 'haulBread': return 43; // Hauling is productive work
         case 'cooking': return 42; // Cooking is productive work
         case 'research': return 41; // Research is productive work
+        case 'haulFloorItem': return 40; // Hauling items via floor system
         case 'build':
         case 'chop':
         case 'mine':
@@ -1240,9 +1238,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'chop': changeState('chop', 'assigned chop task'); break;
         case 'mine': changeState('mine', 'assigned mine task'); break;
         case 'haulFloorItem': changeState('haulFloorItem', 'assigned floor hauling task'); break;
-        case 'haulBread': changeState('haulBread', 'assigned haul task'); break;
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
-        case 'storeBread': changeState('storingBread', 'assigned bread storage task'); break;
         case 'research': changeState('research', 'assigned research task'); break;
         case 'goto':
         case 'rest':
@@ -1626,29 +1622,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (f.kind === 'farm') {
           f.ready = false; 
           f.growth = 0; 
-          // Farms now produce wheat - store it in the farm's inventory instead of global resources
+          // Farms now drop wheat on the floor for haulers to transport
           const wheatAmount = Math.round(10 * yieldMult);
-          
-          // Try to add to farm inventory first
-          if (f.inventory) {
-            const added = addItemToInventory(f, 'wheat', wheatAmount);
-            if (added > 0) {
-              game.msg(`Farm harvested (+${added} wheat stored in farm)`, 'good');
-            }
-            
-            // If farm inventory is full, drop remainder on the ground at the farm
-            if (added < wheatAmount) {
-              const remainder = wheatAmount - added;
-              const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
-              (game as any).itemManager?.dropItems('wheat', remainder, dropAt);
-              game.msg(`Farm full! Dropped ${remainder} wheat`, 'info');
-            }
-          } else {
-            // Fallback: no inventory, drop wheat on the ground at the farm
-            const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
-            (game as any).itemManager?.dropItems('wheat', wheatAmount, dropAt);
-            game.msg(`Farm harvested (dropped ${wheatAmount} wheat)`, 'good');
-          }
+          const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
+          game.itemManager.dropItems('wheat', wheatAmount, dropAt);
+          game.msg(`Farm harvested (dropped ${wheatAmount} wheat)`, 'good');
           
           if (c.skills) grantSkillXP(c, 'Plants', 20, c.t || 0); // big tick on harvest
         } else if (f.kind === 'well') {
@@ -1971,302 +1949,127 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Stove was destroyed or doesn't exist
         c.task = null;
         c.target = null;
-        c.carryingWheat = 0;
         game.clearPath(c);
         changeState('seekTask', 'stove no longer available');
         break;
       }
       
-      // Initialize cooking sub-state if not set
-      if (!c.cookingSubState) {
-        c.cookingSubState = 'goingToFarm';
-        c.cookingSourceFarm = null;
-      }
+      // Simple cooking workflow: Pick up wheat from floor, cook at stove, drop bread on floor
       
-      // COOKING WORKFLOW: Farm → Stove → Cook
+      const pt = { x: stove.x + stove.w / 2, y: stove.y + stove.h / 2 };
+      const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
       
-      // SUB-STATE 1: Go to farm to get wheat
-      if (c.cookingSubState === 'goingToFarm') {
-        // Find a farm with wheat
-        if (!c.cookingSourceFarm) {
-          const farms = game.buildings.filter((b: Building) => 
-            b.kind === 'farm' && 
-            b.done && 
-            b.inventory &&
-            getInventoryItemCount(b, 'wheat') >= 5
-          );
+      // Phase 1: Pick up wheat if we don't have any
+      if (!c.carryingWheat || c.carryingWheat < 5) {
+        const rim = game.itemManager;
+        if (rim) {
+          // Look for wheat on the floor nearby
+          const wheatItems = rim.floorItems.filter((item: any) => item.type === 'wheat' && item.quantity > 0);
           
-          if (farms.length === 0) {
-            // No farm with wheat available
+          if (wheatItems.length === 0) {
+            // No wheat available - abandon cooking
             c.task = null;
             c.target = null;
-            c.cookingSubState = null;
-            c.cookingSourceFarm = null;
-            changeState('seekTask', 'no wheat available in farms');
+            c.carryingWheat = undefined;
+            changeState('seekTask', 'no wheat available');
             break;
           }
           
-          // Find nearest farm with wheat
-          c.cookingSourceFarm = farms.reduce((closest: Building, farm: Building) => {
-            const distToFarm = Math.hypot(c.x - (farm.x + farm.w/2), c.y - (farm.y + farm.h/2));
-            const distToClosest = Math.hypot(c.x - (closest.x + closest.w/2), c.y - (closest.y + closest.h/2));
-            return distToFarm < distToClosest ? farm : closest;
+          // Find closest wheat
+          const closestWheat = wheatItems.reduce((closest: any, item: any) => {
+            const d = Math.hypot(c.x - item.x, c.y - item.y);
+            const closestD = Math.hypot(c.x - closest.x, c.y - closest.y);
+            return d < closestD ? item : closest;
           });
-        }
-        
-        const farm = c.cookingSourceFarm;
-        if (!farm) {
-          // Safety check - should never happen
-          c.task = null;
-          c.target = null;
-          c.cookingSubState = null;
-          changeState('seekTask', 'no farm found');
-          break;
-        }
-        
-        const farmPt = { x: farm.x + farm.w / 2, y: farm.y + farm.h / 2 };
-        const distanceToFarm = Math.hypot(c.x - farmPt.x, c.y - farmPt.y);
-        
-        // Move to the farm
-        if (distanceToFarm > 20) {
-          game.moveAlongPath(c, dt, farmPt, 20);
-          break;
-        }
-        
-        // At the farm - pick up wheat
-        const availableWheat = getInventoryItemCount(farm, 'wheat');
-        if (availableWheat >= 5) {
-          const removed = removeItemFromInventory(farm, 'wheat', 5);
-          c.carryingWheat = removed;
-          game.msg(`${c.profile?.name || 'Colonist'} picked up ${removed} wheat from farm`, 'info');
-          c.cookingSubState = 'goingToStove';
-          game.clearPath(c); // Clear path so we recalculate to stove
-        } else {
-          // Wheat was taken by someone else
-          c.cookingSourceFarm = null; // Try to find another farm
-        }
-        break;
-      }
-      
-      // SUB-STATE 2: Go to stove with wheat
-      if (c.cookingSubState === 'goingToStove') {
-        const pt = { x: stove.x + stove.w / 2, y: stove.y + stove.h / 2 };
-        const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
-        
-        // Move to the stove
-        if (distance > 20) {
-          game.moveAlongPath(c, dt, pt, 20);
-          break;
-        }
-        
-        // At the stove - put wheat in and start cooking
-        if (c.carryingWheat && c.carryingWheat > 0) {
-          // Store wheat in stove inventory
-          const added = addItemToInventory(stove, 'wheat', c.carryingWheat);
-          c.carryingWheat = 0;
-          stove.cookingProgress = 0;
-          stove.cookingColonist = c.id;
-          c.cookingSubState = 'cooking';
-          game.msg(`${c.profile?.name || 'Colonist'} started cooking at stove`, 'info');
-        } else {
-          // Lost the wheat somehow
-          c.task = null;
-          c.target = null;
-          c.cookingSubState = null;
-          c.cookingSourceFarm = null;
-          changeState('seekTask', 'lost wheat');
-        }
-        break;
-      }
-      
-      // SUB-STATE 3: Actually cooking (waiting at stove)
-      if (c.cookingSubState === 'cooking') {
-        const pt = { x: stove.x + stove.w / 2, y: stove.y + stove.h / 2 };
-        const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
-        
-        // Stay near the stove
-        if (distance > 25) {
-          game.moveAlongPath(c, dt, pt, 20);
-        }
-        
-        const wheatInStove = getInventoryItemCount(stove, 'wheat');
-        if (wheatInStove >= 5) {
-          // Cooking skill affects speed
-          const cookingLvl = c.skills ? skillLevel(c, 'Cooking') : 0;
-          const skillMult = skillWorkSpeedMultiplier(cookingLvl);
-          const cookSpeed = 0.1 * skillMult; // Base 10 seconds to cook
           
-          stove.cookingProgress = (stove.cookingProgress || 0) + cookSpeed * dt;
+          // Move to wheat
+          const wheatDist = Math.hypot(c.x - closestWheat.x, c.y - closestWheat.y);
+          if (wheatDist > 10) {
+            const wheatPt = { x: closestWheat.x, y: closestWheat.y };
+            game.moveAlongPath(c, dt, wheatPt, 10);
+            break;
+          }
           
-          // Grant cooking XP while cooking
-          if (c.skills) grantSkillXP(c, 'Cooking', 3 * dt, c.t || 0);
+          // Pick up wheat (need 5 for cooking)
+          const needed = 5 - (c.carryingWheat || 0);
+          const picked = rim.pickupItems(closestWheat.id, Math.min(needed, closestWheat.quantity));
+          c.carryingWheat = (c.carryingWheat || 0) + picked;
           
-          if (stove.cookingProgress >= 1.0) {
-            // Cooking complete! Convert wheat to bread
-            const wheatUsed = removeItemFromInventory(stove, 'wheat', 5);
-            const breadProduced = Math.floor(wheatUsed / 5) * 3; // 5 wheat = 3 bread
-            
-            // Store bread in stove inventory (to be hauled later)
-            addItemToInventory(stove, 'bread', breadProduced);
-            
-            stove.cookingProgress = 0;
-            stove.cookingColonist = undefined;
-            
-            game.msg(`${c.profile?.name || 'Colonist'} cooked ${breadProduced} bread!`, 'good');
-            if (c.skills) grantSkillXP(c, 'Cooking', 30, c.t || 0); // Bonus XP for completion
-            
-            // Cooking job done - colonist can seek new task
-            c.task = null;
-            c.target = null;
-            c.cookingSubState = null;
-            c.cookingSourceFarm = null;
-            changeState('seekTask', 'finished cooking');
+          if ((c.carryingWheat || 0) < 5) {
+            // Need more wheat, continue searching
+            break;
           }
         } else {
-          // Wheat disappeared - someone took it or bug
-          stove.cookingProgress = 0;
-          stove.cookingColonist = undefined;
+          // No item manager - can't cook
           c.task = null;
           c.target = null;
-          c.cookingSubState = null;
-          c.cookingSourceFarm = null;
-          changeState('seekTask', 'wheat disappeared from stove');
+          c.carryingWheat = undefined;
+          changeState('seekTask', 'no item manager');
+          break;
         }
       }
       
-      // Timeout check (increased for multi-step workflow)
-      if (c.stateSince > 60) {
-        console.log(`Cooking task timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
-        stove.cookingColonist = undefined;
+      // Phase 2: Move to stove with wheat
+      if (distance > 20) {
+        game.moveAlongPath(c, dt, pt, 20);
+        break;
+      }
+      
+      // Phase 3: Cook at the stove
+      if (!stove.cookingColonist || stove.cookingColonist === c.id) {
+        stove.cookingColonist = c.id;
+        
+        // Cooking skill affects speed
+        const cookingLvl = c.skills ? skillLevel(c, 'Cooking') : 0;
+        const skillMult = skillWorkSpeedMultiplier(cookingLvl);
+        const cookSpeed = 0.1 * skillMult; // Base 10 seconds to cook
+        
+        stove.cookingProgress = (stove.cookingProgress || 0) + cookSpeed * dt;
+        
+        // Grant cooking XP while cooking
+        if (c.skills) grantSkillXP(c, 'Cooking', 3 * dt, c.t || 0);
+        
+        if (stove.cookingProgress >= 1.0) {
+          // Cooking complete! Convert wheat to bread
+          const breadProduced = 3; // 5 wheat = 3 bread
+          c.carryingWheat = 0; // Consumed the wheat
+          
+          // Drop bread on the floor next to stove
+          const dropPos = { x: stove.x + stove.w / 2, y: stove.y + stove.h + 8 };
+          game.itemManager.dropItems('bread', breadProduced, dropPos);
+          
+          stove.cookingProgress = 0;
+          stove.cookingColonist = undefined;
+          
+          game.msg(`${c.profile?.name || 'Colonist'} cooked ${breadProduced} bread!`, 'good');
+          if (c.skills) grantSkillXP(c, 'Cooking', 30, c.t || 0); // Bonus XP for completion
+          
+          // Cooking job done - colonist can seek new task
+          c.task = null;
+          c.target = null;
+          changeState('seekTask', 'finished cooking');
+        }
+      } else {
+        // Someone else is already cooking at this stove
         c.task = null;
         c.target = null;
-        c.carryingWheat = 0;
-        c.cookingSubState = null;
-        c.cookingSourceFarm = null;
+        c.carryingWheat = undefined;
+        changeState('seekTask', 'stove occupied');
+      }
+      
+      // Timeout check
+      if (c.stateSince > 30) {
+        console.log(`Cooking task timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
+        if (stove.cookingColonist === c.id) {
+          stove.cookingColonist = undefined;
+        }
+        c.task = null;
+        c.target = null;
         changeState('seekTask', 'cooking timeout');
       }
       break;
     }
     
-    
-    case 'haulBread': {
-      // Multi-step hauling: Go to stove → pick up bread → go to pantry → deposit bread
-      const stove = c.target as Building;
-      if (!stove || stove.kind !== 'stove' || !stove.done) {
-        // Stove was destroyed
-        c.task = null;
-        c.target = null;
-        c.taskData = null;
-        c.carryingBread = 0;
-        game.clearPath(c);
-        changeState('seekTask', 'stove no longer available');
-        break;
-      }
-      
-      // Get the pantry from the task's extra data
-      const pantry = (c as any).taskData as Building;
-      if (!pantry || pantry.kind !== 'pantry' || !pantry.done) {
-        // Pantry was destroyed
-        c.task = null;
-        c.target = null;
-        c.taskData = null;
-        c.carryingBread = 0;
-        changeState('seekTask', 'pantry no longer available');
-        break;
-      }
-      
-      // Initialize hauling sub-state
-      if (!c.cookingSubState) {
-        c.cookingSubState = 'goingToStove'; // Reuse this field for hauling workflow
-      }
-      
-      // SUB-STATE 1: Go to stove to pick up bread
-      if (c.cookingSubState === 'goingToStove') {
-        const stovePt = { x: stove.x + stove.w / 2, y: stove.y + stove.h / 2 };
-        const distanceToStove = Math.hypot(c.x - stovePt.x, c.y - stovePt.y);
-        
-        if (distanceToStove > 20) {
-          game.moveAlongPath(c, dt, stovePt, 20);
-          break;
-        }
-        
-        // At the stove - pick up bread
-        const breadInStove = getInventoryItemCount(stove, 'bread');
-        if (breadInStove > 0) {
-          // Pick up as much as we can carry (up to 10 for now)
-          const amountToPickup = Math.min(breadInStove, 10);
-          const removed = removeItemFromInventory(stove, 'bread', amountToPickup);
-          c.carryingBread = (c.carryingBread || 0) + removed;
-          game.msg(`${c.profile?.name || 'Colonist'} picked up ${removed} bread from stove`, 'info');
-          c.cookingSubState = 'goingToFarm'; // Reuse 'goingToFarm' to mean "going to destination" 
-          game.clearPath(c); // Recalculate path to pantry
-        } else {
-          // No bread in stove (someone else took it)
-          c.task = null;
-          c.target = null;
-          c.taskData = null;
-          c.cookingSubState = null;
-          changeState('seekTask', 'no bread in stove');
-        }
-        break;
-      }
-      
-      // SUB-STATE 2: Go to pantry with bread
-      if (c.cookingSubState === 'goingToFarm') { // Reusing this state
-        const pantryPt = { x: pantry.x + pantry.w / 2, y: pantry.y + pantry.h / 2 };
-        const distanceToPantry = Math.hypot(c.x - pantryPt.x, c.y - pantryPt.y);
-        
-        if (distanceToPantry > 20) {
-          game.moveAlongPath(c, dt, pantryPt, 20);
-          break;
-        }
-        
-        // At the pantry - deposit bread
-        if (c.carryingBread && c.carryingBread > 0) {
-          const added = addItemToInventory(pantry, 'bread', c.carryingBread);
-          if (added > 0) {
-            game.msg(`${c.profile?.name || 'Colonist'} stored ${added} bread in pantry`, 'good');
-            // Update legacy breadStored property for backwards compatibility
-            pantry.breadStored = (pantry.breadStored || 0) + added;
-            // Add to global resources for HUD display
-            game.addResource('bread', added);
-          }
-          
-          // If pantry is full, add remainder to global resources
-          if (added < c.carryingBread) {
-            const remainder = c.carryingBread - added;
-            game.addResource('bread', remainder);
-            game.msg(`Pantry full! +${remainder} bread to general storage`, 'info');
-          }
-          
-          c.carryingBread = 0;
-          c.task = null;
-          c.target = null;
-          c.taskData = null;
-          c.cookingSubState = null;
-          changeState('seekTask', 'bread hauled to pantry');
-        } else {
-          // Lost the bread somehow
-          c.task = null;
-          c.target = null;
-          c.taskData = null;
-          c.cookingSubState = null;
-          changeState('seekTask', 'lost bread during hauling');
-        }
-      }
-      
-      // Timeout check
-      if (c.stateSince > 45) {
-        console.log(`Haul bread task timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
-        c.task = null;
-        c.target = null;
-        c.taskData = null;
-        c.carryingBread = 0;
-        c.cookingSubState = null;
-        changeState('seekTask', 'haul bread timeout');
-      }
-      break;
-    }
     
     case 'haulFloorItem': {
       // Haul a ground item from floor item system to a stockpile destination
@@ -2369,72 +2172,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     
-    case 'storingBread': {
-      const pantry = c.target as Building;
-      if (!pantry || pantry.kind !== 'pantry' || !pantry.done) {
-        // Pantry was destroyed or doesn't exist - just add bread to global resources
-        if (c.carryingBread && c.carryingBread > 0) {
-          game.addResource('bread', c.carryingBread);
-          c.carryingBread = 0;
-        }
-        c.task = null;
-        c.target = null;
-        c.taskData = null;
-        changeState('seekTask', 'pantry no longer available');
-        break;
-      }
-      
-      const pt = { x: pantry.x + pantry.w / 2, y: pantry.y + pantry.h / 2 };
-      const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
-      
-      // Move to the pantry
-      if (distance > 20) {
-        game.moveAlongPath(c, dt, pt, 20);
-        break;
-      }
-      
-      // At the pantry - store the bread
-      if (c.carryingBread && c.carryingBread > 0) {
-        // Try to store in pantry inventory first
-        if (pantry.inventory) {
-          const added = addItemToInventory(pantry, 'bread', c.carryingBread);
-          if (added > 0) {
-            game.msg(`${c.profile?.name || 'Colonist'} stored ${added} bread in pantry`, 'good');
-            // Update legacy breadStored property for backwards compatibility
-            pantry.breadStored = (pantry.breadStored || 0) + added;
-          }
-          
-          // Add to global resources as well (for HUD display)
-          game.addResource('bread', added);
-          
-          // If pantry is full, add remainder to global resources
-          if (added < c.carryingBread) {
-            const remainder = c.carryingBread - added;
-            game.addResource('bread', remainder);
-            game.msg(`Pantry full! +${remainder} bread to general storage`, 'info');
-          }
-        } else {
-          // Fallback: no inventory, use legacy system
-          pantry.breadStored = (pantry.breadStored || 0) + c.carryingBread;
-          game.addResource('bread', c.carryingBread);
-          game.msg(`${c.profile?.name || 'Colonist'} stored ${c.carryingBread} bread`, 'good');
-        }
-        
-        c.carryingBread = 0;
-        c.task = null;
-        c.target = null;
-        c.taskData = null;
-        changeState('seekTask', 'bread stored');
-      } else {
-        // No bread to store
-        c.task = null;
-        c.target = null;
-        c.taskData = null;
-        changeState('seekTask', 'no bread to store');
-      }
-      break;
-    }
-
     case 'guard': {
       const anchor = c.guardAnchor;
       if (!anchor) {

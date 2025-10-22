@@ -24,18 +24,13 @@ export function initializeBuildingInventory(building: Building, capacity: number
  */
 export function getDefaultInventoryCapacity(buildingKind: string): number {
   switch (buildingKind) {
-    case 'pantry':
-      return 10; // Can store 10 different item stacks
-    case 'farm':
-      return 5; // Can store 5 stacks of wheat before colonist hauls it
+    // Removed 'pantry', 'farm', 'stove' - now using floor-based item system with hauling
     case 'warehouse':
       return 20; // Large storage
     case 'stock':
       return 15; // Medium storage
     case 'hq':
       return 30; // Very large storage
-    case 'stove':
-      return 3; // Small temporary storage for cooking
     default:
       return 0; // No inventory by default
   }
@@ -45,7 +40,8 @@ export function getDefaultInventoryCapacity(buildingKind: string): number {
  * Check if building should have inventory
  */
 export function shouldHaveInventory(buildingKind: string): boolean {
-  return ['pantry', 'farm', 'warehouse', 'stock', 'hq', 'stove'].includes(buildingKind);
+  // Removed 'farm', 'stove', 'pantry' - now using floor-based item system with hauling
+  return ['warehouse', 'stock', 'hq'].includes(buildingKind);
 }
 
 /**

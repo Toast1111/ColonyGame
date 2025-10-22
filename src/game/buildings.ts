@@ -168,7 +168,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
   pantry: {
     category: 'Furniture',
     name: 'Pantry',
-    description: 'Stores prepared food (bread). Colonists can retrieve meals when hungry.',
+    description: '[DEPRECATED] Decorative only - food now uses floor-based hauling system. Use stockpiles instead.',
     key: 'P',
     cost: { wood: 10, stone: 10 },
     hp: 120,

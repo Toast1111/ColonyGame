@@ -1,6 +1,8 @@
 import type { Game } from "../Game";
 import { itemDatabase } from "../../data/itemDatabase";
 import { initializeColonistHealth } from "../health/healthSystem";
+import { addItemToInventory } from "../systems/buildingInventory";
+import { RESEARCH_TREE } from "../research/researchDatabase";
 
 type CommandHandler = (game: Game, args: string[]) => string | void;
 
@@ -26,7 +28,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, kill, heal, godmode";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, items, kill, heal, godmode, farm, building, stove, time, tree, research";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -688,6 +690,209 @@ export function initDebugConsole(game: Game) {
     const status = (targets[0] as any).godmode ? 'enabled' : 'disabled';
     return `godmode ${status} for ${targets.length} colonist(s)`;
   }, "godmode [target] — toggle godmode (no damage/hunger/fatigue). Target: selected,all,name");
+
+  reg("farm", (g, args) => {
+    const action = (args[0] || "ready").toLowerCase();
+    
+    if (action === "ready" || action === "harvest") {
+      // Make all farms ready to harvest
+      const farms = game.buildings.filter((b: any) => b.kind === 'farm' && b.done);
+      if (farms.length === 0) return 'No farms found';
+      
+      for (const farm of farms) {
+        (farm as any).growth = (farm as any).growTime || 1; // Full growth
+        (farm as any).ready = true; // Mark as ready to harvest
+      }
+      return `${farms.length} farm(s) ready to harvest`;
+    } else if (action === "grow") {
+      // Add growth progress to all farms
+      const amount = parseFloat(args[1] || "0.5");
+      const farms = g.buildings.filter((b: any) => b.kind === 'farm' && b.done);
+      if (!farms.length) return "no completed farms found";
+      
+      for (const farm of farms) {
+        const growTime = (farm as any).growTime || 1;
+        (farm as any).growth = Math.min(growTime, ((farm as any).growth || 0) + amount);
+        if ((farm as any).growth >= growTime) {
+          (farm as any).ready = true;
+        }
+      }
+      return `added ${amount.toFixed(1)} growth to ${farms.length} farm(s)`;
+    } else if (action === "clear") {
+      // Reset all farm growth
+      const farms = g.buildings.filter((b: any) => b.kind === 'farm' && b.done);
+      if (!farms.length) return "no completed farms found";
+      
+      for (const farm of farms) {
+        (farm as any).growth = 0;
+        (farm as any).ready = false;
+      }
+      return `cleared growth from ${farms.length} farm(s)`;
+    }
+    
+    return "usage: farm ready|grow [0-1]|clear";
+  }, "farm ready|grow [amount]|clear — manipulate farm growth. ready=instant harvest, grow=add growth, clear=reset");
+
+  reg("building", (g, args) => {
+    const action = (args[0] || "").toLowerCase();
+    
+    if (action === "complete" || action === "finish") {
+      // Complete all buildings under construction
+      const incomplete = g.buildings.filter((b: any) => !b.done && b.buildProgress !== undefined);
+      if (!incomplete.length) return "no buildings under construction";
+      
+      for (const building of incomplete) {
+        (building as any).buildProgress = 1;
+        (building as any).done = true;
+      }
+      return `completed ${incomplete.length} building(s)`;
+    } else if (action === "progress") {
+      // Add build progress
+      const amount = parseFloat(args[1] || "0.5");
+      const incomplete = g.buildings.filter((b: any) => !b.done && b.buildProgress !== undefined);
+      if (!incomplete.length) return "no buildings under construction";
+      
+      for (const building of incomplete) {
+        (building as any).buildProgress = Math.min(1, ((building as any).buildProgress || 0) + amount);
+        if ((building as any).buildProgress >= 1) {
+          (building as any).done = true;
+        }
+      }
+      return `added ${(amount * 100).toFixed(0)}% progress to ${incomplete.length} building(s)`;
+    } else if (action === "destroy" || action === "delete") {
+      // Delete selected building
+      const selBuilding = (g as any).selBuilding;
+      if (!selBuilding) return "no building selected";
+      const index = g.buildings.indexOf(selBuilding);
+      if (index >= 0) {
+        g.buildings.splice(index, 1);
+        const name = selBuilding.kind || "building";
+        (g as any).selBuilding = null;
+        return `deleted ${name}`;
+      }
+      return "building not found in array";
+    }
+    
+    return "usage: building complete|progress [0-1]|destroy";
+  }, "building complete|progress [amount]|destroy — manipulate buildings. complete=finish all, progress=add build%, destroy=delete selected");
+
+  reg("stove", (g, args) => {
+    const action = (args[0] || "fill").toLowerCase();
+    
+    if (action === "fill" || action === "wheat") {
+      // Fill all stoves with wheat
+      const stoves = g.buildings.filter((b: any) => b.kind === 'stove' && b.done);
+      if (!stoves.length) return "no completed stoves found";
+      
+      let filled = 0;
+      for (const stove of stoves) {
+        if (stove.inventory) {
+          const added = addItemToInventory(stove, 'wheat', 10);
+          if (added > 0) filled++;
+        }
+      }
+      return filled > 0 ? `filled ${filled} stove(s) with wheat` : "stoves have no inventory or are full";
+    } else if (action === "clear") {
+      // Clear all stove inventories
+      const stoves = g.buildings.filter((b: any) => b.kind === 'stove' && b.done);
+      if (!stoves.length) return "no completed stoves found";
+      
+      for (const stove of stoves) {
+        if (stove.inventory) {
+          stove.inventory.items = [];
+        }
+        (stove as any).cookingProgress = 0;
+        (stove as any).cookingColonist = undefined;
+      }
+      return `cleared ${stoves.length} stove(s)`;
+    }
+    
+    return "usage: stove fill|clear — fill stoves with wheat or clear them";
+  }, "stove fill|clear — manipulate stoves. fill=add wheat, clear=empty inventory");
+
+  reg("time", (g, args) => {
+    const action = (args[0] || "").toLowerCase();
+    
+    if (action === "day" || action === "morning") {
+      // Set to morning (6 AM)
+      (g as any).worldTime = 6 * 3600;
+      return "set time to 6:00 AM (morning)";
+    } else if (action === "noon" || action === "midday") {
+      (g as any).worldTime = 12 * 3600;
+      return "set time to 12:00 PM (noon)";
+    } else if (action === "night" || action === "evening") {
+      (g as any).worldTime = 20 * 3600;
+      return "set time to 8:00 PM (night)";
+    } else if (action === "midnight") {
+      (g as any).worldTime = 0;
+      return "set time to 12:00 AM (midnight)";
+    } else if (!isNaN(parseFloat(action))) {
+      // Set specific hour
+      const hour = Math.max(0, Math.min(23, parseFloat(action)));
+      (g as any).worldTime = hour * 3600;
+      return `set time to ${hour}:00`;
+    }
+    
+    return "usage: time day|noon|night|midnight|<hour> — set time of day";
+  }, "time day|noon|night|midnight|<hour> — set time of day. Examples: time noon, time 6");
+
+  reg("tree", (g, args) => {
+    const action = (args[0] || "regrow").toLowerCase();
+    
+    if (action === "regrow" || action === "restore") {
+      // Respawn all cut trees
+      const treeCount = Math.floor((g as any).WORLD?.w * (g as any).WORLD?.h / 8000) || 100;
+      (g as any).trees = [];
+      for (let i = 0; i < treeCount; i++) {
+        (g as any).spawnTree?.();
+      }
+      return `regenerated ${treeCount} trees`;
+    } else if (action === "clear" || action === "remove") {
+      // Remove all trees
+      const count = (g as any).trees?.length || 0;
+      (g as any).trees = [];
+      return `removed ${count} trees`;
+    }
+    
+    return "usage: tree regrow|clear — regrow all trees or remove all trees";
+  }, "tree regrow|clear — regrow=respawn trees, clear=remove all trees");
+
+  reg("research", (g, args) => {
+    const action = (args[0] || "").toLowerCase();
+    
+    if (action === "complete" || action === "all") {
+      // Complete all research
+      const rm = (g as any).researchManager;
+      if (!rm) return "research manager not found";
+      
+      let count = 0;
+      for (const id in RESEARCH_TREE) {
+        if (!rm.isCompleted(id)) {
+          rm.completeResearch(id);
+          count++;
+        }
+      }
+      return `completed ${count} research node(s)`;
+    } else if (action === "reset" || action === "clear") {
+      // Reset all research
+      const rm = (g as any).researchManager;
+      if (!rm) return "research manager not found";
+      
+      rm.completedResearch.clear();
+      rm.currentResearch = null;
+      return "reset all research progress";
+    } else if (action === "start" && args[1]) {
+      // Start specific research
+      const rm = (g as any).researchManager;
+      if (!rm) return "research manager not found";
+      
+      const researchId = args[1];
+      const result = rm.startResearch(researchId);
+      return result ? `started research: ${researchId}` : `failed to start research: ${researchId}`;
+    }
+    
+    return "usage: research complete|reset|start <id> — manipulate research";
+  }, "research complete|reset|start <id> — complete all, reset, or start specific research");
 }
 
 export function toggleDebugConsole(game: Game) {
