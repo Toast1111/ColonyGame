@@ -1840,7 +1840,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             
             if ((r as any).lastCheckTime && movedDist < 10) {
               // Stuck - clear path and abandon
-              console.log(`Colonist stuck mining mountain at (${gx},${gy}), abandoning`);
+              // console.log(`Colonist stuck mining mountain at (${gx},${gy}), abandoning`);
               const tileKey = `${gx},${gy}`;
               if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
               c.task = null; c.target = null; game.clearPath(c);
