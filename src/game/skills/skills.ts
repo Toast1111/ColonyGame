@@ -1,6 +1,6 @@
 import type { Colonist, SkillName, SkillSet, Skill } from '../types';
 
-// XP curve similar in spirit to RimWorld: increasing cost per level
+// XP curve increases level cost per level
 const LEVEL_XP: number[] = (() => {
   const arr: number[] = []; // XP required to REACH level i from i-1
   for (let lvl = 1; lvl <= 20; lvl++) {
