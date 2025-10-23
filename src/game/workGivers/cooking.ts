@@ -10,8 +10,12 @@ export const CookingWorkGiver: WorkGiver = {
     const rim = (game as any).itemManager;
     if (!rim) return out;
     
-    const wheatItems = rim.floorItems.filter((item: any) => item.type === 'wheat' && item.quantity >= 5);
-    if (wheatItems.length === 0) return out;
+    // Check total wheat available (could be split across multiple piles)
+    const totalWheat = rim.floorItems
+      .filter((item: any) => item.type === 'wheat' && item.quantity > 0)
+      .reduce((sum: number, item: any) => sum + item.quantity, 0);
+    
+    if (totalWheat < 5) return out; // Need at least 5 wheat to cook
 
     // Find available stoves
     const stoves = game.buildings.filter((b: any) => 

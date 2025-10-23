@@ -1223,9 +1223,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     case 'seekTask': {
       if (game.isNight()) { changeState('sleep', 'night time'); break; }
+      
       // Always pick a new task when in seekTask state, unless we're executing a command
       if (!c.task || c.task === 'idle') {
         const oldTask = c.task;
+        
+        // Clear any stale carrying data from previous tasks
+        if (oldTask !== 'cookWheat') {
+          c.carryingWheat = 0;
+        }
+        if (oldTask !== 'haulFloorItem') {
+          (c as any).carryingItem = null;
+        }
+        
         game.pickTask(c);
         if (oldTask !== c.task && Math.random() < 0.1) {
           console.log(`Colonist assigned task: ${c.task}, target:`, c.target);
@@ -1272,8 +1282,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break; 
       }
       
-      const dst = c.target; if (!dst) { changeState('seekTask', 'no target'); break; }
-      if (game.moveAlongPath(c, dt, dst, 8)) { c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'reached target'); }
+      const dst = c.target;
+      if (!dst) {
+        game.clearPath(c);
+        changeState('seekTask', 'no target');
+        break;
+      }
+      
+      if (game.moveAlongPath(c, dt, dst, 8)) {
+        c.task = null;
+        c.target = null;
+        game.clearPath(c);
+        changeState('seekTask', 'reached target');
+      }
       break;
     }
     case 'move': {
@@ -1949,8 +1970,24 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Stove was destroyed or doesn't exist
         c.task = null;
         c.target = null;
+        c.carryingWheat = 0;
         game.clearPath(c);
         changeState('seekTask', 'stove no longer available');
+        break;
+      }
+      
+      // Timeout check - if stuck for too long, abandon cooking
+      if (c.stateSince > 45) {
+        console.log(`Cooking timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
+        c.task = null;
+        c.target = null;
+        c.carryingWheat = 0;
+        game.clearPath(c);
+        if (stove.cookingColonist === c.id) {
+          stove.cookingColonist = undefined;
+          stove.cookingProgress = 0;
+        }
+        changeState('seekTask', 'cooking timeout');
         break;
       }
       
@@ -1962,49 +1999,51 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Phase 1: Pick up wheat if we don't have any
       if (!c.carryingWheat || c.carryingWheat < 5) {
         const rim = game.itemManager;
-        if (rim) {
-          // Look for wheat on the floor nearby
-          const wheatItems = rim.floorItems.filter((item: any) => item.type === 'wheat' && item.quantity > 0);
-          
-          if (wheatItems.length === 0) {
-            // No wheat available - abandon cooking
-            c.task = null;
-            c.target = null;
-            c.carryingWheat = undefined;
-            changeState('seekTask', 'no wheat available');
-            break;
-          }
-          
-          // Find closest wheat
-          const closestWheat = wheatItems.reduce((closest: any, item: any) => {
-            const d = Math.hypot(c.x - item.x, c.y - item.y);
-            const closestD = Math.hypot(c.x - closest.x, c.y - closest.y);
-            return d < closestD ? item : closest;
-          });
-          
-          // Move to wheat
-          const wheatDist = Math.hypot(c.x - closestWheat.x, c.y - closestWheat.y);
-          if (wheatDist > 10) {
-            const wheatPt = { x: closestWheat.x, y: closestWheat.y };
-            game.moveAlongPath(c, dt, wheatPt, 10);
-            break;
-          }
-          
-          // Pick up wheat (need 5 for cooking)
-          const needed = 5 - (c.carryingWheat || 0);
-          const picked = rim.pickupItems(closestWheat.id, Math.min(needed, closestWheat.quantity));
-          c.carryingWheat = (c.carryingWheat || 0) + picked;
-          
-          if ((c.carryingWheat || 0) < 5) {
-            // Need more wheat, continue searching
-            break;
-          }
-        } else {
+        if (!rim) {
           // No item manager - can't cook
           c.task = null;
           c.target = null;
-          c.carryingWheat = undefined;
+          c.carryingWheat = 0;
+          game.clearPath(c);
           changeState('seekTask', 'no item manager');
+          break;
+        }
+        
+        // Look for wheat on the floor nearby
+        const wheatItems = rim.floorItems.filter((item: any) => item.type === 'wheat' && item.quantity > 0);
+        
+        if (wheatItems.length === 0) {
+          // No wheat available - abandon cooking
+          c.task = null;
+          c.target = null;
+          c.carryingWheat = 0;
+          game.clearPath(c);
+          changeState('seekTask', 'no wheat available');
+          break;
+        }
+        
+        // Find closest wheat
+        const closestWheat = wheatItems.reduce((closest: any, item: any) => {
+          const d = Math.hypot(c.x - item.x, c.y - item.y);
+          const closestD = Math.hypot(c.x - closest.x, c.y - closest.y);
+          return d < closestD ? item : closest;
+        });
+        
+        // Move to wheat
+        const wheatDist = Math.hypot(c.x - closestWheat.x, c.y - closestWheat.y);
+        if (wheatDist > 10) {
+          const wheatPt = { x: closestWheat.x, y: closestWheat.y };
+          game.moveAlongPath(c, dt, wheatPt, 10);
+          break;
+        }
+        
+        // Pick up wheat (need 5 for cooking)
+        const needed = 5 - (c.carryingWheat || 0);
+        const picked = rim.pickupItems(closestWheat.id, Math.min(needed, closestWheat.quantity));
+        c.carryingWheat = (c.carryingWheat || 0) + picked;
+        
+        if ((c.carryingWheat || 0) < 5) {
+          // Need more wheat, continue searching
           break;
         }
       }
@@ -2047,42 +2086,42 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // Cooking job done - colonist can seek new task
           c.task = null;
           c.target = null;
+          game.clearPath(c);
           changeState('seekTask', 'finished cooking');
         }
       } else {
         // Someone else is already cooking at this stove
         c.task = null;
         c.target = null;
-        c.carryingWheat = undefined;
+        c.carryingWheat = 0;
+        game.clearPath(c);
         changeState('seekTask', 'stove occupied');
-      }
-      
-      // Timeout check
-      if (c.stateSince > 30) {
-        console.log(`Cooking task timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
-        if (stove.cookingColonist === c.id) {
-          stove.cookingColonist = undefined;
-        }
-        c.task = null;
-        c.target = null;
-        changeState('seekTask', 'cooking timeout');
       }
       break;
     }
-    
     
     case 'haulFloorItem': {
       // Haul a ground item from floor item system to a stockpile destination
       const data = (c as any).taskData as any;
       const rim = (game as any).itemManager;
       if (!data || !rim) {
-        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'no hauling data');
+        c.task = null;
+        c.target = null;
+        c.taskData = null;
+        (c as any).carryingItem = null;
+        game.clearPath(c);
+        changeState('seekTask', 'no hauling data');
         break;
       }
       const itemId: string = data.itemId;
       const dest = data.destination as { x: number; y: number };
       if (!itemId || !dest) {
-        c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'invalid hauling data');
+        c.task = null;
+        c.target = null;
+        c.taskData = null;
+        (c as any).carryingItem = null;
+        game.clearPath(c);
+        changeState('seekTask', 'invalid hauling data');
         break;
       }
 
@@ -2093,9 +2132,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const carried = (c as any).carryingItem;
         if (carried && carried.qty > 0) {
           rim.dropItems(carried.type, carried.qty, { x: c.x, y: c.y });
-          (c as any).carryingItem = null;
         }
-        c.task = null; c.target = null; c.taskData = null; 
+        c.task = null;
+        c.target = null;
+        c.taskData = null;
+        (c as any).carryingItem = null;
+        game.clearPath(c);
         changeState('seekTask', 'hauling timeout');
         break;
       }
@@ -2108,7 +2150,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const item = rim.floorItems.getAllItems().find((it: any) => it.id === itemId);
         if (!item) {
           // Item disappeared before pickup; abort gracefully
-          c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'item missing before pickup');
+          c.task = null;
+          c.target = null;
+          c.taskData = null;
+          (c as any).carryingItem = null;
+          game.clearPath(c);
+          changeState('seekTask', 'item missing before pickup');
           break;
         }
 
@@ -2125,7 +2172,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         const taken = takeRes ? takeRes.taken : 0;
         if (taken <= 0) {
           // Nothing to take (race lost)
-          c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'nothing to pick up');
+          c.task = null;
+          c.target = null;
+          c.taskData = null;
+          (c as any).carryingItem = null;
+          game.clearPath(c);
+          changeState('seekTask', 'nothing to pick up');
           break;
         }
         // Store temporarily in colonist cargo
@@ -2165,10 +2217,14 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             }
           }
         } catch {}
-        (c as any).carryingItem = null;
         game.msg(`${c.profile?.name || 'Colonist'} hauled ${payload.qty} ${payload.type}`, 'good');
       }
-      c.task = null; c.target = null; c.taskData = null; changeState('seekTask', 'floor item hauled');
+      c.task = null;
+      c.target = null;
+      c.taskData = null;
+      (c as any).carryingItem = null;
+      game.clearPath(c);
+      changeState('seekTask', 'floor item hauled');
       break;
     }
     
