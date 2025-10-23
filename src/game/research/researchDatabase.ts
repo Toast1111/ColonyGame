@@ -157,11 +157,11 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'military',
     cost: 250,
     time: 75,
-    prerequisites: ['ranged_weapons_basic'],
+    prerequisites: ['turrets', 'stonecutting'],
     unlocks: {
       buildings: ['turret'],
     },
-    position: { x: 2, y: 0 }
+    position: { x: 3, y: 0 }
   },
 
   'body_armor': {
@@ -199,11 +199,11 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'military',
     cost: 300,
     time: 95,
-    prerequisites: ['turrets', 'stonecutting'],
+    prerequisites: ['ranged_weapons_basic'],
     unlocks: {
       buildings: ['bunker', 'barricade', 'sandbag'],
     },
-    position: { x: 3, y: 0 }
+    position: { x: 2, y: 0 }
   },
 
   'explosives': {
