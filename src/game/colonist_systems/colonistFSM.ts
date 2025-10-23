@@ -1547,6 +1547,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               const idx = ty * game.grid.cols + tx;
               game.terrainGrid.floors[idx] = floorTypeId;
               
+              // Invalidate world cache so floor appears immediately
+              game.renderManager?.invalidateWorldCache();
+              
               // Sync terrain to pathfinding grid
               (game as any).syncTerrainToGrid?.();
               
