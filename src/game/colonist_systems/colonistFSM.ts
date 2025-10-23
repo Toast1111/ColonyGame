@@ -1830,6 +1830,32 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         } else {
           // Move toward the mountain tile
           game.moveAlongPath(c, dt, { x: worldX, y: worldY }, interact);
+          
+          // If colonist hasn't moved much in a while, they might be stuck
+          // Store last position check in the target object itself
+          if (!(r as any).lastCheckTime || c.t - (r as any).lastCheckTime > 3) {
+            const lastX = (r as any).lastCheckX ?? c.x;
+            const lastY = (r as any).lastCheckY ?? c.y;
+            const movedDist = Math.hypot(c.x - lastX, c.y - lastY);
+            
+            if ((r as any).lastCheckTime && movedDist < 10) {
+              // Stuck - clear path and abandon
+              console.log(`Colonist stuck mining mountain at (${gx},${gy}), abandoning`);
+              const tileKey = `${gx},${gy}`;
+              if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
+              c.task = null; c.target = null; game.clearPath(c);
+              delete (r as any).lastCheckTime;
+              delete (r as any).lastCheckX;
+              delete (r as any).lastCheckY;
+              changeState('seekTask', 'stuck mining mountain');
+              break;
+            }
+            
+            // Update check position
+            (r as any).lastCheckTime = c.t;
+            (r as any).lastCheckX = c.x;
+            (r as any).lastCheckY = c.y;
+          }
         }
         
         // Timeout check
@@ -1838,6 +1864,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const tileKey = `${gx},${gy}`;
           if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
           c.task = null; c.target = null; game.clearPath(c); 
+          delete (r as any).lastCheckTime;
+          delete (r as any).lastCheckX;
+          delete (r as any).lastCheckY;
           changeState('seekTask', 'mine timeout');
         }
       } else {
@@ -2308,6 +2337,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Drafted colonists are under player control for combat
       // They will automatically engage enemies they can see with ranged weapons
       // Or fight in melee when adjacent to enemies
+      
+      // Release door queue if colonist was waiting at a door when drafted
+      if (c.waitingForDoor) {
+        if (c.id) {
+          releaseDoorQueue(c.waitingForDoor, c.id);
+        }
+        c.waitingForDoor = null;
+        c.doorWaitStart = undefined;
+        c.doorPassingThrough = null;
+        c.doorApproachVector = null;
+      }
       
       // Check if colonist should exit drafted state
       if (!c.isDrafted) {
