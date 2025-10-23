@@ -317,20 +317,79 @@ export function eraseInRect(game: Game, rect: { x: number; y: number; w: number;
     }
   }
   const removed = before - game.buildings.length;
-  if (removed > 0) { 
-    const refundMsg = [
-      totalRefunded.wood > 0 ? `${totalRefunded.wood}w` : '',
-      totalRefunded.stone > 0 ? `${totalRefunded.stone}s` : '',
-      totalRefunded.food > 0 ? `${totalRefunded.food}f` : ''
-    ].filter(s => s).join(' ');
+  
+  // Also erase stockpile zones
+  let zonesRemoved = 0;
+  if ((game as any).itemManager && (game as any).itemManager.stockpiles) {
+    const stockpileZones = (game as any).itemManager.stockpiles.getAllZones();
+    for (const zone of stockpileZones) {
+      const overlap = !(rect.x + rect.w <= zone.x || rect.x >= zone.x + zone.width || 
+                       rect.y + rect.h <= zone.y || rect.y >= zone.y + zone.height);
+      if (overlap) {
+        (game as any).itemManager.removeStockpileZone(zone.id);
+        zonesRemoved++;
+      }
+    }
+  }
+  
+  // Also erase mining zones
+  if ((game as any).miningZones) {
+    for (let i = (game as any).miningZones.length - 1; i >= 0; i--) {
+      const zone = (game as any).miningZones[i];
+      const overlap = !(rect.x + rect.w <= zone.x || rect.x >= zone.x + zone.w || 
+                       rect.y + rect.h <= zone.y || rect.y >= zone.y + zone.h);
+      if (overlap) {
+        (game as any).miningZones.splice(i, 1);
+        zonesRemoved++;
+      }
+    }
+  }
+  
+  if (removed > 0 || zonesRemoved > 0) { 
+    const msgs = [];
+    if (removed > 0) {
+      const refundMsg = [
+        totalRefunded.wood > 0 ? `${totalRefunded.wood}w` : '',
+        totalRefunded.stone > 0 ? `${totalRefunded.stone}s` : '',
+        totalRefunded.food > 0 ? `${totalRefunded.food}f` : ''
+      ].filter(s => s).join(' ');
+      msgs.push(`${removed} structure(s)${refundMsg ? ` (refunded: ${refundMsg})` : ''}`);
+    }
+    if (zonesRemoved > 0) {
+      msgs.push(`${zonesRemoved} zone(s)`);
+    }
     
-    game.msg(`Removed ${removed} structure(s)${refundMsg ? ` (refunded: ${refundMsg})` : ''}`); 
+    game.msg(`Removed ${msgs.join(', ')}`); 
     game.rebuildNavGrid(); 
   }
 }
 
 export function cancelOrErase(game: Game) {
   const pos = { x: game.mouse.wx, y: game.mouse.wy };
+  
+  // Check for stockpile zones first
+  if ((game as any).itemManager && (game as any).itemManager.stockpiles) {
+    const zone = (game as any).itemManager.stockpiles.getZoneAtPosition(pos);
+    if (zone) {
+      (game as any).itemManager.removeStockpileZone(zone.id);
+      game.msg(`Removed stockpile zone: ${zone.name}`);
+      return;
+    }
+  }
+  
+  // Check for mining zones
+  if ((game as any).miningZones) {
+    for (let i = (game as any).miningZones.length - 1; i >= 0; i--) {
+      const zone = (game as any).miningZones[i];
+      if (pos.x >= zone.x && pos.x <= zone.x + zone.w && pos.y >= zone.y && pos.y <= zone.y + zone.h) {
+        (game as any).miningZones.splice(i, 1);
+        game.msg('Removed mining zone');
+        return;
+      }
+    }
+  }
+  
+  // Check for buildings
   for (let i = game.buildings.length - 1; i >= 0; i--) {
     const b = game.buildings[i]; if (b.kind === 'hq') continue;
     if (pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h) {

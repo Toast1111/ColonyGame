@@ -1454,9 +1454,15 @@ export class Game {
         return;
       }
       
-      // 2) Tap on ghost = confirm, tap elsewhere = move ghost to tapped tile
+      // 2) Tap on ghost = confirm, UNLESS we just finished dragging
+      // If we were dragging, don't auto-confirm on release
       if (isClickOnGhost(this, mx, my)) {
-        this.confirmPending();
+        // Only confirm if this wasn't a drag operation
+        if (!this.pendingDragging) {
+          this.confirmPending();
+        }
+        // Clear drag state regardless
+        this.pendingDragging = false;
         return;
       }
       
@@ -1892,26 +1898,41 @@ export class Game {
     return c;
   }
   spawnEnemy() {
-    // Try multiple times to find a valid spawn position
-    const MAX_ATTEMPTS = 20;
+    // Try multiple times to find a valid spawn position on the outskirts
+    const MAX_ATTEMPTS = 30;
     let x = 0, y = 0;
     let validSpawn = false;
     
+    const HQ_X = HQ_POS.x;
+    const HQ_Y = HQ_POS.y;
+    const MIN_DISTANCE_FROM_HQ = 400; // Minimum distance from HQ (pixels)
+    const EDGE_MARGIN = 100; // Distance from world edge (pixels)
+    
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      // Pick a random edge
+      // Pick a random edge - spawn INSIDE world bounds, not outside
       const edge = randi(0, 4);
       if (edge === 0) { 
-        x = rand(0, WORLD.w); 
-        y = -80; 
+        // Top edge
+        x = rand(EDGE_MARGIN, WORLD.w - EDGE_MARGIN); 
+        y = EDGE_MARGIN; 
       } else if (edge === 1) { 
-        x = rand(0, WORLD.w); 
-        y = WORLD.h + 80; 
+        // Bottom edge
+        x = rand(EDGE_MARGIN, WORLD.w - EDGE_MARGIN); 
+        y = WORLD.h - EDGE_MARGIN; 
       } else if (edge === 2) { 
-        x = -80; 
-        y = rand(0, WORLD.h); 
+        // Left edge
+        x = EDGE_MARGIN; 
+        y = rand(EDGE_MARGIN, WORLD.h - EDGE_MARGIN); 
       } else { 
-        x = WORLD.w + 80; 
-        y = rand(0, WORLD.h); 
+        // Right edge
+        x = WORLD.w - EDGE_MARGIN; 
+        y = rand(EDGE_MARGIN, WORLD.h - EDGE_MARGIN); 
+      }
+      
+      // Check if far enough from HQ
+      const distFromHQ = Math.hypot(x - HQ_X, y - HQ_Y);
+      if (distFromHQ < MIN_DISTANCE_FROM_HQ) {
+        continue; // Too close to HQ
       }
       
       // Check if this position is on a mountain tile
@@ -1921,29 +1942,46 @@ export class Game {
         continue; // Skip mountain tiles
       }
       
-      // Check if there's a valid path from this position to the HQ
-      // Use a quick reachability check instead of full pathfinding
-      const hqX = HQ_POS.x;
-      const hqY = HQ_POS.y;
-      
-      // Simple validation: check if spawn grid tile is passable
+      // Check if spawn tile is passable
       if (gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows) {
         const idx = gy * this.grid.cols + gx;
         if (!this.grid.solid[idx]) {
+          // Check if there's a path to HQ (simple reachability check)
+          // We could use A* here, but for performance, just check if not completely blocked
+          // The enemy FSM will handle pathfinding to HQ
           validSpawn = true;
           break;
         }
       }
     }
     
-    // If we couldn't find a valid spawn after MAX_ATTEMPTS, spawn near HQ edge
+    // If we couldn't find a valid spawn after MAX_ATTEMPTS, try positions around HQ
+    // but still keep minimum distance
     if (!validSpawn) {
+      this.msg('Could not find valid edge spawn, spawning near HQ perimeter', 'warning');
       const angle = rand(0, Math.PI * 2);
-      const distance = 200; // Safe distance from HQ
-      x = HQ_POS.x + Math.cos(angle) * distance;
-      y = HQ_POS.y + Math.sin(angle) * distance;
-      x = Math.max(0, Math.min(x, WORLD.w));
-      y = Math.max(0, Math.min(y, WORLD.h));
+      const distance = MIN_DISTANCE_FROM_HQ + 100; // A bit farther than minimum
+      x = HQ_X + Math.cos(angle) * distance;
+      y = HQ_Y + Math.sin(angle) * distance;
+      
+      // Clamp to world bounds
+      x = Math.max(EDGE_MARGIN, Math.min(x, WORLD.w - EDGE_MARGIN));
+      y = Math.max(EDGE_MARGIN, Math.min(y, WORLD.h - EDGE_MARGIN));
+      
+      // Try to avoid mountains
+      let gx = Math.floor(x / T);
+      let gy = Math.floor(y / T);
+      for (let i = 0; i < 10; i++) {
+        if (!isMountainTile(this.terrainGrid, gx, gy)) break;
+        // Try nearby position
+        const offset = 50;
+        x += (Math.random() - 0.5) * offset * 2;
+        y += (Math.random() - 0.5) * offset * 2;
+        x = Math.max(EDGE_MARGIN, Math.min(x, WORLD.w - EDGE_MARGIN));
+        y = Math.max(EDGE_MARGIN, Math.min(y, WORLD.h - EDGE_MARGIN));
+        gx = Math.floor(x / T);
+        gy = Math.floor(y / T);
+      }
     }
     
     // Use enemy generator for visual variety and equipment

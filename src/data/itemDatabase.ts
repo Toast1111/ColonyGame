@@ -167,6 +167,54 @@ export class ItemDatabase {
           accuracyLong: 0.35
         },
         {
+          defName: 'Revolver',
+          label: 'revolver',
+          description: 'A powerful six-shooter with high damage but slow fire rate.',
+          category: 'Weapon',
+          equipSlot: 'weapon',
+          maxDurability: 100,
+          stackable: false,
+          value: 200,
+          weight: 1.5,
+          damage: 18,
+          range: 28,
+          accuracy: 0.75,
+          ammoType: 'Bullets',
+          armorPenetration: 0.25,
+          stoppingPower: 1.2,
+          burstCount: 1,
+          aimTimeTicks: 30,          // 30 RimWorld ticks = 0.5 sec in RimWorld = 1.0 sec in game
+          cooldownTicks: 48,         // 48 RimWorld ticks = 0.8 sec in RimWorld = 1.6 sec in game
+          accuracyTouch: 0.92,
+          accuracyShort: 0.85,
+          accuracyMedium: 0.65,
+          accuracyLong: 0.45
+        },
+        {
+          defName: 'Shotgun',
+          label: 'pump shotgun',
+          description: 'Devastating at close range with spread shot pattern.',
+          category: 'Weapon',
+          equipSlot: 'weapon',
+          maxDurability: 90,
+          stackable: false,
+          value: 250,
+          weight: 4.0,
+          damage: 25,
+          range: 15,
+          accuracy: 0.80,
+          ammoType: 'Shells',
+          armorPenetration: 0.10,
+          stoppingPower: 1.8,
+          burstCount: 1,
+          aimTimeTicks: 36,          // 36 RimWorld ticks = 0.6 sec in RimWorld = 1.2 sec in game
+          cooldownTicks: 60,         // 60 RimWorld ticks = 1.0 sec in RimWorld = 2.0 sec in game
+          accuracyTouch: 0.98,
+          accuracyShort: 0.85,
+          accuracyMedium: 0.45,
+          accuracyLong: 0.20
+        },
+        {
           defName: 'AssaultRifle',
           label: 'assault rifle',
           description: 'Military-grade automatic rifle with high damage output.',
