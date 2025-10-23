@@ -74,6 +74,20 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 1 }
   },
 
+      'smithing': {
+    id: 'smithing',
+    name: 'smithing',
+    description: 'Learn smithing techniques. Unlocks smithing workbench.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: ['basic_tools'],
+    unlocks: {
+      buildings: ['smithing_workbench'],
+    },
+    position: { x: 2, y: 1 }
+  },
+
     'mountain_deconstruction': {
     id: 'mountain_deconstruction',
     name: 'Mountain De-Construction',
@@ -88,18 +102,46 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 2 }
   },   
 
-    'smithing': {
-    id: 'smithing',
-    name: 'smithing',
+    'alternative_fuel': {
+    id: 'alternative_fuel',
+    name: 'Alternative Fuel',
+    description: 'Learn how to use coal for fuel. Unlocks coal processor.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: ['mountain_deconstruction'],
+    unlocks: {
+      buildings: ['alternative fuel'],
+    },
+    position: { x: 2, y: 3 }
+  },
+
+      'metal_use': {
+    id: 'metal_use',
+    name: 'Metal Use',
     description: 'Learn smithing techniques. Unlocks smithing workbench.',
     category: 'basic',
     cost: 50,
     time: 30,
     prerequisites: ['mountain_deconstruction'],
     unlocks: {
+      buildings: ['bloomery'],
+    },
+    position: { x: 2, y: 4 }
+  },
+
+      'smithing': {
+    id: 'smithing',
+    name: 'smithing',
+    description: 'Learn smithing techniques. Unlocks smithing workbench.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: ['basic_tools'],
+    unlocks: {
       buildings: ['smithing_workbench'],
     },
-    position: { x: 2, y: 2 }
+    position: { x: 2, y: 1 }
   },
 
   'agriculture': {
