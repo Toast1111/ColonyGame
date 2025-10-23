@@ -74,7 +74,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 1 }
   },
 
-      'smithing': {
+    'smithing': {
     id: 'smithing',
     name: 'smithing',
     description: 'Learn smithing techniques. Unlocks smithing workbench.',
@@ -116,32 +116,18 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 2, y: 3 }
   },
 
-      'metal_use': {
+    'metal_use': {
     id: 'metal_use',
     name: 'Metal Use',
-    description: 'Learn smithing techniques. Unlocks smithing workbench.',
+    description: 'Learn how to use metal. Unlocks bloomery and cooling pallet.',
     category: 'basic',
     cost: 50,
     time: 30,
     prerequisites: ['mountain_deconstruction'],
     unlocks: {
-      buildings: ['bloomery'],
+      buildings: ['bloomery', 'cooling_pallet'],
     },
     position: { x: 2, y: 4 }
-  },
-
-      'smithing': {
-    id: 'smithing',
-    name: 'smithing',
-    description: 'Learn smithing techniques. Unlocks smithing workbench.',
-    category: 'basic',
-    cost: 50,
-    time: 30,
-    prerequisites: ['basic_tools'],
-    unlocks: {
-      buildings: ['smithing_workbench'],
-    },
-    position: { x: 2, y: 1 }
   },
 
   'agriculture': {
@@ -158,17 +144,17 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 0, y: 2 }
   },
 
-  'cooking': {
-    id: 'cooking',
-    name: 'Cooking',
-    description: 'Learn to prepare meals. Unlocks stove and basic recipes.',
+  'basic_furniture': {
+    id: 'basic_furniture',
+    name: 'Basic Furniture',
+    description: 'Learn to create basic furniture.',
     category: 'basic',
     cost: 80,
     time: 35,
     prerequisites: [],
     unlocks: {
-      buildings: ['stove'],
-      mechanics: ['meal_preparation']
+      buildings: ['small_table', 'large_table', 'stool', 'dining_chair', 'bed', 'end_table'],
+      mechanics: ['eat_at_table']
     },
     position: { x: 1, y: 0 }
   },
