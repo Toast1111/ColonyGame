@@ -491,22 +491,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     if (!c.inside && !danger && (c.hp || 0) < 35) set('heal', 85 - Math.max(0, c.hp) * 0.1, 'low health');
     
-    // Sleep based on fatigue level - colonists prefer to sleep when tired but can continue working
-    // Priority scales from 55 at 60% fatigue to 85+ at 100% fatigue
+    // Sleep based on fatigue level - colonists are MORE LIKELY to sleep when tired, but NEVER forced
+    // Priority scales gradually based on fatigue, competing with work priority
     // At night, they get a bonus to encourage natural sleep patterns
-    // HOWEVER: If player has issued a command, reduce sleep priority significantly (unless critically tired)
+    // This creates natural behavior where tired colonists prefer rest over work
     if (!c.inside && !danger && (c.fatigue || 0) >= fatigueEnterThreshold) {
       const isNight = game.isNight();
-      // Scale fatigue factor: 60% = 0, 80% = 20, 100% = 40
-      const fatigueFactor = Math.min(40, ((c.fatigue || 0) - fatigueEnterThreshold) * 1.0);
-      const nightBonus = isNight ? 10 : 0; // Moderate bonus at night for natural rhythm
-      let basePriority = 55 + fatigueFactor + nightBonus;
+      // Scale fatigue factor more gradually: 60% = 0, 80% = 15, 100% = 30
+      const fatigueFactor = Math.min(30, ((c.fatigue || 0) - fatigueEnterThreshold) * 0.75);
+      const nightBonus = isNight ? 15 : 0; // Bonus at night for natural circadian rhythm
+      const basePriority = 45 + fatigueFactor + nightBonus; // Max ~90 at 100% fatigue + night
       
-      // Player command override: reduce sleep priority unless critically exhausted (90%+)
-      if (hasActivePlayerCommand && (c.fatigue || 0) < 90) {
-        basePriority = Math.min(basePriority, 35); // Reduce below work priority (40) but above idle
-      }
-      
+      // Sleep competes with work (priority ~40-50) naturally
+      // More tired = more likely to choose sleep over work
       set('goToSleep', basePriority, isNight ? 'tired + night preference' : 'high fatigue');
     }
     
@@ -1081,10 +1078,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break;
       }
       
-      if (!game.isNight()) { 
-        changeState('seekTask', 'daybreak'); 
-        break; 
-      }
+      // Removed forced daybreak wakeup - colonists can sleep during day if tired
+      // They'll naturally wake up when fatigue is low enough (via evaluateIntent)
       
     // Improve house selection - prefer houses with more space and closer distance, but lock briefly once chosen
     let best = selectSleepTarget(protectedHouses);
@@ -1222,7 +1217,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'seekTask': {
-      if (game.isNight()) { changeState('sleep', 'night time'); break; }
+      // Removed forced night sleep - colonists choose sleep naturally when tired
       
       // Always pick a new task when in seekTask state, unless we're executing a command
       if (!c.task || c.task === 'idle') {
@@ -1272,15 +1267,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'idle': {
-      // Check for night time even when idle - colonists should go to sleep
-      if (game.isNight()) { 
-        // Debug: Log when we catch a colonist being idle during night
-        if (Math.random() < 0.1) {
-          console.log(`Colonist was idle during night time, forcing sleep transition`);
-        }
-        changeState('sleep', 'night time while idle'); 
-        break; 
-      }
+      // Removed forced night sleep - idle colonists will naturally prefer sleep when tired
+      // If they're not tired, they can stay awake and idle (realistic behavior)
       
       const dst = c.target;
       if (!dst) {
