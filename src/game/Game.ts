@@ -1958,7 +1958,7 @@ export class Game {
     // If we couldn't find a valid spawn after MAX_ATTEMPTS, try positions around HQ
     // but still keep minimum distance
     if (!validSpawn) {
-      this.msg('Could not find valid edge spawn, spawning near HQ perimeter', 'warning');
+      this.msg('Could not find valid edge spawn, spawning near HQ perimeter', 'warn');
       const angle = rand(0, Math.PI * 2);
       const distance = MIN_DISTANCE_FROM_HQ + 100; // A bit farther than minimum
       x = HQ_X + Math.cos(angle) * distance;
