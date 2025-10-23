@@ -46,18 +46,60 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 0, y: 0 }
   },
 
-  'tool_crafting': {
-    id: 'tool_crafting',
-    name: 'Tool Crafting',
-    description: 'Master basic tool creation. Unlocks crafting bench.',
+    'basic_crafting': {
+    id: 'basic_crafting',
+    name: 'Basic Crafting',
+    description: 'Learn fundamental crafting techniques. Unlocks crafting spot.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: [],
+    unlocks: {
+      buildings: ['crafting_spot'],
+    },
+    position: { x: 0, y: 1 }
+  },
+
+  'basic_tools': {
+    id: 'basic_tools',
+    name: 'Basic Tools',
+    description: 'Master basic tool creation. Unlocks more crafting blueprints.',
     category: 'basic',
     cost: 100,
     time: 45,
-    prerequisites: [],
+    prerequisites: ['basic_crafting'],
     unlocks: {
-      buildings: ['crafting_bench'],
+      items: ['hoe', 'axe', 'pickaxe'],
     },
-    position: { x: 0, y: 1 }
+    position: { x: 1, y: 1 }
+  },
+
+    'mountain_deconstruction': {
+    id: 'mountain_deconstruction',
+    name: 'Mountain De-Construction',
+    description: 'Learn how to mine mountain tiles. Unlocks mining zones.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: ['basic_tools'],
+    unlocks: {
+      buildings: ['mining_zone'],
+    },
+    position: { x: 1, y: 2 }
+  },   
+
+    'smithing': {
+    id: 'smithing',
+    name: 'smithing',
+    description: 'Learn smithing techniques. Unlocks smithing workbench.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: ['mountain_deconstruction'],
+    unlocks: {
+      buildings: ['smithing_workbench'],
+    },
+    position: { x: 2, y: 2 }
   },
 
   'agriculture': {
