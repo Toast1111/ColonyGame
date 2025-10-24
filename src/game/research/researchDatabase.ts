@@ -1,8 +1,8 @@
 /**
- * Research Database
+ * Research Database - Unified Tree Structure
  * 
  * Centralized data-driven research tree definition.
- * Easy to modify and expand without touching core game logic.
+ * All categories displayed together in one large interconnected tree.
  */
 
 export type ResearchCategory = 'basic' | 'military' | 'agriculture' | 'industry' | 'medicine' | 'advanced';
@@ -20,22 +20,41 @@ export interface ResearchNode {
     items?: string[];        // Item defNames that become available
     mechanics?: string[];    // Game mechanics that become available
   };
-  position: { x: number; y: number }; // Position in research tree UI
+  position: { x: number; y: number }; // Position in unified research tree
   icon?: string;            // Icon identifier (future)
 }
 
 /**
- * Research Tree Data
- * Organized by category for easy maintenance
+ * Unified Research Tree Data
+ * 
+ * Layout: 20 columns (x) × 12 rows (y)
+ * X: 0-3=Basic, 4-7=Military, 8-11=Industry, 12-15=Medicine, 16-19=Advanced
+ * Y: 0-2=Early, 3-5=Mid, 6-8=Late, 9-11=Endgame
  */
 export const RESEARCH_TREE: Record<string, ResearchNode> = {
   // ====================
-  // BASIC RESEARCH
+  // BASIC (Gray #94a3b8)
+  // X: 0-3, Y: 0-3
   // ====================
+  'cooking': {
+    id: 'cooking',
+    name: 'Cooking',
+    description: 'Learn to cook basic meals from raw ingredients.',
+    category: 'basic',
+    cost: 50,
+    time: 30,
+    prerequisites: [],
+    unlocks: {
+      buildings: ['campfire', 'stove'],
+      items: ['SimpleMeal', 'Bread'],
+    },
+    position: { x: 0, y: 0 }
+  },
+
   'basic_construction': {
     id: 'basic_construction',
     name: 'Basic Construction',
-    description: 'Learn fundamental building techniques. Unlocks walls and doors.',
+    description: 'Learn fundamental building techniques.',
     category: 'basic',
     cost: 50,
     time: 30,
@@ -43,97 +62,28 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['wall', 'door'],
     },
-    position: { x: 0, y: 0 }
+    position: { x: 1, y: 0 }
   },
 
-    'basic_crafting': {
+  'basic_crafting': {
     id: 'basic_crafting',
     name: 'Basic Crafting',
-    description: 'Learn fundamental crafting techniques. Unlocks crafting spot.',
+    description: 'Learn to craft simple items and clothing.',
     category: 'basic',
     cost: 50,
     time: 30,
     prerequisites: [],
     unlocks: {
       buildings: ['crafting_spot'],
+      items: ['ClothShirt', 'ClothPants'],
     },
-    position: { x: 0, y: 1 }
-  },
-
-  'basic_tools': {
-    id: 'basic_tools',
-    name: 'Basic Tools',
-    description: 'Master basic tool creation. Unlocks more crafting blueprints.',
-    category: 'basic',
-    cost: 100,
-    time: 45,
-    prerequisites: ['basic_crafting'],
-    unlocks: {
-      items: ['hoe', 'axe', 'pickaxe'],
-    },
-    position: { x: 1, y: 1 }
-  },
-
-    'smithing': {
-    id: 'smithing',
-    name: 'smithing',
-    description: 'Learn smithing techniques. Unlocks smithing workbench.',
-    category: 'basic',
-    cost: 50,
-    time: 30,
-    prerequisites: ['basic_tools'],
-    unlocks: {
-      buildings: ['smithing_workbench'],
-    },
-    position: { x: 2, y: 1 }
-  },
-
-    'mountain_deconstruction': {
-    id: 'mountain_deconstruction',
-    name: 'Mountain De-Construction',
-    description: 'Learn how to mine mountain tiles. Unlocks mining zones.',
-    category: 'basic',
-    cost: 50,
-    time: 30,
-    prerequisites: ['basic_tools'],
-    unlocks: {
-      buildings: ['mining_zone'],
-    },
-    position: { x: 1, y: 2 }
-  },   
-
-    'alternative_fuel': {
-    id: 'alternative_fuel',
-    name: 'Alternative Fuel',
-    description: 'Learn how to use coal for fuel. Unlocks coal processor.',
-    category: 'basic',
-    cost: 50,
-    time: 30,
-    prerequisites: ['mountain_deconstruction'],
-    unlocks: {
-      buildings: ['alternative fuel'],
-    },
-    position: { x: 2, y: 3 }
-  },
-
-    'metal_use': {
-    id: 'metal_use',
-    name: 'Metal Use',
-    description: 'Learn how to use metal. Unlocks bloomery and cooling pallet.',
-    category: 'basic',
-    cost: 50,
-    time: 30,
-    prerequisites: ['mountain_deconstruction'],
-    unlocks: {
-      buildings: ['bloomery', 'cooling_pallet'],
-    },
-    position: { x: 2, y: 4 }
+    position: { x: 2, y: 0 }
   },
 
   'agriculture': {
     id: 'agriculture',
     name: 'Agriculture',
-    description: 'Develop farming techniques. Already unlocked (tutorial).',
+    description: 'Develop farming techniques. (Tutorial unlock)',
     category: 'agriculture',
     cost: 0,
     time: 0,
@@ -141,243 +91,335 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['farm'],
     },
-    position: { x: 0, y: 2 }
+    position: { x: 0, y: 1 }
+  },
+
+  'basic_medicine': {
+    id: 'basic_medicine',
+    name: 'Basic Medicine',
+    description: 'Learn fundamental medical treatments. (Tutorial unlock)',
+    category: 'medicine',
+    cost: 0,
+    time: 0,
+    prerequisites: [],
+    unlocks: {
+      buildings: ['medical_bed'],
+      items: ['Bandage'],
+    },
+    position: { x: 1, y: 1 }
   },
 
   'basic_furniture': {
     id: 'basic_furniture',
     name: 'Basic Furniture',
-    description: 'Learn to create basic furniture.',
+    description: 'Craft tables, chairs, and beds for your colonists.',
     category: 'basic',
     cost: 80,
     time: 35,
-    prerequisites: [],
+    prerequisites: ['basic_construction'],
     unlocks: {
       buildings: ['small_table', 'large_table', 'stool', 'dining_chair', 'bed', 'end_table'],
       mechanics: ['eat_at_table']
     },
-    position: { x: 1, y: 0 }
+    position: { x: 2, y: 1 }
+  },
+
+  'tool_crafting': {
+    id: 'tool_crafting',
+    name: 'Tool Crafting',
+    description: 'Master basic tool creation for survival.',
+    category: 'basic',
+    cost: 100,
+    time: 45,
+    prerequisites: ['basic_crafting'],
+    unlocks: {
+      items: ['Hoe', 'Axe', 'Pickaxe', 'Hammer'],
+    },
+    position: { x: 1, y: 2 }
   },
 
   'advanced_cooking': {
     id: 'advanced_cooking',
     name: 'Advanced Cooking',
-    description: 'Master culinary techniques. Better meals and buff foods.',
+    description: 'Master culinary techniques for better meals.',
     category: 'basic',
-    cost: 200,
-    time: 75,
+    cost: 150,
+    time: 60,
     prerequisites: ['cooking'],
     unlocks: {
       buildings: ['industrial_stove'],
-      items: ['LavishMeal', 'PackagedSurvivalMeal'],
-      mechanics: ['buff_meals']
+      items: ['FineMeal', 'LavishMeal'],
+      mechanics: ['meal_quality_bonus']
     },
-    position: { x: 2, y: 0 }
+    position: { x: 0, y: 2 }
+  },
+
+  'smithing': {
+    id: 'smithing',
+    name: 'Smithing',
+    description: 'Work metal to create superior tools and materials.',
+    category: 'basic',
+    cost: 200,
+    time: 75,
+    prerequisites: ['tool_crafting', 'stonecutting'],
+    unlocks: {
+      buildings: ['smithing_workbench'],
+      items: ['SteelTools'],
+    },
+    position: { x: 2, y: 3 }
   },
 
   // ====================
-  // MILITARY RESEARCH
+  // MILITARY (Red #ef4444)
+  // X: 4-7, Y: 2-6
   // ====================
   'melee_weapons': {
     id: 'melee_weapons',
     name: 'Melee Weapons',
-    description: 'Craft basic melee weapons for defense.',
+    description: 'Craft basic weapons for close combat defense.',
     category: 'military',
     cost: 75,
     time: 40,
     prerequisites: ['tool_crafting'],
     unlocks: {
-      items: ['Club', 'Knife'],
+      items: ['Club', 'Knife', 'Spear'],
     },
-    position: { x: 1, y: 1 }
+    position: { x: 4, y: 2 }
   },
 
-  'ranged_weapons_basic': {
-    id: 'ranged_weapons_basic',
+  'defensive_structures': {
+    id: 'defensive_structures',
+    name: 'Defensive Structures',
+    description: 'Build basic defensive positions.',
+    category: 'military',
+    cost: 100,
+    time: 50,
+    prerequisites: ['basic_construction'],
+    unlocks: {
+      buildings: ['barricade', 'sandbag', 'spike_trap'],
+    },
+    position: { x: 4, y: 3 }
+  },
+
+  'basic_firearms': {
+    id: 'basic_firearms',
     name: 'Basic Firearms',
-    description: 'Develop simple firearms. Unlocks pistols and revolvers.',
+    description: 'Manufacture simple firearms for ranged combat.',
     category: 'military',
     cost: 150,
     time: 60,
-    prerequisites: ['melee_weapons'],
+    prerequisites: ['melee_weapons', 'smithing'],
     unlocks: {
-      items: ['Revolver', 'Autopistol'],
+      items: ['Revolver', 'Autopistol', 'BoltActionRifle'],
     },
-    position: { x: 2, y: 1 }
-  },
-
-  'ranged_weapons_advanced': {
-    id: 'ranged_weapons_advanced',
-    name: 'Advanced Firearms',
-    description: 'Master advanced weapon manufacturing. Unlocks rifles and shotguns.',
-    category: 'military',
-    cost: 300,
-    time: 90,
-    prerequisites: ['ranged_weapons_basic'],
-    unlocks: {
-      items: ['AssaultRifle', 'Shotgun', 'SniperRifle'],
-    },
-    position: { x: 3, y: 1 }
-  },
-
-  'turrets': {
-    id: 'turrets',
-    name: 'Automated Defense',
-    description: 'Build automated turrets for colony defense.',
-    category: 'military',
-    cost: 250,
-    time: 75,
-    prerequisites: ['turrets', 'stonecutting'],
-    unlocks: {
-      buildings: ['turret'],
-    },
-    position: { x: 3, y: 0 }
+    position: { x: 5, y: 3 }
   },
 
   'body_armor': {
     id: 'body_armor',
     name: 'Body Armor',
-    description: 'Protective gear for colonists. Unlocks vests and helmets.',
+    description: 'Craft protective gear to reduce combat damage.',
     category: 'military',
     cost: 180,
     time: 65,
-    prerequisites: ['melee_weapons'],
+    prerequisites: ['basic_firearms'],
     unlocks: {
-      items: ['Vest', 'Helmet', 'FlakJacket'],
+      items: ['LeatherVest', 'FlakVest', 'SteelHelmet'],
     },
-    position: { x: 2, y: 2 }
-  },
-
-  'advanced_turrets': {
-    id: 'advanced_turrets',
-    name: 'Advanced Turrets',
-    description: 'Heavy weapons platforms. Unlocks rocket and laser turrets.',
-    category: 'military',
-    cost: 450,
-    time: 130,
-    prerequisites: ['turrets', 'electricity'],
-    unlocks: {
-      buildings: ['heavy_turret', 'laser_turret'],
-    },
-    position: { x: 4, y: 1 }
+    position: { x: 5, y: 4 }
   },
 
   'fortifications': {
     id: 'fortifications',
     name: 'Fortifications',
-    description: 'Advanced defensive structures. Unlocks bunkers and barricades.',
+    description: 'Build advanced defensive structures.',
+    category: 'military',
+    cost: 200,
+    time: 80,
+    prerequisites: ['defensive_structures', 'stonecutting'],
+    unlocks: {
+      buildings: ['bunker', 'embrasure', 'kill_box'],
+    },
+    position: { x: 4, y: 4 }
+  },
+
+  'advanced_firearms': {
+    id: 'advanced_firearms',
+    name: 'Advanced Firearms',
+    description: 'Master military-grade weapon manufacturing.',
     category: 'military',
     cost: 300,
-    time: 95,
-    prerequisites: ['ranged_weapons_basic'],
+    time: 90,
+    prerequisites: ['basic_firearms', 'machining'],
     unlocks: {
-      buildings: ['bunker', 'barricade', 'sandbag'],
+      items: ['AssaultRifle', 'Shotgun', 'SniperRifle', 'MachineGun'],
     },
-    position: { x: 2, y: 0 }
+    position: { x: 6, y: 4 }
+  },
+
+  'automated_defense': {
+    id: 'automated_defense',
+    name: 'Automated Defense',
+    description: 'Build autonomous turrets to defend your colony.',
+    category: 'military',
+    cost: 350,
+    time: 100,
+    prerequisites: ['advanced_firearms', 'electricity'],
+    unlocks: {
+      buildings: ['mini_turret', 'auto_turret'],
+    },
+    position: { x: 7, y: 4 }
   },
 
   'explosives': {
     id: 'explosives',
     name: 'Explosives',
-    description: 'Manufacture bombs and grenades for offense and defense.',
+    description: 'Manufacture grenades and explosive weaponry.',
     category: 'military',
     cost: 320,
     time: 100,
-    prerequisites: ['ranged_weapons_advanced'],
+    prerequisites: ['advanced_firearms'],
     unlocks: {
-      items: ['Grenade', 'MolotovCocktail', 'RocketLauncher'],
+      items: ['Grenade', 'MolotovCocktail', 'IED'],
     },
-    position: { x: 4, y: 2 }
+    position: { x: 6, y: 5 }
+  },
+
+  'heavy_armor': {
+    id: 'heavy_armor',
+    name: 'Heavy Armor',
+    description: 'Craft military-grade protective armor.',
+    category: 'military',
+    cost: 400,
+    time: 120,
+    prerequisites: ['body_armor', 'smelting'],
+    unlocks: {
+      items: ['MarineArmor', 'CataphractArmor'],
+    },
+    position: { x: 5, y: 5 }
+  },
+
+  'heavy_turrets': {
+    id: 'heavy_turrets',
+    name: 'Heavy Turrets',
+    description: 'Deploy heavy weapons platforms.',
+    category: 'military',
+    cost: 500,
+    time: 140,
+    prerequisites: ['automated_defense'],
+    unlocks: {
+      buildings: ['heavy_turret', 'mortar', 'rocket_turret'],
+    },
+    position: { x: 7, y: 5 }
   },
 
   'powered_armor': {
     id: 'powered_armor',
     name: 'Powered Armor',
-    description: 'Mechanized combat suits. Elite protection for colonists.',
+    description: 'Mechanized combat suits with superior protection.',
     category: 'military',
     cost: 600,
     time: 180,
-    prerequisites: ['body_armor', 'electricity'],
+    prerequisites: ['heavy_armor', 'advanced_materials'],
     unlocks: {
-      items: ['PowerArmor', 'PowerHelmet'],
+      items: ['PoweredArmor', 'PoweredHelmet'],
     },
-    position: { x: 5, y: 2 }
+    position: { x: 6, y: 6 }
   },
 
   // ====================
-  // AGRICULTURE RESEARCH
+  // AGRICULTURE (Green #22c55e)
+  // X: 0-6, Y: 4-10
   // ====================
+  'composting': {
+    id: 'composting',
+    name: 'Composting',
+    description: 'Create fertilizer to boost crop growth.',
+    category: 'agriculture',
+    cost: 80,
+    time: 40,
+    prerequisites: ['agriculture'],
+    unlocks: {
+      buildings: ['compost_bin'],
+      mechanics: ['fertilizer', 'growth_boost_15'],
+    },
+    position: { x: 2, y: 4 }
+  },
+
+  'cooking_efficiency': {
+    id: 'cooking_efficiency',
+    name: 'Cooking Efficiency',
+    description: 'Cook multiple meals at once.',
+    category: 'agriculture',
+    cost: 100,
+    time: 45,
+    prerequisites: ['advanced_cooking'],
+    unlocks: {
+      mechanics: ['bulk_cooking_4x'],
+    },
+    position: { x: 1, y: 4 }
+  },
+
   'irrigation': {
     id: 'irrigation',
     name: 'Irrigation',
-    description: 'Improve farming efficiency. Increases crop growth speed.',
+    description: 'Water management systems for faster crop growth.',
     category: 'agriculture',
-    cost: 100,
-    time: 50,
-    prerequisites: ['agriculture'],
+    cost: 150,
+    time: 60,
+    prerequisites: ['composting'],
     unlocks: {
-      mechanics: ['faster_crop_growth'],
+      buildings: ['irrigation_channel'],
+      mechanics: ['growth_boost_20', 'drought_resistance'],
     },
-    position: { x: 1, y: 2 }
+    position: { x: 3, y: 5 }
   },
 
   'animal_husbandry': {
     id: 'animal_husbandry',
     name: 'Animal Husbandry',
-    description: 'Domesticate and raise animals for food and resources.',
+    description: 'Tame and raise animals for resources.',
     category: 'agriculture',
-    cost: 200,
-    time: 80,
-    prerequisites: ['irrigation'],
+    cost: 180,
+    time: 70,
+    prerequisites: ['agriculture'],
     unlocks: {
-      buildings: ['animal_pen'],
+      buildings: ['animal_pen', 'haygrass_farm'],
+      items: ['Kibble'],
       mechanics: ['animal_taming'],
     },
-    position: { x: 2, y: 2 }
+    position: { x: 2, y: 5 }
   },
 
   'advanced_farming': {
     id: 'advanced_farming',
     name: 'Advanced Farming',
-    description: 'Improved farming techniques. Unlocks greenhouses and fertilizer.',
+    description: 'Greenhouses and year-round crop production.',
     category: 'agriculture',
     cost: 250,
     time: 85,
     prerequisites: ['irrigation'],
     unlocks: {
       buildings: ['greenhouse'],
-      mechanics: ['fertilizer', 'crop_rotation']
+      mechanics: ['year_round_growing', 'crop_rotation'],
     },
-    position: { x: 2, y: 1 }
+    position: { x: 4, y: 6 }
   },
 
   'food_preservation': {
     id: 'food_preservation',
     name: 'Food Preservation',
-    description: 'Keep food fresh longer. Unlocks smokehouses and freezers.',
+    description: 'Keep food fresh for extended periods.',
     category: 'agriculture',
-    cost: 180,
-    time: 65,
-    prerequisites: ['cooking'],
+    cost: 200,
+    time: 70,
+    prerequisites: ['cooking_efficiency'],
     unlocks: {
-      buildings: ['smokehouse', 'freezer', 'salt_cellar'],
+      buildings: ['smokehouse', 'salt_cellar'],
+      items: ['Jerky', 'Pemmican'],
+      mechanics: ['food_lasts_300_percent'],
     },
-    position: { x: 3, y: 1 }
-  },
-
-  'hydroponics': {
-    id: 'hydroponics',
-    name: 'Hydroponics',
-    description: 'Grow crops without soil. Faster growth, all-season farming.',
-    category: 'agriculture',
-    cost: 380,
-    time: 120,
-    prerequisites: ['advanced_farming', 'electricity'],
-    unlocks: {
-      buildings: ['hydroponic_basin', 'climate_controlled_greenhouse'],
-      mechanics: ['soilless_farming']
-    },
-    position: { x: 4, y: 1 }
+    position: { x: 2, y: 6 }
   },
 
   'breeding_programs': {
@@ -390,163 +432,315 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     prerequisites: ['animal_husbandry'],
     unlocks: {
       buildings: ['breeding_facility'],
-      mechanics: ['selective_breeding', 'increased_yields']
+      mechanics: ['selective_breeding', 'enhanced_animals'],
     },
-    position: { x: 3, y: 2 }
+    position: { x: 3, y: 7 }
+  },
+
+  'cold_storage': {
+    id: 'cold_storage',
+    name: 'Cold Storage',
+    description: 'Refrigeration technology for indefinite food storage.',
+    category: 'agriculture',
+    cost: 280,
+    time: 90,
+    prerequisites: ['food_preservation', 'electricity'],
+    unlocks: {
+      buildings: ['freezer', 'refrigerator'],
+      mechanics: ['indefinite_storage'],
+    },
+    position: { x: 2, y: 7 }
+  },
+
+  'hydroponics': {
+    id: 'hydroponics',
+    name: 'Hydroponics',
+    description: 'Soilless farming with accelerated growth.',
+    category: 'agriculture',
+    cost: 450,
+    time: 130,
+    prerequisites: ['advanced_farming', 'electricity'],
+    unlocks: {
+      buildings: ['hydroponic_basin', 'climate_greenhouse'],
+      mechanics: ['growth_200_percent', 'soilless'],
+    },
+    position: { x: 5, y: 7 }
+  },
+
+  'industrial_ranching': {
+    id: 'industrial_ranching',
+    name: 'Industrial Ranching',
+    description: 'Automated animal product collection.',
+    category: 'agriculture',
+    cost: 400,
+    time: 120,
+    prerequisites: ['breeding_programs', 'automation'],
+    unlocks: {
+      buildings: ['auto_feeder', 'milking_station', 'shearing_station'],
+      mechanics: ['passive_production'],
+    },
+    position: { x: 4, y: 8 }
   },
 
   'genetic_modification': {
     id: 'genetic_modification',
     name: 'Genetic Modification',
-    description: 'Modify crops and animals at the genetic level for superior traits.',
+    description: 'Modify genetics for custom crops and livestock.',
     category: 'agriculture',
-    cost: 750,
-    time: 220,
-    prerequisites: ['hydroponics', 'breeding_programs', 'advanced_medicine'],
+    cost: 800,
+    time: 240,
+    prerequisites: ['hydroponics', 'industrial_ranching', 'gene_therapy'],
     unlocks: {
       buildings: ['gene_lab', 'bioreactor'],
-      mechanics: ['crop_modification', 'enhanced_livestock']
+      mechanics: ['gmo_crops', 'super_animals'],
     },
-    position: { x: 6, y: 1 }
+    position: { x: 5, y: 9 }
   },
 
   // ====================
-  // INDUSTRY RESEARCH
+  // INDUSTRY (Orange #f59e0b)
+  // X: 8-12, Y: 1-7
   // ====================
   'stonecutting': {
     id: 'stonecutting',
     name: 'Stonecutting',
-    description: 'Work with stone materials. Unlocks stone buildings.',
+    description: 'Process stone into building blocks.',
     category: 'industry',
-    cost: 120,
-    time: 55,
+    cost: 80,
+    time: 45,
     prerequisites: ['basic_construction'],
     unlocks: {
-      buildings: ['stone_wall'],
+      buildings: ['stonecutter_table', 'stone_wall'],
+      items: ['StoneBlocks'],
       mechanics: ['stone_construction'],
     },
-    position: { x: 1, y: 0 }
+    position: { x: 8, y: 1 }
   },
 
-  'mining': {
-    id: 'mining',
-    name: 'Mining',
-    description: 'Extract resources from the ground. Unlocks quarry and mining operations.',
+  'deep_mining': {
+    id: 'deep_mining',
+    name: 'Deep Mining',
+    description: 'Extract ore and minerals from mountains.',
     category: 'industry',
     cost: 150,
     time: 60,
-    prerequisites: ['stonecutting'],
+    prerequisites: ['tool_crafting'],
     unlocks: {
-      buildings: ['quarry', 'mine'],
-      mechanics: ['deep_mining'],
+      buildings: ['mining_zone', 'quarry', 'deep_drill'],
+      mechanics: ['ore_extraction'],
     },
-    position: { x: 2, y: 0 }
+    position: { x: 9, y: 2 }
+  },
+
+  'logging_efficiency': {
+    id: 'logging_efficiency',
+    name: 'Logging Efficiency',
+    description: 'Process lumber more effectively.',
+    category: 'industry',
+    cost: 100,
+    time: 50,
+    prerequisites: ['tool_crafting'],
+    unlocks: {
+      buildings: ['sawmill'],
+      mechanics: ['wood_bonus_50'],
+    },
+    position: { x: 8, y: 2 }
   },
 
   'smelting': {
     id: 'smelting',
     name: 'Smelting',
-    description: 'Process raw ore into metal. Unlocks smelter and metalworking.',
+    description: 'Process raw ore into metal ingots.',
     category: 'industry',
     cost: 200,
     time: 75,
-    prerequisites: ['mining'],
+    prerequisites: ['deep_mining'],
     unlocks: {
-      buildings: ['smelter', 'forge'],
-      items: ['SteelBar', 'IronBar'],
+      buildings: ['bloomery', 'smelter', 'forge'],
+      items: ['IronBar', 'SteelBar'],
     },
-    position: { x: 3, y: 0 }
+    position: { x: 10, y: 3 }
   },
 
-  'electricity': {
-    id: 'electricity',
-    name: 'Electricity',
-    description: 'Harness electrical power. Unlocks generators and powered devices.',
+  'masonry': {
+    id: 'masonry',
+    name: 'Masonry',
+    description: 'Craft advanced stone structures and furniture.',
     category: 'industry',
-    cost: 400,
-    time: 120,
-    prerequisites: ['smelting'],
+    cost: 180,
+    time: 65,
+    prerequisites: ['stonecutting'],
     unlocks: {
-      buildings: ['generator', 'battery', 'power_conduit'],
-      mechanics: ['power_grid'],
+      buildings: ['stone_table', 'stone_chair'],
+      items: ['Marble', 'Granite'],
     },
-    position: { x: 4, y: 0 }
-  },
-
-  'automation': {
-    id: 'automation',
-    name: 'Automation',
-    description: 'Automate production with machinery. Unlocks automated workstations.',
-    category: 'industry',
-    cost: 500,
-    time: 150,
-    prerequisites: ['electricity'],
-    unlocks: {
-      buildings: ['auto_loom', 'auto_kitchen', 'assembly_line'],
-      mechanics: ['automated_production'],
-    },
-    position: { x: 5, y: 0 }
+    position: { x: 8, y: 3 }
   },
 
   'machining': {
     id: 'machining',
     name: 'Machining',
-    description: 'Precision manufacturing and components. Unlocks advanced fabrication.',
+    description: 'Precision manufacturing and component production.',
     category: 'industry',
-    cost: 350,
-    time: 110,
+    cost: 300,
+    time: 100,
     prerequisites: ['smelting'],
     unlocks: {
       buildings: ['machine_shop', 'fabricator'],
-      items: ['Component', 'AdvancedComponent'],
+      items: ['Component', 'MechanicalPart'],
     },
-    position: { x: 4, y: -1 }
+    position: { x: 11, y: 4 }
   },
 
-  // ====================
-  // MEDICINE RESEARCH
-  // ====================
-  'basic_medicine': {
-    id: 'basic_medicine',
-    name: 'Basic Medicine',
-    description: 'Learn fundamental medical treatments. Already unlocked (tutorial).',
-    category: 'medicine',
-    cost: 0,
-    time: 0,
-    prerequisites: [],
+  'power_generation': {
+    id: 'power_generation',
+    name: 'Power Generation',
+    description: 'Generate electrical power for your colony.',
+    category: 'industry',
+    cost: 400,
+    time: 120,
+    prerequisites: ['machining'],
     unlocks: {
-      buildings: ['medical_bed'],
+      buildings: ['wood_generator', 'water_wheel', 'battery'],
+      mechanics: ['power_grid'],
     },
-    position: { x: 0, y: 3 }
+    position: { x: 10, y: 4 }
   },
 
-  'advanced_medicine': {
-    id: 'advanced_medicine',
-    name: 'Advanced Medicine',
-    description: 'Develop advanced medical procedures. Improves healing speed.',
+  'electricity': {
+    id: 'electricity',
+    name: 'Electricity',
+    description: 'Harness electrical power for advanced technology.',
+    category: 'industry',
+    cost: 450,
+    time: 130,
+    prerequisites: ['power_generation'],
+    unlocks: {
+      buildings: ['power_conduit', 'electric_light', 'electric_crafting_bench'],
+      mechanics: ['electricity_unlocked'],
+    },
+    position: { x: 11, y: 5 }
+  },
+
+  'renewable_energy': {
+    id: 'renewable_energy',
+    name: 'Renewable Energy',
+    description: 'Infinite clean power from sun and wind.',
+    category: 'industry',
+    cost: 380,
+    time: 115,
+    prerequisites: ['electricity'],
+    unlocks: {
+      buildings: ['solar_panel', 'wind_turbine', 'geothermal_tap'],
+    },
+    position: { x: 10, y: 5 }
+  },
+
+  'automation': {
+    id: 'automation',
+    name: 'Automation',
+    description: 'Automate production with machinery.',
+    category: 'industry',
+    cost: 550,
+    time: 160,
+    prerequisites: ['electricity'],
+    unlocks: {
+      buildings: ['auto_loom', 'auto_kitchen', 'assembly_line', 'conveyor'],
+      mechanics: ['automated_crafting'],
+    },
+    position: { x: 12, y: 6 }
+  },
+
+  'advanced_materials': {
+    id: 'advanced_materials',
+    name: 'Advanced Materials',
+    description: 'Research exotic materials for superior construction.',
+    category: 'industry',
+    cost: 500,
+    time: 150,
+    prerequisites: ['machining', 'smelting'],
+    unlocks: {
+      items: ['Plasteel', 'Composite', 'Hyperweave'],
+    },
+    position: { x: 11, y: 6 }
+  },
+
+  'industrial_fabrication': {
+    id: 'industrial_fabrication',
+    name: 'Industrial Fabrication',
+    description: 'Mass production and advanced manufacturing.',
+    category: 'industry',
+    cost: 700,
+    time: 200,
+    prerequisites: ['automation', 'advanced_materials'],
+    unlocks: {
+      buildings: ['advanced_fabricator', 'nanoforge'],
+      mechanics: ['instant_crafting'],
+    },
+    position: { x: 12, y: 7 }
+  },
+
+  // ====================
+  // MEDICINE (Pink #ec4899)
+  // X: 12-16, Y: 2-8
+  // ====================
+  'herbal_medicine': {
+    id: 'herbal_medicine',
+    name: 'Herbal Medicine',
+    description: 'Craft healing items from plants.',
     category: 'medicine',
-    cost: 180,
-    time: 70,
+    cost: 100,
+    time: 50,
     prerequisites: ['basic_medicine'],
     unlocks: {
-      mechanics: ['faster_healing', 'surgery'],
+      items: ['HerbalMedicine', 'HealingPoultice'],
     },
-    position: { x: 1, y: 3 }
+    position: { x: 13, y: 2 }
+  },
+
+  'surgery': {
+    id: 'surgery',
+    name: 'Surgery',
+    description: 'Perform medical operations on colonists.',
+    category: 'medicine',
+    cost: 200,
+    time: 80,
+    prerequisites: ['basic_medicine'],
+    unlocks: {
+      buildings: ['operating_table'],
+      mechanics: ['surgery', 'remove_bullets'],
+    },
+    position: { x: 14, y: 3 }
   },
 
   'pharmaceuticals': {
     id: 'pharmaceuticals',
     name: 'Pharmaceuticals',
-    description: 'Manufacture advanced medicine. Unlocks drug production.',
+    description: 'Manufacture advanced medicine and drugs.',
     category: 'medicine',
-    cost: 350,
-    time: 100,
-    prerequisites: ['advanced_medicine'],
+    cost: 250,
+    time: 90,
+    prerequisites: ['herbal_medicine'],
     unlocks: {
       buildings: ['drug_lab'],
-      items: ['Medicine', 'PainkillerPills'],
+      items: ['Medicine', 'Painkillers'],
     },
-    position: { x: 2, y: 3 }
+    position: { x: 13, y: 3 }
+  },
+
+  'advanced_medicine': {
+    id: 'advanced_medicine',
+    name: 'Advanced Medicine',
+    description: 'Cutting-edge medical procedures and techniques.',
+    category: 'medicine',
+    cost: 350,
+    time: 110,
+    prerequisites: ['surgery', 'pharmaceuticals'],
+    unlocks: {
+      buildings: ['vitals_monitor', 'iv_drip'],
+      mechanics: ['healing_speed_50', 'surgery_success_boost'],
+    },
+    position: { x: 14, y: 4 }
   },
 
   'prosthetics': {
@@ -554,197 +748,229 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     name: 'Prosthetics',
     description: 'Replace lost limbs with mechanical prosthetics.',
     category: 'medicine',
-    cost: 420,
-    time: 125,
-    prerequisites: ['advanced_medicine', 'machining'],
+    cost: 380,
+    time: 115,
+    prerequisites: ['surgery', 'machining'],
     unlocks: {
-      buildings: ['prosthetics_lab'],
-      items: ['ProstheticArm', 'ProstheticLeg', 'SimpleEye', 'SimpleEar'],
+      buildings: ['prosthetics_workbench'],
+      items: ['PegLeg', 'HookHand', 'Dentures', 'GlassEye'],
     },
-    position: { x: 3, y: 3 }
-  },
-
-  'bionics': {
-    id: 'bionics',
-    name: 'Bionics',
-    description: 'Advanced bionic implants that enhance colonist abilities.',
-    category: 'medicine',
-    cost: 650,
-    time: 180,
-    prerequisites: ['prosthetics', 'electricity'],
-    unlocks: {
-      buildings: ['bionic_workshop'],
-      items: ['BionicArm', 'BionicLeg', 'BionicEye', 'BionicHeart', 'BionicSpine'],
-    },
-    position: { x: 5, y: 3 }
+    position: { x: 15, y: 4 }
   },
 
   'regenerative_medicine': {
     id: 'regenerative_medicine',
     name: 'Regenerative Medicine',
-    description: 'Heal permanent injuries and regrow organs.',
+    description: 'Heal permanent injuries and scars.',
     category: 'medicine',
-    cost: 550,
-    time: 160,
-    prerequisites: ['pharmaceuticals'],
+    cost: 500,
+    time: 150,
+    prerequisites: ['advanced_medicine'],
     unlocks: {
       buildings: ['regeneration_tank'],
       items: ['HealerSerum', 'RegenerationGel'],
-      mechanics: ['scar_healing']
+      mechanics: ['scar_healing', 'old_wound_healing'],
     },
-    position: { x: 4, y: 3 }
+    position: { x: 14, y: 5 }
+  },
+
+  'bionics': {
+    id: 'bionics',
+    name: 'Bionics',
+    description: 'Advanced bionic implants that enhance abilities.',
+    category: 'medicine',
+    cost: 600,
+    time: 170,
+    prerequisites: ['prosthetics', 'electricity'],
+    unlocks: {
+      buildings: ['bionic_workshop'],
+      items: ['BionicArm', 'BionicLeg', 'BionicEye', 'BionicEar', 'BionicHeart', 'BionicSpine'],
+      mechanics: ['stat_boost'],
+    },
+    position: { x: 15, y: 5 }
   },
 
   'gene_therapy': {
     id: 'gene_therapy',
     name: 'Gene Therapy',
-    description: 'Modify colonist genetics. Enhance traits and cure genetic diseases.',
+    description: 'Modify colonist genetics and traits.',
     category: 'medicine',
-    cost: 900,
-    time: 250,
+    cost: 850,
+    time: 230,
     prerequisites: ['regenerative_medicine', 'bionics'],
     unlocks: {
       buildings: ['gene_therapy_lab'],
-      mechanics: ['trait_modification', 'genetic_enhancement']
+      mechanics: ['trait_modification', 'genetic_enhancement'],
     },
-    position: { x: 6, y: 3 }
+    position: { x: 15, y: 6 }
+  },
+
+  'archotech_implants': {
+    id: 'archotech_implants',
+    name: 'Archotech Implants',
+    description: 'Legendary technology from an ancient civilization.',
+    category: 'medicine',
+    cost: 1000,
+    time: 300,
+    prerequisites: ['bionics', 'nanotechnology'],
+    unlocks: {
+      items: ['ArchotechEye', 'ArchotechArm', 'ArchotechLeg'],
+      mechanics: ['massive_stat_boost'],
+    },
+    position: { x: 16, y: 7 }
   },
 
   // ====================
-  // ADVANCED RESEARCH
+  // ADVANCED (Purple #8b5cf6)
+  // X: 16-19, Y: 4-11
   // ====================
-  'advanced_materials': {
-    id: 'advanced_materials',
-    name: 'Advanced Materials',
-    description: 'Research exotic materials. Unlocks plasteel and advanced composites.',
+  'energy_weapons': {
+    id: 'energy_weapons',
+    name: 'Energy Weapons',
+    description: 'Plasma and laser weaponry.',
     category: 'advanced',
-    cost: 500,
-    time: 150,
-    prerequisites: ['machining'],
+    cost: 650,
+    time: 180,
+    prerequisites: ['advanced_firearms', 'electricity'],
     unlocks: {
-      items: ['Plasteel', 'Composite', 'Hyperweave'],
+      items: ['LaserPistol', 'PlasmaRifle', 'ChargeLance'],
     },
-    position: { x: 6, y: 0 }
+    position: { x: 16, y: 4 }
+  },
+
+  'laser_turrets': {
+    id: 'laser_turrets',
+    name: 'Laser Turrets',
+    description: 'Energy-based defensive installations.',
+    category: 'advanced',
+    cost: 600,
+    time: 170,
+    prerequisites: ['heavy_turrets', 'energy_weapons'],
+    unlocks: {
+      buildings: ['laser_turret', 'plasma_turret'],
+    },
+    position: { x: 17, y: 5 }
   },
 
   'robotics': {
     id: 'robotics',
     name: 'Robotics',
-    description: 'Build autonomous robots to help with colony tasks.',
+    description: 'Build autonomous robots to assist colonists.',
     category: 'advanced',
-    cost: 800,
-    time: 220,
-    prerequisites: ['automation', 'advanced_turrets'],
+    cost: 750,
+    time: 210,
+    prerequisites: ['automation', 'laser_turrets'],
     unlocks: {
       buildings: ['robotics_facility', 'charging_station'],
-      mechanics: ['autonomous_workers']
+      mechanics: ['worker_bots', 'auto_hauling'],
     },
-    position: { x: 7, y: 0 }
-  },
-
-  'artificial_intelligence': {
-    id: 'artificial_intelligence',
-    name: 'Artificial Intelligence',
-    description: 'Develop AI assistants. Improves research and defense systems.',
-    category: 'advanced',
-    cost: 950,
-    time: 280,
-    prerequisites: ['robotics'],
-    unlocks: {
-      buildings: ['ai_core'],
-      mechanics: ['ai_research_bonus', 'smart_defense']
-    },
-    position: { x: 8, y: 0 }
-  },
-
-  'energy_weapons': {
-    id: 'energy_weapons',
-    name: 'Energy Weapons',
-    description: 'Plasma and laser weaponry. Superior damage and accuracy.',
-    category: 'advanced',
-    cost: 700,
-    time: 200,
-    prerequisites: ['powered_armor', 'electricity'],
-    unlocks: {
-      items: ['PlasmaRifle', 'LaserPistol', 'ChargeLance'],
-    },
-    position: { x: 7, y: 2 }
+    position: { x: 17, y: 6 }
   },
 
   'shields': {
     id: 'shields',
     name: 'Shield Technology',
-    description: 'Personal and base shields. Absorb damage before health loss.',
+    description: 'Personal and base shields that absorb damage.',
     category: 'advanced',
-    cost: 850,
-    time: 240,
+    cost: 800,
+    time: 220,
     prerequisites: ['energy_weapons'],
     unlocks: {
       buildings: ['shield_generator'],
-      items: ['ShieldBelt', 'ShieldPack'],
+      items: ['ShieldBelt', 'PersonalShield'],
     },
-    position: { x: 8, y: 2 }
+    position: { x: 16, y: 6 }
   },
 
-  'nanotechnology': {
-    id: 'nanotechnology',
-    name: 'Nanotechnology',
-    description: 'Microscopic machines. Revolutionary healing and construction.',
+  'artificial_intelligence': {
+    id: 'artificial_intelligence',
+    name: 'Artificial Intelligence',
+    description: 'AI assistants and advanced computing.',
     category: 'advanced',
-    cost: 1200,
-    time: 350,
-    prerequisites: ['gene_therapy', 'artificial_intelligence'],
+    cost: 900,
+    time: 260,
+    prerequisites: ['robotics'],
     unlocks: {
-      buildings: ['nanoforge'],
-      items: ['NanoHealer', 'NanoAssembler'],
-      mechanics: ['nano_healing', 'instant_construction']
+      buildings: ['ai_core'],
+      mechanics: ['research_speed_30', 'smart_defense'],
     },
-    position: { x: 9, y: 1 }
-  },
-
-  'quantum_computing': {
-    id: 'quantum_computing',
-    name: 'Quantum Computing',
-    description: 'Harness quantum mechanics for ultimate computational power.',
-    category: 'advanced',
-    cost: 1500,
-    time: 400,
-    prerequisites: ['artificial_intelligence'],
-    unlocks: {
-      buildings: ['quantum_processor'],
-      mechanics: ['research_speed_x3']
-    },
-    position: { x: 9, y: 0 }
+    position: { x: 18, y: 7 }
   },
 
   'cryogenics': {
     id: 'cryogenics',
     name: 'Cryogenics',
-    description: 'Freeze colonists for long-term storage. Suspend aging and injuries.',
+    description: 'Freeze colonists for long-term storage.',
     category: 'advanced',
-    cost: 600,
-    time: 180,
-    prerequisites: ['bionics'],
+    cost: 850,
+    time: 230,
+    prerequisites: ['bionics', 'electricity'],
     unlocks: {
       buildings: ['cryo_pod', 'cryo_casket'],
-      mechanics: ['suspended_animation']
+      mechanics: ['suspended_animation', 'no_aging'],
     },
-    position: { x: 7, y: 3 }
+    position: { x: 16, y: 8 }
+  },
+
+  'nanotechnology': {
+    id: 'nanotechnology',
+    name: 'Nanotechnology',
+    description: 'Microscopic machines for healing and construction.',
+    category: 'advanced',
+    cost: 1100,
+    time: 320,
+    prerequisites: ['gene_therapy', 'artificial_intelligence'],
+    unlocks: {
+      buildings: ['nano_assembler'],
+      items: ['NanoHealer', 'NanoConstructor'],
+      mechanics: ['nano_healing', 'instant_build'],
+    },
+    position: { x: 17, y: 8 }
+  },
+
+  'quantum_computing': {
+    id: 'quantum_computing',
+    name: 'Quantum Computing',
+    description: 'Harness quantum mechanics for ultimate computation.',
+    category: 'advanced',
+    cost: 1400,
+    time: 380,
+    prerequisites: ['artificial_intelligence'],
+    unlocks: {
+      buildings: ['quantum_processor'],
+      mechanics: ['research_speed_300'],
+    },
+    position: { x: 18, y: 8 }
   },
 
   'teleportation': {
     id: 'teleportation',
     name: 'Teleportation',
-    description: 'Instant transport across the map. Ultimate mobility.',
+    description: 'Instant transport across the map.',
     category: 'advanced',
-    cost: 1800,
-    time: 450,
+    cost: 1600,
+    time: 420,
     prerequisites: ['quantum_computing', 'shields'],
     unlocks: {
       buildings: ['teleporter', 'teleport_beacon'],
-      mechanics: ['instant_travel']
+      mechanics: ['instant_travel'],
     },
-    position: { x: 10, y: 1 }
+    position: { x: 18, y: 9 }
+  },
+
+  'starship_construction': {
+    id: 'starship_construction',
+    name: 'Starship Construction',
+    description: 'Build a ship to escape the planet. [VICTORY]',
+    category: 'advanced',
+    cost: 2000,
+    time: 500,
+    prerequisites: ['quantum_computing', 'nanotechnology'],
+    unlocks: {
+      buildings: ['ship_reactor', 'ship_engine', 'ship_hull', 'ship_sensors', 'ship_cryptosleep'],
+      mechanics: ['victory_path'],
+    },
+    position: { x: 18, y: 10 }
   },
 };
 
@@ -809,7 +1035,7 @@ export const CATEGORY_INFO: Record<ResearchCategory, { name: string; color: stri
   medicine: {
     name: 'Medicine',
     color: '#ec4899',
-    description: 'Healthcare and healing'
+    description: 'Healthcare and augmentation'
   },
   advanced: {
     name: 'Advanced',

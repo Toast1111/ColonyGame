@@ -1,27 +1,28 @@
 /**
- * Research UI Panel - Visual Tree View
+ * Research UI Panel - Unified Tree View
  * 
- * DOM-based research tree with nodes and connection lines.
- * Uses CSS classes from style.css for consistent styling.
+ * DOM-based research tree showing ALL categories at once.
+ * Features category filters (toggleable), zoom/pan, and color-coding.
  */
 
 import { Game } from '../../Game';
 import type { ResearchManager } from '../../research/ResearchManager';
 import { RESEARCH_TREE, CATEGORY_INFO, type ResearchNode, type ResearchCategory } from '../../research/researchDatabase';
 
-const NODE_WIDTH = 180;
+const NODE_WIDTH = 200;  // Increased from 180 for better readability
 const NODE_HEIGHT = 120;
-const GRID_X = 240; // Horizontal spacing between nodes
-const GRID_Y = 160; // Vertical spacing between nodes
-const PADDING = 100; // Padding around the tree
+const GRID_X = 260; // Horizontal spacing
+const GRID_Y = 170; // Vertical spacing
+const PADDING = 150; // Padding around the tree
 
 export class ResearchUI {
   private researchManager: ResearchManager;
   private game: Game;
   private container: HTMLElement | null = null;
-  private selectedCategory: string = 'basic';
+  private activeFilters: Set<ResearchCategory> = new Set(['basic', 'military', 'agriculture', 'industry', 'medicine', 'advanced']);
   private treeContainer: HTMLElement | null = null;
   private svg: SVGSVGElement | null = null;
+  private zoom: number = 0.7; // Start zoomed out to see more
 
   constructor(researchManager: ResearchManager, game: Game) {
     this.researchManager = researchManager;
@@ -50,18 +51,25 @@ export class ResearchUI {
     header.appendChild(title);
     header.appendChild(closeBtn);
     
-    // Category bar
-    const categoryBar = this.createCategoryBar();
+    // Filter bar (replaces exclusive category tabs)
+    const filterBar = this.createFilterBar();
     
     // Tree container (scrollable with nodes and SVG)
     this.treeContainer = document.createElement('div');
     this.treeContainer.className = 'research-tree-container';
     this.treeContainer.id = 'research-tree-container';
     
+    // Wrapper for proper sizing (inside scrollable container)
+    const wrapper = document.createElement('div');
+    wrapper.className = 'research-tree-wrapper';
+    wrapper.id = 'research-tree-wrapper';
+    
     // SVG for connection lines
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     this.svg.classList.add('research-tree-svg');
-    this.treeContainer.appendChild(this.svg);
+    wrapper.appendChild(this.svg);
+    
+    this.treeContainer.appendChild(wrapper);
     
     // Progress bar at bottom
     const progressBarContainer = document.createElement('div');
@@ -103,38 +111,84 @@ export class ResearchUI {
     progressBarContainer.appendChild(progressBarOuter);
     
     container.appendChild(header);
-    container.appendChild(categoryBar);
+    container.appendChild(filterBar);
     container.appendChild(this.treeContainer);
     container.appendChild(progressBarContainer);
     
     return container;
   }
 
-  private createCategoryBar(): HTMLElement {
+  private createFilterBar(): HTMLElement {
     const bar = document.createElement('div');
     bar.className = 'research-category-bar';
+    bar.style.cssText = 'display:flex;gap:8px;padding:12px 16px;background:rgba(15,23,42,0.4);border-bottom:1px solid #334155;overflow-x:auto;flex-shrink:0;align-items:center;';
+    
+    // "Filters:" label
+    const label = document.createElement('span');
+    label.textContent = 'Show:';
+    label.style.cssText = 'color:#94a3b8;font-weight:600;font-size:14px;margin-right:4px;';
+    bar.appendChild(label);
     
     const categories = Object.keys(CATEGORY_INFO) as ResearchCategory[];
     
     categories.forEach(cat => {
       const info = CATEGORY_INFO[cat];
       const btn = document.createElement('button');
-      btn.textContent = info.name;
+      
+      // Count nodes in this category
+      const count = Object.values(RESEARCH_TREE).filter(n => n.category === cat).length;
+      btn.textContent = `${info.name} (${count})`;
+      
       btn.className = 'research-category-btn';
       btn.style.borderColor = info.color;
       btn.style.color = info.color;
+      btn.dataset.category = cat;
       
-      if (cat === this.selectedCategory) {
+      // Start with all filters active
+      if (this.activeFilters.has(cat)) {
         btn.classList.add('active');
+        btn.style.background = `${info.color}33`; // 20% opacity
+      } else {
+        btn.style.background = 'rgba(30,41,59,0.5)';
       }
       
       btn.onclick = () => {
-        this.selectedCategory = cat;
+        // Toggle filter
+        if (this.activeFilters.has(cat)) {
+          this.activeFilters.delete(cat);
+          btn.classList.remove('active');
+          btn.style.background = 'rgba(30,41,59,0.5)';
+        } else {
+          this.activeFilters.add(cat);
+          btn.classList.add('active');
+          btn.style.background = `${info.color}33`;
+        }
         this.refresh();
       };
       
       bar.appendChild(btn);
     });
+    
+    // "All" / "None" quick buttons
+    const allBtn = document.createElement('button');
+    allBtn.textContent = 'All';
+    allBtn.className = 'research-category-btn';
+    allBtn.style.cssText = 'background:#1e40af;border-color:#3b82f6;color:#3b82f6;margin-left:8px;';
+    allBtn.onclick = () => {
+      this.activeFilters = new Set(['basic', 'military', 'agriculture', 'industry', 'medicine', 'advanced']);
+      this.refresh();
+    };
+    bar.appendChild(allBtn);
+    
+    const noneBtn = document.createElement('button');
+    noneBtn.textContent = 'None';
+    noneBtn.className = 'research-category-btn';
+    noneBtn.style.cssText = 'background:rgba(30,41,59,0.5);border-color:#6b7280;color:#6b7280;';
+    noneBtn.onclick = () => {
+      this.activeFilters.clear();
+      this.refresh();
+    };
+    bar.appendChild(noneBtn);
     
     return bar;
   }
@@ -142,49 +196,67 @@ export class ResearchUI {
   private renderResearchTree(): void {
     if (!this.treeContainer || !this.svg) return;
     
+    const wrapper = document.getElementById('research-tree-wrapper');
+    if (!wrapper) return;
+    
     // Clear existing nodes and lines
-    const existingNodes = this.treeContainer.querySelectorAll('.research-node');
+    const existingNodes = wrapper.querySelectorAll('.research-node');
     existingNodes.forEach(node => node.remove());
     this.svg.innerHTML = '';
     
-    // Get research nodes in selected category
-    const nodes = Object.values(RESEARCH_TREE)
-      .filter(node => node.category === this.selectedCategory);
+    // Get ALL research nodes (not filtered by category)
+    const allNodes = Object.values(RESEARCH_TREE);
     
-    if (nodes.length === 0) {
+    if (allNodes.length === 0) {
       const empty = document.createElement('div');
-      empty.textContent = 'No research available in this category yet.';
+      empty.textContent = 'No research available.';
       empty.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#94a3b8;font-size:16px;';
-      this.treeContainer.appendChild(empty);
+      wrapper.appendChild(empty);
       return;
     }
     
     // Calculate tree dimensions
-    const maxX = Math.max(...nodes.map(n => n.position.x));
-    const maxY = Math.max(...nodes.map(n => n.position.y));
+    const maxX = Math.max(...allNodes.map(n => n.position.x));
+    const maxY = Math.max(...allNodes.map(n => n.position.y));
     const treeWidth = (maxX + 1) * GRID_X + PADDING * 2;
     const treeHeight = (maxY + 1) * GRID_Y + PADDING * 2;
     
-    // Set SVG size to match tree
+    // Set wrapper and SVG size to match tree
+    wrapper.style.width = `${treeWidth}px`;
+    wrapper.style.height = `${treeHeight}px`;
     this.svg.setAttribute('width', treeWidth.toString());
     this.svg.setAttribute('height', treeHeight.toString());
     
-    // Draw connection lines first (so they appear behind nodes)
-    nodes.forEach(node => {
+    // Only draw direct prerequisite connections (reduces spaghetti)
+    const drawnConnections = new Set<string>();
+    
+    allNodes.forEach(node => {
       if (node.prerequisites.length > 0) {
         node.prerequisites.forEach(prereqId => {
+          const connectionKey = `${prereqId}->${node.id}`;
+          
+          // Skip if already drawn
+          if (drawnConnections.has(connectionKey)) return;
+          drawnConnections.add(connectionKey);
+          
           const prereqNode = RESEARCH_TREE[prereqId];
-          if (prereqNode && prereqNode.category === this.selectedCategory) {
-            this.drawConnection(prereqNode, node);
+          if (prereqNode) {
+            // Only draw if both nodes are visible (not filtered out)
+            const fromVisible = this.activeFilters.has(prereqNode.category);
+            const toVisible = this.activeFilters.has(node.category);
+            
+            if (fromVisible || toVisible) {
+              this.drawConnection(prereqNode, node);
+            }
           }
         });
       }
     });
     
     // Create node elements
-    nodes.forEach(node => {
+    allNodes.forEach(node => {
       const nodeElement = this.createResearchNode(node);
-      this.treeContainer!.appendChild(nodeElement);
+      wrapper.appendChild(nodeElement);
     });
   }
 
@@ -196,246 +268,241 @@ export class ResearchUI {
     const x2 = toNode.position.x * GRID_X + PADDING;
     const y2 = toNode.position.y * GRID_Y + PADDING + NODE_HEIGHT / 2;
     
-    // Determine line color based on research state
+    // Determine line style
     const fromCompleted = this.researchManager.isCompleted(fromNode.id);
     const toCompleted = this.researchManager.isCompleted(toNode.id);
-    const toInProgress = this.researchManager.isInProgress(toNode.id);
-    const toAvailable = this.researchManager.isAvailable(toNode.id);
+    const crossCategory = fromNode.category !== toNode.category;
     
-    let strokeColor = '#475569'; // default (locked)
-    let strokeWidth = 2;
+    // Check if filtered
+    const fromFiltered = !this.activeFilters.has(fromNode.category);
+    const toFiltered = !this.activeFilters.has(toNode.category);
     
-    if (toCompleted) {
-      strokeColor = '#10b981'; // green (completed path)
-      strokeWidth = 3;
-    } else if (toInProgress) {
-      strokeColor = '#ea580c'; // orange (in progress)
-      strokeWidth = 3;
-    } else if (toAvailable && fromCompleted) {
-      strokeColor = '#3b82f6'; // blue (available)
-      strokeWidth = 2.5;
+    // Line color
+    let color = '#6b7280'; // Default gray
+    if (fromCompleted && toCompleted) {
+      color = '#10b981'; // Green for completed path
+    } else if (fromCompleted) {
+      color = '#3b82f6'; // Blue for available path
     }
     
-    // Create curved path
+    // Dim if either end is filtered
+    let opacity = 0.4; // Lower base opacity
+    if (fromFiltered || toFiltered) {
+      opacity = 0.08; // Very dim for filtered connections
+    }
+    
+    // Cross-category connections use dashed line and brighter color
+    const strokeDasharray = crossCategory ? '6,3' : 'none';
+    const strokeWidth = crossCategory ? '2.5' : '2';
+    
+    // Use path for smoother curves
     const midX = (x1 + x2) / 2;
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`);
-    path.setAttribute('stroke', strokeColor);
-    path.setAttribute('stroke-width', strokeWidth.toString());
-    path.setAttribute('fill', 'none');
-    path.setAttribute('opacity', '0.7');
     
-    this.svg!.appendChild(path);
+    // Bezier curve for smoother connections
+    const pathData = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
+    
+    path.setAttribute('d', pathData);
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', strokeWidth);
+    path.setAttribute('stroke-dasharray', strokeDasharray);
+    path.setAttribute('fill', 'none');
+    path.setAttribute('opacity', opacity.toString());
+    
+    this.svg.appendChild(path);
   }
 
   private createResearchNode(node: ResearchNode): HTMLElement {
-    const completed = this.researchManager.isCompleted(node.id);
-    const available = this.researchManager.isAvailable(node.id);
-    const inProgress = this.researchManager.isInProgress(node.id);
+    const div = document.createElement('div');
+    div.className = 'research-node';
+    div.dataset.researchId = node.id;
     
-    const nodeElement = document.createElement('div');
-    nodeElement.className = 'research-node';
-    
-    if (completed) nodeElement.classList.add('completed');
-    else if (inProgress) nodeElement.classList.add('in-progress');
-    else if (available) nodeElement.classList.add('available');
-    
-    // Position the node
+    // Position
     const x = node.position.x * GRID_X + PADDING;
     const y = node.position.y * GRID_Y + PADDING;
-    nodeElement.style.left = `${x}px`;
-    nodeElement.style.top = `${y}px`;
+    div.style.left = `${x}px`;
+    div.style.top = `${y}px`;
+    div.style.width = `${NODE_WIDTH}px`;
     
-    if (available && !completed && !inProgress) {
-      nodeElement.onclick = () => this.startResearch(node.id);
+    // Color-code by category
+    const categoryColor = CATEGORY_INFO[node.category].color;
+    div.style.borderColor = categoryColor;
+    div.style.background = `${categoryColor}22`; // 13% opacity background
+    
+    // Determine research state
+    const isCompleted = this.researchManager.isCompleted(node.id);
+    const isAvailable = this.researchManager.isAvailable(node.id);
+    const isInProgress = this.researchManager.isInProgress(node.id);
+    
+    // Apply state classes
+    if (isCompleted) {
+      div.classList.add('completed');
+    } else if (isInProgress) {
+      div.classList.add('in-progress');
+    } else if (isAvailable) {
+      div.classList.add('available');
+    } else {
+      // Locked - dim it
+      div.style.opacity = '0.4';
+      div.style.filter = 'grayscale(60%)';
     }
     
-    // Header
+    // Dim if category is filtered out
+    if (!this.activeFilters.has(node.category)) {
+      div.style.opacity = '0.15';
+      div.style.pointerEvents = 'none';
+    }
+    
+    // Header with status icon
     const header = document.createElement('div');
     header.className = 'research-node-header';
     
-    const status = document.createElement('span');
-    status.className = 'research-node-status';
-    status.textContent = completed ? '✓' : inProgress ? '⏳' : available ? '○' : '🔒';
-    
-    const title = document.createElement('span');
-    title.className = 'research-node-title';
-    title.textContent = node.name;
-    
-    header.appendChild(status);
-    header.appendChild(title);
-    nodeElement.appendChild(header);
-    
-    // Cost (with saved progress if any)
-    const cost = document.createElement('div');
-    cost.className = 'research-node-cost';
-    const partialProgress = this.researchManager.getPartialProgress(node.id);
-    if (partialProgress > 0 && !completed && !inProgress) {
-      cost.textContent = `${node.cost} RP (${partialProgress.toFixed(0)} saved)`;
-      cost.style.color = '#fbbf24'; // Amber color for saved progress
+    const statusIcon = document.createElement('span');
+    statusIcon.className = 'research-node-status';
+    if (isCompleted) {
+      statusIcon.textContent = '✓';
+      statusIcon.style.color = '#10b981';
+    } else if (isInProgress) {
+      statusIcon.textContent = '⏳';
+      statusIcon.style.color = '#ea580c';
+    } else if (isAvailable) {
+      statusIcon.textContent = '●';
+      statusIcon.style.color = '#3b82f6';
     } else {
-      cost.textContent = `${node.cost} RP`;
+      statusIcon.textContent = '🔒';
+      statusIcon.style.color = '#6b7280';
     }
-    nodeElement.appendChild(cost);
+    
+    const titleEl = document.createElement('div');
+    titleEl.className = 'research-node-title';
+    titleEl.textContent = node.name;
+    
+    header.appendChild(statusIcon);
+    header.appendChild(titleEl);
+    
+    // Category badge
+    const categoryBadge = document.createElement('div');
+    categoryBadge.style.cssText = `font-size:9px;font-weight:700;color:${categoryColor};text-transform:uppercase;margin-bottom:4px;`;
+    categoryBadge.textContent = CATEGORY_INFO[node.category].name;
+    
+    // Cost
+    const costEl = document.createElement('div');
+    costEl.className = 'research-node-cost';
+    costEl.textContent = `${node.cost} pts • ${node.time}s`;
     
     // Description
-    const desc = document.createElement('div');
-    desc.className = 'research-node-desc';
-    desc.textContent = node.description;
-    nodeElement.appendChild(desc);
+    const descEl = document.createElement('div');
+    descEl.className = 'research-node-desc';
+    descEl.textContent = node.description;
     
-    // Unlocks (abbreviated)
-    const unlocks: string[] = [];
-    if (node.unlocks.buildings?.length) {
-      unlocks.push(`🏗️ ${node.unlocks.buildings.length}`);
-    }
-    if (node.unlocks.items?.length) {
-      unlocks.push(`⚔️ ${node.unlocks.items.length}`);
-    }
-    if (node.unlocks.mechanics?.length) {
-      unlocks.push(`⚙️ ${node.unlocks.mechanics.length}`);
-    }
+    // Unlocks
+    const unlocksEl = document.createElement('div');
+    unlocksEl.className = 'research-node-unlocks';
+    const unlocksList: string[] = [];
+    if (node.unlocks.buildings) unlocksList.push(`🏗️ ${node.unlocks.buildings.length} buildings`);
+    if (node.unlocks.items) unlocksList.push(`📦 ${node.unlocks.items.length} items`);
+    if (node.unlocks.mechanics) unlocksList.push(`⚙️ ${node.unlocks.mechanics.length} mechanics`);
+    unlocksEl.textContent = unlocksList.join(' • ');
     
-    if (unlocks.length > 0) {
-      const unlocksDiv = document.createElement('div');
-      unlocksDiv.className = 'research-node-unlocks';
-      unlocksDiv.textContent = `Unlocks: ${unlocks.join(' ')}`;
-      nodeElement.appendChild(unlocksDiv);
-    }
+    // Build node
+    div.appendChild(header);
+    div.appendChild(categoryBadge);
+    div.appendChild(costEl);
+    div.appendChild(descEl);
+    if (unlocksList.length > 0) div.appendChild(unlocksEl);
     
-    // Progress bar for in-progress research
-    if (inProgress) {
-      const progress = this.researchManager.getCurrentProgress();
-      const progressBar = document.createElement('div');
-      progressBar.className = 'research-progress-bar-outer';
-      progressBar.style.marginTop = '6px';
-      
-      const progressInner = document.createElement('div');
-      progressInner.className = 'research-progress-bar-inner';
-      progressInner.style.width = `${progress}%`;
-      progressInner.style.fontSize = '10px';
-      progressInner.textContent = `${Math.floor(progress)}%`;
-      
-      progressBar.appendChild(progressInner);
-      nodeElement.appendChild(progressBar);
+    // Click handler
+    if (isAvailable && !isCompleted && !isInProgress) {
+      div.onclick = () => this.startResearch(node.id);
     }
     
-    return nodeElement;
+    return div;
   }
 
-  private startResearch(id: string): void {
-    const currentTime = performance.now() / 1000;
-    const success = this.researchManager.startResearch(id, currentTime);
-    if (success) {
-      void this.game.audioManager?.play('ui.click.primary').catch(() => {});
-      const partialProgress = this.researchManager.getPartialProgress(id);
-      if (partialProgress > 0) {
-        this.game.msg?.(`Resumed research: ${RESEARCH_TREE[id].name}`, 'info');
-      } else {
-        this.game.msg?.(`Started research: ${RESEARCH_TREE[id].name}`, 'info');
-      }
-      this.refresh();
-    } else {
-      void this.game.audioManager?.play('ui.click.secondary').catch(() => {});
-    }
+  private startResearch(researchId: string): void {
+    this.researchManager.startResearch(researchId, Date.now());
+    this.refresh();
   }
 
   private cancelResearch(): void {
-    const success = this.researchManager.cancelResearch();
-    if (success) {
-      void this.game.audioManager?.play('ui.click.secondary').catch(() => {});
-      this.game.msg?.('Research cancelled (progress saved)', 'info');
+    this.researchManager.cancelResearch();
+    this.refresh();
+  }
+
+  public refresh(): void {
+    this.renderResearchTree();
+    this.updateProgressBar();
+    this.updateFilterButtons();
+  }
+
+  private updateFilterButtons(): void {
+    const buttons = this.container?.querySelectorAll('.research-category-btn[data-category]');
+    buttons?.forEach(btn => {
+      const category = (btn as HTMLElement).dataset.category as ResearchCategory;
+      const info = CATEGORY_INFO[category];
+      
+      if (this.activeFilters.has(category)) {
+        btn.classList.add('active');
+        (btn as HTMLElement).style.background = `${info.color}33`;
+      } else {
+        btn.classList.remove('active');
+        (btn as HTMLElement).style.background = 'rgba(30,41,59,0.5)';
+      }
+    });
+  }
+
+  private updateProgressBar(): void {
+    const progressInfo = document.getElementById('research-progress-info');
+    const progressBar = document.getElementById('research-progress-bar');
+    const progressText = document.getElementById('research-progress-text');
+    const cancelBtn = document.getElementById('research-cancel-btn');
+    
+    if (!progressInfo || !progressBar || !progressText || !cancelBtn) return;
+    
+    const current = this.researchManager.getCurrentResearch();
+    if (!current) {
+      progressInfo.textContent = 'No research in progress';
+      progressBar.style.width = '0%';
+      progressText.textContent = '0%';
+      cancelBtn.style.display = 'none';
+      return;
+    }
+    
+    const node = RESEARCH_TREE[current.researchId];
+    if (!node) return;
+    
+    const percentage = Math.floor(this.researchManager.getCurrentProgress());
+    
+    progressInfo.textContent = `Researching: ${node.name}`;
+    progressBar.style.width = `${percentage}%`;
+    progressText.textContent = `${percentage}%`;
+    cancelBtn.style.display = 'block';
+  }
+
+  public show(): void {
+    if (this.container) {
+      this.container.hidden = false;
       this.refresh();
     }
   }
 
-  /**
-   * Refresh the UI display
-   */
-  refresh(): void {
-    if (!this.container) return;
-    
-    // Update category buttons
-    const categoryBar = this.container.querySelector('.research-category-bar');
-    if (categoryBar) {
-      categoryBar.querySelectorAll('.research-category-btn').forEach((btn, idx) => {
-        const cat = Object.keys(CATEGORY_INFO)[idx];
-        if (cat === this.selectedCategory) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
-      });
-    }
-    
-    // Render research tree for selected category
-    this.renderResearchTree();
-    
-    // Update progress bar
-    this.updateProgressBar();
-  }
-
-  private updateProgressBar(): void {
-    const progressBar = document.getElementById('research-progress-bar');
-    const progressText = document.getElementById('research-progress-text');
-    const progressInfo = document.getElementById('research-progress-info');
-    const cancelBtn = document.getElementById('research-cancel-btn');
-    
-    if (!progressBar || !progressText || !progressInfo || !cancelBtn) return;
-    
-    const current = this.researchManager.getCurrentResearch();
-    
-    if (current) {
-      const progress = this.researchManager.getCurrentProgress();
-      const node = RESEARCH_TREE[current.researchId];
-      
-      progressInfo.textContent = `Researching: ${node.name} (${current.progress.toFixed(0)} / ${node.cost} RP)`;
-      progressBar.style.width = `${progress}%`;
-      progressText.textContent = `${Math.floor(progress)}%`;
-      cancelBtn.style.display = 'block'; // Show cancel button
-    } else {
-      progressInfo.textContent = 'No research in progress';
-      progressBar.style.width = '0%';
-      progressText.textContent = '0%';
-      cancelBtn.style.display = 'none'; // Hide cancel button
+  public hide(): void {
+    if (this.container) {
+      this.container.hidden = true;
     }
   }
 
-  /**
-   * Show the research panel
-   */
-  show(): void {
-    if (!this.container) return;
-    this.container.hidden = false;
-    this.refresh();
-    void this.game.audioManager?.play('ui.panel.open').catch(() => {});
-  }
-
-  /**
-   * Hide the research panel
-   */
-  hide(): void {
-    if (!this.container) return;
-    this.container.hidden = true;
-    void this.game.audioManager?.play('ui.panel.close').catch(() => {});
-  }
-
-  /**
-   * Toggle research panel visibility
-   */
-  toggle(): void {
-    if (!this.container) return;
-    if (this.container.hidden) {
-      this.show();
-    } else {
-      this.hide();
+  public toggle(): void {
+    if (this.container) {
+      if (this.container.hidden) {
+        this.show();
+      } else {
+        this.hide();
+      }
     }
   }
 
-  /**
-   * Check if panel is currently visible
-   */
-  isVisible(): boolean {
+  public isVisible(): boolean {
     return this.container ? !this.container.hidden : false;
   }
 }
