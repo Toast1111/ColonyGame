@@ -48,7 +48,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['campfire', 'stove'],
       items: ['SimpleMeal', 'Bread'],
     },
-    position: { x: 0, y: 0 }
+    position: { x: 0, y: 3 }
   },
 
   'basic_construction': {
@@ -62,7 +62,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['wall', 'door'],
     },
-    position: { x: 1, y: 0 }
+    position: { x: 1, y: 4 }
   },
 
   'basic_crafting': {
@@ -77,7 +77,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['crafting_spot'],
       items: ['ClothShirt', 'ClothPants'],
     },
-    position: { x: 2, y: 0 }
+    position: { x: 0, y: 5 }
   },
 
   'agriculture': {
@@ -91,7 +91,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['farm'],
     },
-    position: { x: 0, y: 1 }
+    position: { x: 0, y: 6 }
   },
 
   'basic_medicine': {
@@ -106,7 +106,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['medical_bed'],
       items: ['Bandage'],
     },
-    position: { x: 1, y: 1 }
+    position: { x: 1, y: 3 }
   },
 
   'basic_furniture': {
@@ -121,7 +121,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['small_table', 'large_table', 'stool', 'dining_chair', 'bed', 'end_table'],
       mechanics: ['eat_at_table']
     },
-    position: { x: 2, y: 1 }
+    position: { x: 1, y: 4 }
   },
 
   'tool_crafting': {
@@ -135,7 +135,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['Hoe', 'Axe', 'Pickaxe', 'Hammer'],
     },
-    position: { x: 1, y: 2 }
+    position: { x: 1, y: 5 }
   },
 
   'advanced_cooking': {
@@ -151,7 +151,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       items: ['FineMeal', 'LavishMeal'],
       mechanics: ['meal_quality_bonus']
     },
-    position: { x: 0, y: 2 }
+    position: { x: 1, y: 6 }
   },
 
   'smithing': {
@@ -166,7 +166,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['smithing_workbench'],
       items: ['SteelTools'],
     },
-    position: { x: 2, y: 3 }
+    position: { x: 2, y: 2 }
   },
 
   // ====================
@@ -184,7 +184,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['Club', 'Knife', 'Spear'],
     },
-    position: { x: 4, y: 2 }
+    position: { x: 2, y: 3 }
   },
 
   'defensive_structures': {
@@ -198,7 +198,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['barricade', 'sandbag', 'spike_trap'],
     },
-    position: { x: 4, y: 3 }
+    position: { x: 2, y: 4 }
   },
 
   'basic_firearms': {
@@ -212,7 +212,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['Revolver', 'Autopistol', 'BoltActionRifle'],
     },
-    position: { x: 5, y: 3 }
+    position: { x: 2, y: 5 }
   },
 
   'body_armor': {
@@ -226,7 +226,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['LeatherVest', 'FlakVest', 'SteelHelmet'],
     },
-    position: { x: 5, y: 4 }
+    position: { x: 2, y: 6 }
   },
 
   'fortifications': {
@@ -240,7 +240,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['bunker', 'embrasure', 'kill_box'],
     },
-    position: { x: 4, y: 4 }
+    position: { x: 2, y: 7 }
   },
 
   'advanced_firearms': {
@@ -254,7 +254,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['AssaultRifle', 'Shotgun', 'SniperRifle', 'MachineGun'],
     },
-    position: { x: 6, y: 4 }
+    position: { x: 3, y: 1 }
   },
 
   'automated_defense': {
@@ -268,7 +268,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['mini_turret', 'auto_turret'],
     },
-    position: { x: 7, y: 4 }
+    position: { x: 3, y: 2 }
   },
 
   'explosives': {
@@ -282,7 +282,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['Grenade', 'MolotovCocktail', 'IED'],
     },
-    position: { x: 6, y: 5 }
+    position: { x: 3, y: 3 }
   },
 
   'heavy_armor': {
@@ -296,7 +296,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['MarineArmor', 'CataphractArmor'],
     },
-    position: { x: 5, y: 5 }
+    position: { x: 3, y: 4 }
   },
 
   'heavy_turrets': {
@@ -310,7 +310,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['heavy_turret', 'mortar', 'rocket_turret'],
     },
-    position: { x: 7, y: 5 }
+    position: { x: 3, y: 5 }
   },
 
   'powered_armor': {
@@ -324,7 +324,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['PoweredArmor', 'PoweredHelmet'],
     },
-    position: { x: 6, y: 6 }
+    position: { x: 3, y: 6 }
   },
 
   // ====================
@@ -343,7 +343,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['compost_bin'],
       mechanics: ['fertilizer', 'growth_boost_15'],
     },
-    position: { x: 2, y: 4 }
+    position: { x: 4, y: 0 }
   },
 
   'cooking_efficiency': {
@@ -357,7 +357,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       mechanics: ['bulk_cooking_4x'],
     },
-    position: { x: 1, y: 4 }
+    position: { x: 4, y: 1 }
   },
 
   'irrigation': {
@@ -372,7 +372,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['irrigation_channel'],
       mechanics: ['growth_boost_20', 'drought_resistance'],
     },
-    position: { x: 3, y: 5 }
+    position: { x: 4, y: 3 }
   },
 
   'animal_husbandry': {
@@ -388,7 +388,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       items: ['Kibble'],
       mechanics: ['animal_taming'],
     },
-    position: { x: 2, y: 5 }
+    position: { x: 4, y: 4 }
   },
 
   'advanced_farming': {
@@ -403,7 +403,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['greenhouse'],
       mechanics: ['year_round_growing', 'crop_rotation'],
     },
-    position: { x: 4, y: 6 }
+    position: { x: 4, y: 5 }
   },
 
   'food_preservation': {
@@ -419,7 +419,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       items: ['Jerky', 'Pemmican'],
       mechanics: ['food_lasts_300_percent'],
     },
-    position: { x: 2, y: 6 }
+    position: { x: 4, y: 6 }
   },
 
   'breeding_programs': {
@@ -434,7 +434,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['breeding_facility'],
       mechanics: ['selective_breeding', 'enhanced_animals'],
     },
-    position: { x: 3, y: 7 }
+    position: { x: 5, y: 1 }
   },
 
   'cold_storage': {
@@ -449,7 +449,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['freezer', 'refrigerator'],
       mechanics: ['indefinite_storage'],
     },
-    position: { x: 2, y: 7 }
+    position: { x: 5, y: 3 }
   },
 
   'hydroponics': {
@@ -464,7 +464,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['hydroponic_basin', 'climate_greenhouse'],
       mechanics: ['growth_200_percent', 'soilless'],
     },
-    position: { x: 5, y: 7 }
+    position: { x: 6, y: 1 }
   },
 
   'industrial_ranching': {
@@ -479,7 +479,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['auto_feeder', 'milking_station', 'shearing_station'],
       mechanics: ['passive_production'],
     },
-    position: { x: 4, y: 8 }
+    position: { x: 6, y: 2 }
   },
 
   'genetic_modification': {
@@ -494,7 +494,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['gene_lab', 'bioreactor'],
       mechanics: ['gmo_crops', 'super_animals'],
     },
-    position: { x: 5, y: 9 }
+    position: { x: 6, y: 3 }
   },
 
   // ====================
@@ -514,7 +514,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       items: ['StoneBlocks'],
       mechanics: ['stone_construction'],
     },
-    position: { x: 8, y: 1 }
+    position: { x: 7, y: 1 }
   },
 
   'deep_mining': {
@@ -529,7 +529,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['mining_zone', 'quarry', 'deep_drill'],
       mechanics: ['ore_extraction'],
     },
-    position: { x: 9, y: 2 }
+    position: { x: 7, y: 3 }
   },
 
   'logging_efficiency': {
@@ -544,7 +544,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['sawmill'],
       mechanics: ['wood_bonus_50'],
     },
-    position: { x: 8, y: 2 }
+    position: { x: 10, y: 0 }
   },
 
   'smelting': {
@@ -559,7 +559,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['bloomery', 'smelter', 'forge'],
       items: ['IronBar', 'SteelBar'],
     },
-    position: { x: 10, y: 3 }
+    position: { x: 10, y: 1 }
   },
 
   'masonry': {
@@ -574,7 +574,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['stone_table', 'stone_chair'],
       items: ['Marble', 'Granite'],
     },
-    position: { x: 8, y: 3 }
+    position: { x: 10, y: 2 }
   },
 
   'machining': {
@@ -589,7 +589,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['machine_shop', 'fabricator'],
       items: ['Component', 'MechanicalPart'],
     },
-    position: { x: 11, y: 4 }
+    position: { x: 10, y: 3 }
   },
 
   'power_generation': {
@@ -619,7 +619,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['power_conduit', 'electric_light', 'electric_crafting_bench'],
       mechanics: ['electricity_unlocked'],
     },
-    position: { x: 11, y: 5 }
+    position: { x: 10, y: 5 }
   },
 
   'renewable_energy': {
@@ -633,7 +633,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       buildings: ['solar_panel', 'wind_turbine', 'geothermal_tap'],
     },
-    position: { x: 10, y: 5 }
+    position: { x: 10, y: 6 }
   },
 
   'automation': {
@@ -648,7 +648,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['auto_loom', 'auto_kitchen', 'assembly_line', 'conveyor'],
       mechanics: ['automated_crafting'],
     },
-    position: { x: 12, y: 6 }
+    position: { x: 10, y: 7 }
   },
 
   'advanced_materials': {
@@ -662,7 +662,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['Plasteel', 'Composite', 'Hyperweave'],
     },
-    position: { x: 11, y: 6 }
+    position: { x: 12, y: 2 }
   },
 
   'industrial_fabrication': {
@@ -677,7 +677,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['advanced_fabricator', 'nanoforge'],
       mechanics: ['instant_crafting'],
     },
-    position: { x: 12, y: 7 }
+    position: { x: 12, y: 3 }
   },
 
   // ====================
@@ -695,7 +695,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: {
       items: ['HerbalMedicine', 'HealingPoultice'],
     },
-    position: { x: 13, y: 2 }
+    position: { x: 12, y: 4 }
   },
 
   'surgery': {
@@ -710,7 +710,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['operating_table'],
       mechanics: ['surgery', 'remove_bullets'],
     },
-    position: { x: 14, y: 3 }
+    position: { x: 12, y: 5 }
   },
 
   'pharmaceuticals': {
@@ -725,7 +725,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['drug_lab'],
       items: ['Medicine', 'Painkillers'],
     },
-    position: { x: 13, y: 3 }
+    position: { x: 13, y: 2 }
   },
 
   'advanced_medicine': {
@@ -740,7 +740,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['vitals_monitor', 'iv_drip'],
       mechanics: ['healing_speed_50', 'surgery_success_boost'],
     },
-    position: { x: 14, y: 4 }
+    position: { x: 13, y: 3 }
   },
 
   'prosthetics': {
@@ -755,7 +755,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       buildings: ['prosthetics_workbench'],
       items: ['PegLeg', 'HookHand', 'Dentures', 'GlassEye'],
     },
-    position: { x: 15, y: 4 }
+    position: { x: 13, y: 4 }
   },
 
   'regenerative_medicine': {
@@ -771,7 +771,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       items: ['HealerSerum', 'RegenerationGel'],
       mechanics: ['scar_healing', 'old_wound_healing'],
     },
-    position: { x: 14, y: 5 }
+    position: { x: 13, y: 5 }
   },
 
   'bionics': {
@@ -787,7 +787,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
       items: ['BionicArm', 'BionicLeg', 'BionicEye', 'BionicEar', 'BionicHeart', 'BionicSpine'],
       mechanics: ['stat_boost'],
     },
-    position: { x: 15, y: 5 }
+    position: { x: 13, y: 6 }
   },
 
   'gene_therapy': {
