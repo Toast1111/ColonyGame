@@ -227,7 +227,7 @@ export class ResearchUI {
     this.svg.setAttribute('width', treeWidth.toString());
     this.svg.setAttribute('height', treeHeight.toString());
     
-    // Only draw direct prerequisite connections (reduces spaghetti)
+    // Draw prerequisite connections (straight lines, rendered under nodes)
     const drawnConnections = new Set<string>();
     
     allNodes.forEach(node => {
@@ -263,53 +263,38 @@ export class ResearchUI {
   private drawConnection(fromNode: ResearchNode, toNode: ResearchNode): void {
     if (!this.svg) return;
     
-    const x1 = fromNode.position.x * GRID_X + PADDING + NODE_WIDTH;
-    const y1 = fromNode.position.y * GRID_Y + PADDING + NODE_HEIGHT / 2;
-    const x2 = toNode.position.x * GRID_X + PADDING;
-    const y2 = toNode.position.y * GRID_Y + PADDING + NODE_HEIGHT / 2;
-    
-    // Determine line style
-    const fromCompleted = this.researchManager.isCompleted(fromNode.id);
-    const toCompleted = this.researchManager.isCompleted(toNode.id);
-    const crossCategory = fromNode.category !== toNode.category;
+    // Calculate positions: right center of fromNode, left center of toNode
+    const x1 = fromNode.position.x * GRID_X + PADDING + NODE_WIDTH; // Right edge
+    const y1 = fromNode.position.y * GRID_Y + PADDING + NODE_HEIGHT / 2; // Center
+    const x2 = toNode.position.x * GRID_X + PADDING; // Left edge
+    const y2 = toNode.position.y * GRID_Y + PADDING + NODE_HEIGHT / 2; // Center
     
     // Check if filtered
     const fromFiltered = !this.activeFilters.has(fromNode.category);
     const toFiltered = !this.activeFilters.has(toNode.category);
     
-    // Line color
-    let color = '#6b7280'; // Default gray
-    if (fromCompleted && toCompleted) {
-      color = '#10b981'; // Green for completed path
-    } else if (fromCompleted) {
-      color = '#3b82f6'; // Blue for available path
-    }
+    // Line color - always white
+    const color = '#ffffff';
     
     // Dim if either end is filtered
-    let opacity = 0.4; // Lower base opacity
+    let opacity = 0.6; // Base opacity for white lines (increased from 0.3)
     if (fromFiltered || toFiltered) {
-      opacity = 0.08; // Very dim for filtered connections
+      opacity = 0.1; // Very dim for filtered connections
     }
     
-    // Cross-category connections use dashed line and brighter color
-    const strokeDasharray = crossCategory ? '6,3' : 'none';
-    const strokeWidth = crossCategory ? '2.5' : '2';
+    // Create straight line
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
     
-    // Use path for smoother curves
-    const midX = (x1 + x2) / 2;
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    line.setAttribute('x1', x1.toString());
+    line.setAttribute('y1', y1.toString());
+    line.setAttribute('x2', x2.toString());
+    line.setAttribute('y2', y2.toString());
+    line.setAttribute('stroke', color);
+    line.setAttribute('stroke-width', '2');
+    line.setAttribute('fill', 'none');
+    line.setAttribute('opacity', opacity.toString());
     
-    // Bezier curve for smoother connections
-    const pathData = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-    
-    path.setAttribute('d', pathData);
-    path.setAttribute('stroke', color);
-    path.setAttribute('stroke-width', strokeWidth);
-    path.setAttribute('stroke-dasharray', strokeDasharray);
-    path.setAttribute('fill', 'none');
-    path.setAttribute('opacity', opacity.toString());
-    
-    this.svg.appendChild(path);
+    this.svg.appendChild(line);
   }
 
   private createResearchNode(node: ResearchNode): HTMLElement {
@@ -327,7 +312,8 @@ export class ResearchUI {
     // Color-code by category
     const categoryColor = CATEGORY_INFO[node.category].color;
     div.style.borderColor = categoryColor;
-    div.style.background = `${categoryColor}22`; // 13% opacity background
+    // Don't override background - let CSS handle it (or the state classes will override)
+    // The semi-transparent background was making lines visible through nodes
     
     // Determine research state
     const isCompleted = this.researchManager.isCompleted(node.id);
@@ -411,12 +397,242 @@ export class ResearchUI {
     div.appendChild(descEl);
     if (unlocksList.length > 0) div.appendChild(unlocksEl);
     
+    // Add tooltip and click handlers
+    this.addNodeInteractivity(div, node, isAvailable, isCompleted, isInProgress);
+    
+    return div;
+  }
+
+  /**
+   * Add tooltip hover and click interactions to research nodes
+   */
+  private addNodeInteractivity(
+    div: HTMLElement,
+    node: ResearchNode,
+    isAvailable: boolean,
+    isCompleted: boolean,
+    isInProgress: boolean
+  ): void {
+    // Add tooltip on hover showing prerequisites
+    div.addEventListener('mouseenter', (e) => this.showTooltip(e, node));
+    div.addEventListener('mouseleave', () => this.hideTooltip());
+    
     // Click handler
     if (isAvailable && !isCompleted && !isInProgress) {
       div.onclick = () => this.startResearch(node.id);
+    } else if (!isAvailable && !isCompleted) {
+      // Locked node - show popup on click
+      div.style.cursor = 'pointer';
+      div.onclick = () => this.showLockedPopup(node);
     }
+  }
+
+  /**
+   * Show tooltip with prerequisite information
+   */
+  private showTooltip(event: MouseEvent, node: ResearchNode): void {
+    // Remove any existing tooltip
+    this.hideTooltip();
     
-    return div;
+    // Only show tooltip if node has prerequisites
+    if (node.prerequisites.length === 0) return;
+    
+    const tooltip = document.createElement('div');
+    tooltip.id = 'research-tooltip';
+    tooltip.className = 'research-tooltip';
+    
+    // Build prerequisite list
+    const prereqsTitle = document.createElement('div');
+    prereqsTitle.style.cssText = 'font-weight:700;margin-bottom:6px;color:#f1f5f9;';
+    prereqsTitle.textContent = 'Prerequisites:';
+    tooltip.appendChild(prereqsTitle);
+    
+    node.prerequisites.forEach(prereqId => {
+      const prereqNode = RESEARCH_TREE[prereqId];
+      if (prereqNode) {
+        const prereqItem = document.createElement('div');
+        const isCompleted = this.researchManager.isCompleted(prereqId);
+        const categoryColor = CATEGORY_INFO[prereqNode.category].color;
+        
+        prereqItem.style.cssText = `
+          display:flex;
+          align-items:center;
+          gap:6px;
+          margin:4px 0;
+          color:${isCompleted ? '#10b981' : '#cbd5e1'};
+        `;
+        
+        const icon = document.createElement('span');
+        icon.textContent = isCompleted ? '✓' : '○';
+        icon.style.color = isCompleted ? '#10b981' : '#6b7280';
+        
+        const name = document.createElement('span');
+        name.textContent = prereqNode.name;
+        name.style.color = categoryColor;
+        
+        prereqItem.appendChild(icon);
+        prereqItem.appendChild(name);
+        tooltip.appendChild(prereqItem);
+      }
+    });
+    
+    // Position tooltip near the mouse
+    const target = event.currentTarget as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    tooltip.style.left = `${rect.right + 10}px`;
+    tooltip.style.top = `${rect.top}px`;
+    
+    document.body.appendChild(tooltip);
+  }
+
+  /**
+   * Hide tooltip
+   */
+  private hideTooltip(): void {
+    const existing = document.getElementById('research-tooltip');
+    if (existing) {
+      existing.remove();
+    }
+  }
+
+  /**
+   * Show popup for locked nodes explaining missing prerequisites
+   */
+  private showLockedPopup(node: ResearchNode): void {
+    // Remove any existing popup
+    this.hideLockedPopup();
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'research-locked-overlay';
+    overlay.style.cssText = `
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:rgba(0,0,0,0.7);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      z-index:10000;
+    `;
+    
+    const popup = document.createElement('div');
+    popup.className = 'research-locked-popup';
+    popup.style.cssText = `
+      background:#1e293b;
+      border:2px solid #ef4444;
+      border-radius:12px;
+      padding:24px;
+      max-width:400px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    `;
+    
+    // Title
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:18px;font-weight:700;color:#ef4444;margin-bottom:12px;display:flex;align-items:center;gap:8px;';
+    title.innerHTML = '🔒 Research Locked';
+    popup.appendChild(title);
+    
+    // Node name
+    const nodeName = document.createElement('div');
+    nodeName.style.cssText = 'font-size:16px;font-weight:600;color:#f1f5f9;margin-bottom:16px;';
+    nodeName.textContent = node.name;
+    popup.appendChild(nodeName);
+    
+    // Message
+    const message = document.createElement('div');
+    message.style.cssText = 'color:#cbd5e1;margin-bottom:16px;font-size:14px;';
+    message.textContent = 'You must complete the following research first:';
+    popup.appendChild(message);
+    
+    // Prerequisites list
+    const prereqList = document.createElement('div');
+    prereqList.style.cssText = 'margin-bottom:20px;';
+    
+    node.prerequisites.forEach(prereqId => {
+      const prereqNode = RESEARCH_TREE[prereqId];
+      if (prereqNode) {
+        const isCompleted = this.researchManager.isCompleted(prereqId);
+        const categoryColor = CATEGORY_INFO[prereqNode.category].color;
+        
+        const prereqItem = document.createElement('div');
+        prereqItem.style.cssText = `
+          display:flex;
+          align-items:center;
+          gap:8px;
+          padding:8px 12px;
+          margin:6px 0;
+          background:${isCompleted ? 'rgba(16,185,129,0.15)' : 'rgba(107,114,128,0.15)'};
+          border-left:3px solid ${isCompleted ? '#10b981' : categoryColor};
+          border-radius:4px;
+        `;
+        
+        const icon = document.createElement('span');
+        icon.textContent = isCompleted ? '✓' : '○';
+        icon.style.cssText = `font-size:16px;color:${isCompleted ? '#10b981' : '#6b7280'};`;
+        
+        const info = document.createElement('div');
+        info.style.cssText = 'flex:1;';
+        
+        const name = document.createElement('div');
+        name.style.cssText = `font-weight:600;color:${categoryColor};font-size:14px;`;
+        name.textContent = prereqNode.name;
+        
+        const cost = document.createElement('div');
+        cost.style.cssText = 'font-size:12px;color:#94a3b8;margin-top:2px;';
+        cost.textContent = `${prereqNode.cost} pts • ${prereqNode.time}s`;
+        
+        info.appendChild(name);
+        info.appendChild(cost);
+        prereqItem.appendChild(icon);
+        prereqItem.appendChild(info);
+        prereqList.appendChild(prereqItem);
+      }
+    });
+    
+    popup.appendChild(prereqList);
+    
+    // Close button
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'Close';
+    closeBtn.style.cssText = `
+      width:100%;
+      padding:10px;
+      background:#3b82f6;
+      border:none;
+      border-radius:6px;
+      color:white;
+      font-weight:600;
+      font-size:14px;
+      cursor:pointer;
+      transition:background 0.2s;
+    `;
+    closeBtn.onmouseover = () => closeBtn.style.background = '#2563eb';
+    closeBtn.onmouseout = () => closeBtn.style.background = '#3b82f6';
+    closeBtn.onclick = () => this.hideLockedPopup();
+    
+    popup.appendChild(closeBtn);
+    overlay.appendChild(popup);
+    
+    // Click overlay to close
+    overlay.onclick = (e) => {
+      if (e.target === overlay) {
+        this.hideLockedPopup();
+      }
+    };
+    
+    document.body.appendChild(overlay);
+  }
+
+  /**
+   * Hide locked popup
+   */
+  private hideLockedPopup(): void {
+    const existing = document.getElementById('research-locked-overlay');
+    if (existing) {
+      existing.remove();
+    }
   }
 
   private startResearch(researchId: string): void {

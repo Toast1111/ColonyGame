@@ -41,7 +41,7 @@ button:focus{outline:none}
 .research-tree-wrapper{position:relative;min-width:100%;min-height:100%}
 .research-tree-svg{position:absolute;top:0;left:0;pointer-events:none;z-index:1}
 .research-node{position:absolute;width:180px;padding:12px;background:#374151;border:2px solid #6b7280;border-radius:8px;cursor:default;transition:all 0.2s;z-index:2;box-shadow:0 4px 8px rgba(0,0,0,0.3)}
-.research-node.available{background:#1e40af;border-color:#3b82f6;cursor:pointer;box-shadow:0 6px 16px rgba(59,130,246,0.4)}
+.research-node.available{background:#1e3a5f;border-color:#3b82f6;cursor:pointer;box-shadow:0 6px 16px rgba(59,130,246,0.4)}
 .research-node.available:hover{transform:translateY(-4px) scale(1.05);box-shadow:0 8px 20px rgba(59,130,246,0.6);z-index:10}
 .research-node.completed{background:#064e3b;border-color:#10b981;box-shadow:0 4px 8px rgba(16,185,129,0.3)}
 .research-node.in-progress{background:#7c2d12;border-color:#ea580c;box-shadow:0 4px 8px rgba(234,88,12,0.4);animation:pulse-research 2s ease-in-out infinite}
@@ -107,4 +107,19 @@ body.touch-ui #toast{bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 20px
 	#mobileControls button { font-size: 20px; padding: .7rem; min-height: 48px; }
 	#mobileControls button:hover { background: #0f1621; }
 	#mobileControls button:active { transform: scale(0.95); }
+}
+
+/* Research Tooltip */
+.research-tooltip{
+	position:fixed;
+	background:#1e293b;
+	border:2px solid #475569;
+	border-radius:8px;
+	padding:12px 14px;
+	box-shadow:0 8px 24px rgba(0,0,0,0.6);
+	z-index:10001;
+	color:#cbd5e1;
+	font-size:13px;
+	max-width:280px;
+	pointer-events:none;
 }
