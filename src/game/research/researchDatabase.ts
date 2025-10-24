@@ -156,7 +156,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   'explosive_ied': {
     id: 'explosive_ide',
     name: 'Explosive IDE',
-    description: 'Work metal to create superior tools and materials.',
+    description: 'create explosive defensive devices.',
     category: 'basic',
     cost: 200,
     time: 75,
@@ -259,7 +259,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   'solar_panels': {
     id: 'solar_panels',
     name: 'Solar Panels',
-    description: 'Build autonomous turrets to defend your colony.',
+    description: 'Build solar panels.',
     category: 'military',
     cost: 350,
     time: 100,
@@ -273,13 +273,13 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   'auto_doors': {
     id: 'auto_doors',
     name: 'Auto Doors',
-    description: 'Manufacture grenades and explosive weaponry.',
+    description: 'create faster opening doors.',
     category: 'military',
     cost: 320,
     time: 100,
     prerequisites: ['electricity'],
     unlocks: {
-      items: ['Grenade', 'MolotovCocktail', 'IED'],
+      items: ['auto doors],
     },
     position: { x: 3, y: 3 }
   },
@@ -330,43 +330,43 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   // AGRICULTURE (Green #22c55e)
   // X: 0-6, Y: 4-10
   // ====================
-  'composting': {
-    id: 'composting',
+  'hydroponics': {
+    id: 'hydroponics',
     name: 'Composting',
-    description: 'Create fertilizer to boost crop growth.',
+    description: 'Create hydroponics basin to boost crop growth.',
     category: 'agriculture',
     cost: 80,
     time: 40,
-    prerequisites: ['agriculture'],
+    prerequisites: [],
     unlocks: {
-      buildings: ['compost_bin'],
+      buildings: ['hydroponics_basin'],
       mechanics: ['fertilizer', 'growth_boost_15'],
     },
     position: { x: 4, y: 0 }
   },
 
-  'cooking_efficiency': {
-    id: 'cooking_efficiency',
-    name: 'Cooking Efficiency',
-    description: 'Cook multiple meals at once.',
+  'electric_smithing': {
+    id: 'electric_smithing',
+    name: 'Electric Smithing',
+    description: 'Use electricity to smith.',
     category: 'agriculture',
     cost: 100,
     time: 45,
-    prerequisites: ['advanced_cooking'],
+    prerequisites: ['electricity', 'smithing'],
     unlocks: {
-      mechanics: ['bulk_cooking_4x'],
+      mechanics: ['electric_smithing_workbench'],
     },
     position: { x: 4, y: 1 }
   },
 
-  'irrigation': {
-    id: 'irrigation',
-    name: 'Irrigation',
+  'psychite_refining': {
+    id: 'psychite_refining',
+    name: 'Psychite Refining',
     description: 'Water management systems for faster crop growth.',
     category: 'agriculture',
     cost: 150,
     time: 60,
-    prerequisites: ['composting'],
+    prerequisites: ['drug_production'],
     unlocks: {
       buildings: ['irrigation_channel'],
       mechanics: ['growth_boost_20', 'drought_resistance'],
@@ -374,14 +374,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 4, y: 3 }
   },
 
-  'animal_husbandry': {
-    id: 'animal_husbandry',
-    name: 'Animal Husbandry',
+  'malaria_block': {
+    id: 'malaria_block',
+    name: 'Malaria Block',
     description: 'Tame and raise animals for resources.',
     category: 'agriculture',
     cost: 180,
     time: 70,
-    prerequisites: ['agriculture'],
+    prerequisites: ['drug_production'],
     unlocks: {
       buildings: ['animal_pen', 'haygrass_farm'],
       items: ['Kibble'],
@@ -390,14 +390,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 4, y: 4 }
   },
 
-  'advanced_farming': {
-    id: 'advanced_farming',
-    name: 'Advanced Farming',
+  'wake_up_production': {
+    id: 'wake_up_production',
+    name: 'Wake Up Production',
     description: 'Greenhouses and year-round crop production.',
     category: 'agriculture',
     cost: 250,
     time: 85,
-    prerequisites: ['irrigation'],
+    prerequisites: ['drug_production'],
     unlocks: {
       buildings: ['greenhouse'],
       mechanics: ['year_round_growing', 'crop_rotation'],
@@ -405,14 +405,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 4, y: 5 }
   },
 
-  'food_preservation': {
-    id: 'food_preservation',
-    name: 'Food Preservation',
+  'energy_drink': {
+    id: 'energy_drink',
+    name: 'Energy Drink',
     description: 'Keep food fresh for extended periods.',
     category: 'agriculture',
     cost: 200,
     time: 70,
-    prerequisites: ['cooking_efficiency'],
+    prerequisites: ['drug_production'],
     unlocks: {
       buildings: ['smokehouse', 'salt_cellar'],
       items: ['Jerky', 'Pemmican'],
@@ -421,14 +421,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 4, y: 6 }
   },
 
-  'breeding_programs': {
-    id: 'breeding_programs',
-    name: 'Breeding Programs',
+  'electric_cremation': {
+    id: 'electric_cremation',
+    name: 'Electric Cremation',
     description: 'Selectively breed animals for superior traits.',
     category: 'agriculture',
     cost: 320,
     time: 105,
-    prerequisites: ['animal_husbandry'],
+    prerequisites: ['electric_smithing'],
     unlocks: {
       buildings: ['breeding_facility'],
       mechanics: ['selective_breeding', 'enhanced_animals'],
@@ -436,14 +436,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 5, y: 1 }
   },
 
-  'cold_storage': {
-    id: 'cold_storage',
-    name: 'Cold Storage',
+  'micro_electronics': {
+    id: 'micro_electronics',
+    name: 'Micro Electronics',
     description: 'Refrigeration technology for indefinite food storage.',
     category: 'agriculture',
     cost: 280,
     time: 90,
-    prerequisites: ['food_preservation', 'electricity'],
+    prerequisites: [],
     unlocks: {
       buildings: ['freezer', 'refrigerator'],
       mechanics: ['indefinite_storage'],
@@ -451,14 +451,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 5, y: 3 }
   },
 
-  'hydroponics': {
-    id: 'hydroponics',
-    name: 'Hydroponics',
+  'advanced_research': {
+    id: 'advanced_research',
+    name: 'Advanced Research',
     description: 'Soilless farming with accelerated growth.',
     category: 'agriculture',
     cost: 450,
     time: 130,
-    prerequisites: ['advanced_farming', 'electricity'],
+    prerequisites: ['micro_electronics'],
     unlocks: {
       buildings: ['hydroponic_basin', 'climate_greenhouse'],
       mechanics: ['growth_200_percent', 'soilless'],
@@ -466,14 +466,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 6, y: 1 }
   },
 
-  'industrial_ranching': {
-    id: 'industrial_ranching',
-    name: 'Industrial Ranching',
+  'tube_tv': {
+    id: 'tube_tv',
+    name: 'Tube TV',
     description: 'Automated animal product collection.',
     category: 'agriculture',
     cost: 400,
     time: 120,
-    prerequisites: ['breeding_programs', 'automation'],
+    prerequisites: ['micro_electronics'],
     unlocks: {
       buildings: ['auto_feeder', 'milking_station', 'shearing_station'],
       mechanics: ['passive_production'],
@@ -481,14 +481,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 6, y: 2 }
   },
 
-  'genetic_modification': {
-    id: 'genetic_modification',
-    name: 'Genetic Modification',
+  'gun_turrets': {
+    id: 'gun_turrets',
+    name: 'Gun Turrets',
     description: 'Modify genetics for custom crops and livestock.',
     category: 'agriculture',
     cost: 800,
     time: 240,
-    prerequisites: ['hydroponics', 'industrial_ranching', 'gene_therapy'],
+    prerequisites: ['micro_electronics'],
     unlocks: {
       buildings: ['gene_lab', 'bioreactor'],
       mechanics: ['gmo_crops', 'super_animals'],
@@ -500,36 +500,36 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   // INDUSTRY (Orange #f59e0b)
   // X: 8-12, Y: 1-7
   // ====================
-  'stonecutting': {
-    id: 'stonecutting',
-    name: 'Stonecutting',
-    description: 'Process stone into building blocks.',
-    category: 'industry',
-    cost: 80,
-    time: 45,
-    prerequisites: ['basic_construction'],
-    unlocks: {
-      buildings: ['stonecutter_table', 'stone_wall'],
-      items: ['StoneBlocks'],
-      mechanics: ['stone_construction'],
-    },
-    position: { x: 7, y: 1 }
-  },
+  //'stonecutting': {
+    //id: 'stonecutting',
+    //name: 'Stonecutting',
+    //description: 'Process stone into building blocks.',
+    //category: 'industry',
+    //cost: 80,
+    //time: 45,
+    //prerequisites: ['basic_construction'],
+    //unlocks: {
+      //buildings: ['stonecutter_table', 'stone_wall'],
+      //items: ['StoneBlocks'],
+      //mechanics: ['stone_construction'],
+    //},
+    //position: { x: 7, y: 1 }
+  //},
 
-  'deep_mining': {
-    id: 'deep_mining',
-    name: 'Deep Mining',
-    description: 'Extract ore and minerals from mountains.',
-    category: 'industry',
-    cost: 150,
-    time: 60,
-    prerequisites: ['tool_crafting'],
-    unlocks: {
-      buildings: ['mining_zone', 'quarry', 'deep_drill'],
-      mechanics: ['ore_extraction'],
-    },
-    position: { x: 7, y: 3 }
-  },
+  //'deep_mining': {
+    //id: 'deep_mining',
+    //name: 'Deep Mining',
+    //description: 'Extract ore and minerals from mountains.',
+    //category: 'industry',
+    //cost: 150,
+    //time: 60,
+    //prerequisites: ['tool_crafting'],
+    //unlocks: {
+      //buildings: ['mining_zone', 'quarry', 'deep_drill'],
+      //mechanics: ['ore_extraction'],
+    //},
+    //position: { x: 7, y: 3 }
+  //},
 
   'logging_efficiency': {
     id: 'logging_efficiency',
