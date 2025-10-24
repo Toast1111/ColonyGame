@@ -279,7 +279,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     time: 100,
     prerequisites: ['electricity'],
     unlocks: {
-      items: ['auto doors],
+      items: ['auto doors'],
     },
     position: { x: 3, y: 3 }
   },
