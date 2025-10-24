@@ -36,25 +36,24 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   // BASIC (Gray #94a3b8)
   // X: 0-3, Y: 0-3
   // ====================
-  'cooking': {
-    id: 'cooking',
-    name: 'Cooking',
-    description: 'Learn to cook basic meals from raw ingredients.',
+  'passive_cooler': {
+    id: 'passive_cooler',
+    name: 'Passive Cooler',
+    description: 'It cools things down.',
     category: 'basic',
     cost: 50,
     time: 30,
     prerequisites: [],
     unlocks: {
-      buildings: ['campfire', 'stove'],
-      items: ['SimpleMeal', 'Bread'],
+      buildings: ['passive_cooler'],
     },
     position: { x: 0, y: 3 }
   },
 
-  'basic_construction': {
-    id: 'basic_construction',
-    name: 'Basic Construction',
-    description: 'Learn fundamental building techniques.',
+  'brewing': {
+    id: 'brewing',
+    name: 'Brewing',
+    description: 'Make booze.',
     category: 'basic',
     cost: 50,
     time: 30,
@@ -65,9 +64,9 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 4 }
   },
 
-  'basic_crafting': {
-    id: 'basic_crafting',
-    name: 'Basic Crafting',
+  'odd_meat': {
+    id: 'odd_meat',
+    name: 'Odd Meat',
     description: 'Learn to craft simple items and clothing.',
     category: 'basic',
     cost: 50,
@@ -80,13 +79,13 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 0, y: 5 }
   },
 
-  'agriculture': {
-    id: 'agriculture',
-    name: 'Agriculture',
-    description: 'Develop farming techniques. (Tutorial unlock)',
+  'devil_strand': {
+    id: 'devil_strand',
+    name: 'Devil Strand',
+    description: 'Grow Devil Strand',
     category: 'agriculture',
-    cost: 0,
-    time: 0,
+    cost: 50,
+    time:30,
     prerequisites: [],
     unlocks: {
       buildings: ['farm'],
@@ -94,13 +93,13 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 0, y: 6 }
   },
 
-  'basic_medicine': {
-    id: 'basic_medicine',
-    name: 'Basic Medicine',
+  'stone_cutting': {
+    id: 'stone_cutting',
+    name: 'stone_cutting',
     description: 'Learn fundamental medical treatments. (Tutorial unlock)',
     category: 'medicine',
-    cost: 0,
-    time: 0,
+    cost: 60,
+    time: 40,
     prerequisites: [],
     unlocks: {
       buildings: ['medical_bed'],
@@ -109,14 +108,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 3 }
   },
 
-  'basic_furniture': {
-    id: 'basic_furniture',
-    name: 'Basic Furniture',
+  'complex_clothing': {
+    id: 'complex_clothing',
+    name: 'Complex Clothing',
     description: 'Craft tables, chairs, and beds for your colonists.',
     category: 'basic',
     cost: 80,
     time: 35,
-    prerequisites: ['basic_construction'],
+    prerequisites: [],
     unlocks: {
       buildings: ['small_table', 'large_table', 'stool', 'dining_chair', 'bed', 'end_table'],
       mechanics: ['eat_at_table']
@@ -124,28 +123,28 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 4 }
   },
 
-  'tool_crafting': {
-    id: 'tool_crafting',
-    name: 'Tool Crafting',
+  'smithing': {
+    id: 'smithing',
+    name: 'Smithing',
     description: 'Master basic tool creation for survival.',
     category: 'basic',
     cost: 100,
     time: 45,
-    prerequisites: ['basic_crafting'],
+    prerequisites: [],
     unlocks: {
       items: ['Hoe', 'Axe', 'Pickaxe', 'Hammer'],
     },
     position: { x: 1, y: 5 }
   },
 
-  'advanced_cooking': {
-    id: 'advanced_cooking',
-    name: 'Advanced Cooking',
+  'carpet_making': {
+    id: 'carpet_making',
+    name: 'Carpet Making',
     description: 'Master culinary techniques for better meals.',
     category: 'basic',
     cost: 150,
     time: 60,
-    prerequisites: ['cooking'],
+    prerequisites: [],
     unlocks: {
       buildings: ['industrial_stove'],
       items: ['FineMeal', 'LavishMeal'],
@@ -154,14 +153,14 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     position: { x: 1, y: 6 }
   },
 
-  'smithing': {
-    id: 'smithing',
-    name: 'Smithing',
+  'explosive_ied': {
+    id: 'explosive_ide',
+    name: 'Explosive IDE',
     description: 'Work metal to create superior tools and materials.',
     category: 'basic',
     cost: 200,
     time: 75,
-    prerequisites: ['tool_crafting', 'stonecutting'],
+    prerequisites: [],
     unlocks: {
       buildings: ['smithing_workbench'],
       items: ['SteelTools'],
@@ -173,154 +172,154 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   // MILITARY (Red #ef4444)
   // X: 4-7, Y: 2-6
   // ====================
-  'melee_weapons': {
-    id: 'melee_weapons',
-    name: 'Melee Weapons',
+  'fire_ied': {
+    id: 'fire_ied',
+    name: 'Fire IED',
     description: 'Craft basic weapons for close combat defense.',
     category: 'military',
     cost: 75,
     time: 40,
-    prerequisites: ['tool_crafting'],
+    prerequisites: ['explosive_ied'],
     unlocks: {
       items: ['Club', 'Knife', 'Spear'],
     },
     position: { x: 2, y: 3 }
   },
 
-  'defensive_structures': {
-    id: 'defensive_structures',
-    name: 'Defensive Structures',
+  'electricity': {
+    id: 'electricity',
+    name: 'Electricity',
     description: 'Build basic defensive positions.',
     category: 'military',
     cost: 100,
     time: 50,
-    prerequisites: ['basic_construction'],
+    prerequisites: [],
     unlocks: {
       buildings: ['barricade', 'sandbag', 'spike_trap'],
     },
     position: { x: 2, y: 4 }
   },
 
-  'basic_firearms': {
-    id: 'basic_firearms',
-    name: 'Basic Firearms',
+  'machining': {
+    id: 'machining',
+    name: 'Machining',
     description: 'Manufacture simple firearms for ranged combat.',
     category: 'military',
     cost: 150,
     time: 60,
-    prerequisites: ['melee_weapons', 'smithing'],
+    prerequisites: ['smithing'],
     unlocks: {
       items: ['Revolver', 'Autopistol', 'BoltActionRifle'],
     },
     position: { x: 2, y: 5 }
   },
 
-  'body_armor': {
-    id: 'body_armor',
-    name: 'Body Armor',
+  'colored_lights': {
+    id: 'colored_lights',
+    name: 'Colored Lights',
     description: 'Craft protective gear to reduce combat damage.',
     category: 'military',
     cost: 180,
     time: 65,
-    prerequisites: ['basic_firearms'],
+    prerequisites: ['electricity'],
     unlocks: {
       items: ['LeatherVest', 'FlakVest', 'SteelHelmet'],
     },
     position: { x: 2, y: 6 }
   },
 
-  'fortifications': {
-    id: 'fortifications',
-    name: 'Fortifications',
+  'mortars': {
+    id: 'mortars',
+    name: 'Mortars',
     description: 'Build advanced defensive structures.',
     category: 'military',
     cost: 200,
     time: 80,
-    prerequisites: ['defensive_structures', 'stonecutting'],
+    prerequisites: ['machining'],
     unlocks: {
       buildings: ['bunker', 'embrasure', 'kill_box'],
     },
     position: { x: 2, y: 7 }
   },
 
-  'advanced_firearms': {
-    id: 'advanced_firearms',
-    name: 'Advanced Firearms',
+  'batteries': {
+    id: 'batteries',
+    name: 'Batteries',
     description: 'Master military-grade weapon manufacturing.',
     category: 'military',
     cost: 300,
     time: 90,
-    prerequisites: ['basic_firearms', 'machining'],
+    prerequisites: ['electricity'],
     unlocks: {
       items: ['AssaultRifle', 'Shotgun', 'SniperRifle', 'MachineGun'],
     },
     position: { x: 3, y: 1 }
   },
 
-  'automated_defense': {
-    id: 'automated_defense',
-    name: 'Automated Defense',
+  'solar_panels': {
+    id: 'solar_panels',
+    name: 'Solar Panels',
     description: 'Build autonomous turrets to defend your colony.',
     category: 'military',
     cost: 350,
     time: 100,
-    prerequisites: ['advanced_firearms', 'electricity'],
+    prerequisites: ['electricity'],
     unlocks: {
       buildings: ['mini_turret', 'auto_turret'],
     },
     position: { x: 3, y: 2 }
   },
 
-  'explosives': {
-    id: 'explosives',
-    name: 'Explosives',
+  'auto_doors': {
+    id: 'auto_doors',
+    name: 'Auto Doors',
     description: 'Manufacture grenades and explosive weaponry.',
     category: 'military',
     cost: 320,
     time: 100,
-    prerequisites: ['advanced_firearms'],
+    prerequisites: ['electricity'],
     unlocks: {
       items: ['Grenade', 'MolotovCocktail', 'IED'],
     },
     position: { x: 3, y: 3 }
   },
 
-  'heavy_armor': {
-    id: 'heavy_armor',
-    name: 'Heavy Armor',
+  'ac': {
+    id: 'ac',
+    name: 'AC',
     description: 'Craft military-grade protective armor.',
     category: 'military',
     cost: 400,
     time: 120,
-    prerequisites: ['body_armor', 'smelting'],
+    prerequisites: ['electricity'],
     unlocks: {
       items: ['MarineArmor', 'CataphractArmor'],
     },
     position: { x: 3, y: 4 }
   },
 
-  'heavy_turrets': {
-    id: 'heavy_turrets',
-    name: 'Heavy Turrets',
+  'nutrient_paste': {
+    id: 'nutrient_paste',
+    name: 'Nutrient Paste',
     description: 'Deploy heavy weapons platforms.',
     category: 'military',
     cost: 500,
     time: 140,
-    prerequisites: ['automated_defense'],
+    prerequisites: ['electricity'],
     unlocks: {
       buildings: ['heavy_turret', 'mortar', 'rocket_turret'],
     },
     position: { x: 3, y: 5 }
   },
 
-  'powered_armor': {
-    id: 'powered_armor',
-    name: 'Powered Armor',
+  'drug_production': {
+    id: 'drug_production',
+    name: 'Drug Production',
     description: 'Mechanized combat suits with superior protection.',
     category: 'military',
     cost: 600,
     time: 180,
-    prerequisites: ['heavy_armor', 'advanced_materials'],
+    prerequisites: [],
     unlocks: {
       items: ['PoweredArmor', 'PoweredHelmet'],
     },
