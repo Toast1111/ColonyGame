@@ -163,7 +163,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     time: 55,
     prerequisites: [],
     unlocks: { buildings: ['smithing_bench'], items: ['Gladius', 'Knife', 'Mace'] },
-    position: { x: 1, y: 4 }
+    position: { x: 2, y: 5 }
   },
   complex_furniture: {
     id: 'complex_furniture',
@@ -174,7 +174,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     time: 55,
     prerequisites: [],
     unlocks: { buildings: ['armchair', 'dresser', 'end_table'] },
-    position: { x: 1, y: 5 }
+    position: { x: 2, y: 0 }
   },
 
   // ====================
@@ -222,7 +222,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     time: 65,
     prerequisites: ['machining'],
     unlocks: { mechanics: ['gas_systems'] },
-    position: { x: 4, y: 4 }
+    position: { x: 4, y: 5 }
   },
   recurve_bow: {
     id: 'recurve_bow',
@@ -233,7 +233,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     time: 50,
     prerequisites: [],
     unlocks: { items: ['RecurveBow'] },
-    position: { x: 2, y: 5 }
+    position: { x: 1, y: 4 }
   },
 
   // ====================
@@ -404,7 +404,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'military',
     cost: 1400,
     time: 75,
-    prerequisites: ['smithing'],
+    prerequisites: ['machining'],
     unlocks: { items: ['Revolver', 'Autopistol'] },
     position: { x: 3, y: 4 }
   },
@@ -426,9 +426,9 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'medicine',
     cost: 600,
     time: 50,
-    prerequisites: [],
+    prerequisites: ['psychite_refining'],
     unlocks: { items: ['SmokeleafJoint'] },
-    position: { x: 8, y: 6 }
+    position: { x: 5, y: 0 }
   },
 
   // ====================
