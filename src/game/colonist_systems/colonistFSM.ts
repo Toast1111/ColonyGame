@@ -11,7 +11,7 @@ import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
-import { updateCookingState } from "./states";
+import { updateCookingState, updateStonecuttingState } from "./states";
 
 
 // Helper function to check if a position would collide with buildings or mountains
@@ -531,6 +531,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'goToSleep': return 55; // Base priority at 60% fatigue, scales to 95+ at 100% fatigue with night bonus
         case 'eat': return 65;
         case 'cooking': return 42; // Cooking is productive work
+        case 'stonecutting': return 42; // Stonecutting is productive work
         case 'research': return 41; // Research is productive work
         case 'haulFloorItem': return 40; // Hauling items via floor system
         case 'build':
@@ -1245,6 +1246,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'mine': changeState('mine', 'assigned mine task'); break;
         case 'haulFloorItem': changeState('haulFloorItem', 'assigned floor hauling task'); break;
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
+        case 'stonecutting': changeState('stonecutting', 'assigned stonecutting task'); break;
         case 'research': changeState('research', 'assigned research task'); break;
         case 'goto':
         case 'rest':
@@ -1808,7 +1810,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
                 case OreType.STEEL: resourceType = 'steel'; break;
                 case OreType.SILVER: resourceType = 'silver'; break;
                 case OreType.GOLD: resourceType = 'gold'; break;
-                default: resourceType = 'stone'; break; // Plain stone or none
+                default: resourceType = 'rubble'; break; // Plain mountain drops rubble (must be refined to stone)
               }
               
               // Drop resources on the ground as floor items
@@ -1988,6 +1990,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'cooking': {
       // Delegate to modular cooking state handler
       updateCookingState(c, game, dt, changeState);
+      break;
+    }
+    
+    case 'stonecutting': {
+      // Delegate to modular stonecutting state handler
+      updateStonecuttingState(c, game, dt, changeState);
       break;
     }
     
@@ -2181,9 +2189,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       // At research bench - do research work
       if (game.pointInRect(c, bench)) {
-        // Reserve spot
-        game.reservationManager.reserveInside(bench);
-        
         // Generate research points based on colonist's research skill (or use base rate)
         const researchSpeed = 5; // Base research points per second
         const points = researchSpeed * dt;

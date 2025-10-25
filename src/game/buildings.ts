@@ -165,6 +165,18 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     build: 60,
     color: '#cd5c5c'
   },
+  stonecutting_table: {
+    category: 'Production',
+    name: 'Stonecutting Table',
+    description: 'Cut rubble from mountain mining into refined stone blocks. Surface rocks provide stone directly.',
+    key: 'T',
+    cost: { wood: 30, stone: 5 },
+    hp: 180,
+    size: { w: 2, h: 1 },
+    build: 80,
+    color: '#708090',  // Slate gray
+    popCap: 1  // One stonecutter at a time
+  },
   pantry: {
     category: 'Furniture',
     name: 'Pantry',

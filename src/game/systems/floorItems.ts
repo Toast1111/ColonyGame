@@ -15,6 +15,12 @@ const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: number; s
     stackRadius: 24,
     color: '#708090'
   },
+  rubble: {
+    weight: 1.2,
+    stackLimit: 50,
+    stackRadius: 26,
+    color: '#5a6268' // Darker gray for raw rubble
+  },
   food: {
     weight: 0.5,
     stackLimit: 20,

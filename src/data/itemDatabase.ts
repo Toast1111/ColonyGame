@@ -460,9 +460,20 @@ export class ItemDatabase {
           weight: 1.0
         },
         {
+          defName: 'Rubble',
+          label: 'stone rubble',
+          description: 'Raw stone chunks from mining mountains. Must be cut at a stonecutting table to create usable stone blocks.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 1,
+          weight: 2.5
+        },
+        {
           defName: 'Stone',
           label: 'stone blocks',
-          description: 'Cut stone blocks for sturdy construction.',
+          description: 'Cut stone blocks for sturdy construction. Obtained from surface rocks or by cutting rubble.',
           category: 'Resource',
           equipSlot: 'none',
           stackable: true,

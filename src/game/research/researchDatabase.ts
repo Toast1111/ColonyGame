@@ -98,7 +98,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
   stonecutting: {
     id: 'stonecutting',
     name: 'Stonecutting',
-    description: 'Cut stone blocks for construction.',
+    description: 'Cut mountain rubble into usable stone blocks. Surface rocks provide stone directly.',
     category: 'basic',
     cost: 1000,
     time: 60,

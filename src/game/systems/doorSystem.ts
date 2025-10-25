@@ -2,7 +2,7 @@ import type { Building, Colonist, Enemy } from "../types";
 
 // Door timing constants (in seconds)
 const DOOR_OPEN_TIME = 2.0;      // Time to fully open
-const DOOR_CLOSE_DELAY = 1.0;    // Time to wait before auto-closing
+const DOOR_CLOSE_DELAY = 3.0;    // Time to wait before auto-closing
 const DOOR_CLOSE_TIME = 2.0;     // Time to fully close
 
 /**

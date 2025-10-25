@@ -7,3 +7,4 @@
  */
 
 export { updateCookingState } from './cookingState';
+export { updateStonecuttingState } from './stonecuttingState';
