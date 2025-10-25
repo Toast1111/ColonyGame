@@ -220,9 +220,9 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'industry',
     cost: 1000,
     time: 65,
-    prerequisites: [],
+    prerequisites: ['machining'],
     unlocks: { mechanics: ['gas_systems'] },
-    position: { x: 2, y: 4 }
+    position: { x: 4, y: 4 }
   },
   recurve_bow: {
     id: 'recurve_bow',
@@ -404,9 +404,9 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'military',
     cost: 1400,
     time: 75,
-    prerequisites: ['machining'],
+    prerequisites: ['smithing'],
     unlocks: { items: ['Revolver', 'Autopistol'] },
-    position: { x: 7, y: 6 }
+    position: { x: 3, y: 4 }
   },
   fuel_energy: {
     id: 'fuel_energy',
