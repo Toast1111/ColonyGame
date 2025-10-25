@@ -84,16 +84,16 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     unlocks: { buildings: ['passive_cooler'] },
     position: { x: 0, y: 3 }
   },
-  beer_brewing: {
-    id: 'beer_brewing',
-    name: 'Beer brewing',
-    description: 'Brew beer for recreation.',
-    category: 'basic',
+  smelting: {
+    id: 'smelting',
+    name: 'Smelting',
+    description: 'Smelt ores into usable metals.',
+    category: 'industry',
     cost: 700,
     time: 55,
     prerequisites: [],
-    unlocks: { items: ['Beer'], buildings: ['brewery'] },
-    position: { x: 0, y: 4 }
+    unlocks: { items: ['SteelIngot', 'CopperIngot', 'GoldIngot', 'SilverIngot'], buildings: ['smelter', 'cooling_rack'] },
+    position: { x: 1, y: 5 }
   },
   stonecutting: {
     id: 'stonecutting',
@@ -103,7 +103,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     cost: 1000,
     time: 60,
     prerequisites: [],
-    unlocks: { items: ['StoneBlocks'], buildings: ['stonecutting_table'] },
+    unlocks: { items: ['StoneBlocks'], buildings: ['stonecutting_table', 'stone_path', 'stone_wall', 'stone_door'] },
     position: { x: 0, y: 5 }
   },
 
@@ -161,7 +161,7 @@ export const RESEARCH_TREE: Record<string, ResearchNode> = {
     category: 'industry',
     cost: 700,
     time: 55,
-    prerequisites: [],
+    prerequisites: ['smelting'],
     unlocks: { buildings: ['smithing_bench'], items: ['Gladius', 'Knife', 'Mace'] },
     position: { x: 2, y: 5 }
   },

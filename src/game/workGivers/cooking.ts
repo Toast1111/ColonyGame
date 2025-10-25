@@ -11,7 +11,8 @@ export const CookingWorkGiver: WorkGiver = {
     if (!rim) return out;
     
     // Check total wheat available (could be split across multiple piles)
-    const totalWheat = rim.floorItems
+    const allFloorItems = rim.floorItems.getAllItems();
+    const totalWheat = allFloorItems
       .filter((item: any) => item.type === 'wheat' && item.quantity > 0)
       .reduce((sum: number, item: any) => sum + item.quantity, 0);
     

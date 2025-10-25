@@ -167,12 +167,6 @@ export class TaskManager {
       initializeWorkPriorities(c);
     }
     
-    // During night time, don't assign new tasks - colonists should be sleeping
-    if (this.game.isNight()) {
-      this.setTask(c, 'idle', { x: c.x, y: c.y }); // FSM will handle sleep transition
-      return;
-    }
-    
     // Build a list of available work with priorities
     const candidates: any[] = [];
     

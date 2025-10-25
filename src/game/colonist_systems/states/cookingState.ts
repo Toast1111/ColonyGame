@@ -73,7 +73,8 @@ function handleWheatPickup(
   }
   
   // Look for wheat on the floor
-  const wheatItems = (rim as any).floorItems.filter((item: any) => 
+  const allFloorItems = rim.floorItems.getAllItems();
+  const wheatItems = allFloorItems.filter((item: any) => 
     item.type === 'wheat' && item.quantity > 0
   );
   
@@ -84,16 +85,16 @@ function handleWheatPickup(
   
   // Find closest wheat pile
   const closestWheat = wheatItems.reduce((closest: any, item: any) => {
-    const d = Math.hypot(c.x - item.x, c.y - item.y);
-    const closestD = Math.hypot(c.x - closest.x, c.y - closest.y);
+    const d = Math.hypot(c.x - item.position.x, c.y - item.position.y);
+    const closestD = Math.hypot(c.x - closest.position.x, c.y - closest.position.y);
     return d < closestD ? item : closest;
   });
   
-  const wheatDist = Math.hypot(c.x - closestWheat.x, c.y - closestWheat.y);
+  const wheatDist = Math.hypot(c.x - closestWheat.position.x, c.y - closestWheat.position.y);
   
   // Move to wheat if not close enough
   if (wheatDist > 10) {
-    const wheatPos = { x: closestWheat.x, y: closestWheat.y };
+    const wheatPos = { x: closestWheat.position.x, y: closestWheat.position.y };
     game.moveAlongPath(c, dt, wheatPos, 10);
     return;
   }
