@@ -11,6 +11,7 @@ import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
+import { updateCookingState } from "./states";
 
 
 // Helper function to check if a position would collide with buildings or mountains
@@ -1985,138 +1986,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     
     case 'cooking': {
-      const stove = c.target as Building;
-      if (!stove || stove.kind !== 'stove' || !stove.done) {
-        // Stove was destroyed or doesn't exist
-        c.task = null;
-        c.target = null;
-        c.carryingWheat = 0;
-        game.clearPath(c);
-        changeState('seekTask', 'stove no longer available');
-        break;
-      }
-      
-      // Timeout check - if stuck for too long, abandon cooking
-      if (c.stateSince > 45) {
-        console.log(`Cooking timeout after ${c.stateSince.toFixed(1)}s, abandoning`);
-        c.task = null;
-        c.target = null;
-        c.carryingWheat = 0;
-        game.clearPath(c);
-        if (stove.cookingColonist === c.id) {
-          stove.cookingColonist = undefined;
-          stove.cookingProgress = 0;
-        }
-        changeState('seekTask', 'cooking timeout');
-        break;
-      }
-      
-      // Simple cooking workflow: Pick up wheat from floor, cook at stove, drop bread on floor
-      
-      const pt = { x: stove.x + stove.w / 2, y: stove.y + stove.h / 2 };
-      const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
-      
-      // Phase 1: Pick up wheat if we don't have any
-      if (!c.carryingWheat || c.carryingWheat < 5) {
-        const rim = game.itemManager;
-        if (!rim) {
-          // No item manager - can't cook
-          c.task = null;
-          c.target = null;
-          c.carryingWheat = 0;
-          game.clearPath(c);
-          changeState('seekTask', 'no item manager');
-          break;
-        }
-        
-        // Look for wheat on the floor nearby
-        const wheatItems = rim.floorItems.filter((item: any) => item.type === 'wheat' && item.quantity > 0);
-        
-        if (wheatItems.length === 0) {
-          // No wheat available - abandon cooking
-          c.task = null;
-          c.target = null;
-          c.carryingWheat = 0;
-          game.clearPath(c);
-          changeState('seekTask', 'no wheat available');
-          break;
-        }
-        
-        // Find closest wheat
-        const closestWheat = wheatItems.reduce((closest: any, item: any) => {
-          const d = Math.hypot(c.x - item.x, c.y - item.y);
-          const closestD = Math.hypot(c.x - closest.x, c.y - closest.y);
-          return d < closestD ? item : closest;
-        });
-        
-        // Move to wheat
-        const wheatDist = Math.hypot(c.x - closestWheat.x, c.y - closestWheat.y);
-        if (wheatDist > 10) {
-          const wheatPt = { x: closestWheat.x, y: closestWheat.y };
-          game.moveAlongPath(c, dt, wheatPt, 10);
-          break;
-        }
-        
-        // Pick up wheat (need 5 for cooking)
-        const needed = 5 - (c.carryingWheat || 0);
-        const picked = rim.pickupItems(closestWheat.id, Math.min(needed, closestWheat.quantity));
-        c.carryingWheat = (c.carryingWheat || 0) + picked;
-        
-        if ((c.carryingWheat || 0) < 5) {
-          // Need more wheat, continue searching
-          break;
-        }
-      }
-      
-      // Phase 2: Move to stove with wheat
-      if (distance > 20) {
-        game.moveAlongPath(c, dt, pt, 20);
-        break;
-      }
-      
-      // Phase 3: Cook at the stove
-      if (!stove.cookingColonist || stove.cookingColonist === c.id) {
-        stove.cookingColonist = c.id;
-        
-        // Cooking skill affects speed
-        const cookingLvl = c.skills ? skillLevel(c, 'Cooking') : 0;
-        const skillMult = skillWorkSpeedMultiplier(cookingLvl);
-        const cookSpeed = 0.1 * skillMult; // Base 10 seconds to cook
-        
-        stove.cookingProgress = (stove.cookingProgress || 0) + cookSpeed * dt;
-        
-        // Grant cooking XP while cooking
-        if (c.skills) grantSkillXP(c, 'Cooking', 3 * dt, c.t || 0);
-        
-        if (stove.cookingProgress >= 1.0) {
-          // Cooking complete! Convert wheat to bread
-          const breadProduced = 3; // 5 wheat = 3 bread
-          c.carryingWheat = 0; // Consumed the wheat
-          
-          // Drop bread on the floor next to stove
-          const dropPos = { x: stove.x + stove.w / 2, y: stove.y + stove.h + 8 };
-          game.itemManager.dropItems('bread', breadProduced, dropPos);
-          
-          stove.cookingProgress = 0;
-          stove.cookingColonist = undefined;
-          
-          game.msg(`${c.profile?.name || 'Colonist'} cooked ${breadProduced} bread!`, 'good');
-          if (c.skills) grantSkillXP(c, 'Cooking', 30, c.t || 0); // Bonus XP for completion
-          
-          // Cooking job done - colonist can seek new task
-          c.task = null;
-          c.target = null;
-          game.clearPath(c);
-          changeState('seekTask', 'finished cooking');
-        }
-      } else {
-        // Someone else is already cooking at this stove
-        c.task = null;
-        c.target = null;
-        c.carryingWheat = 0;
-        game.clearPath(c);
-        changeState('seekTask', 'stove occupied');
-      }
+      // Delegate to modular cooking state handler
+      updateCookingState(c, game, dt, changeState);
       break;
     }
     
