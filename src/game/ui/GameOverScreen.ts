@@ -342,8 +342,8 @@ export class GameOverScreen {
     const fadeInDuration = 2.0;
     const opacity = Math.min(1.0, elapsed / fadeInDuration);
     
-    // Get all dead colonists
-    const deadColonists = this.game.colonists.filter(c => !c.alive);
+    // Get all dead colonists from the dedicated dead colonists array
+    const deadColonists = this.game.deadColonists;
     
     // Debug: log colonist count
     console.log('[GameOver] Total colonists:', this.game.colonists.length, 'Dead:', deadColonists.length);

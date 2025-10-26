@@ -178,6 +178,8 @@ export class Game {
   get colonists(): Colonist[] { return this.state.colonists; }
   set colonists(value: Colonist[]) { this.state.colonists = value; }
   
+  get deadColonists(): Colonist[] { return this.state.deadColonists; }
+  
   get enemies(): Enemy[] { return this.state.enemies; }
   set enemies(value: Enemy[]) { this.state.enemies = value; }
   
@@ -2383,7 +2385,13 @@ export class Game {
     // Day already incremented by TimeSystem
     (this as any).waveSpawnedForDay = false;
     let dead = 0; for (let i = 0; i < this.colonists.length; i++) { if (this.RES.food > 0) { this.RES.food -= 1; } else { dead++; if (this.colonists[i]) { (this.colonists[i] as any).alive = false; } } }
-    if (dead > 0) { this.colonists = this.colonists.filter(c => c.alive); this.msg(`${dead} colonist(s) starved`, 'bad'); }
+    if (dead > 0) { 
+      // Track dead colonists for game over screen before removing them
+      const deadColonists = this.colonists.filter(c => !c.alive);
+      this.state.deadColonists.push(...deadColonists);
+      this.colonists = this.colonists.filter(c => c.alive); 
+      this.msg(`${dead} colonist(s) starved`, 'bad'); 
+    }
     // Farm growth (once per day)
     for (const b of this.buildings) { 
       if (b.kind === 'farm' && b.done) { 
@@ -2424,6 +2432,8 @@ export class Game {
       if (!c.alive) {
         this.releaseSleepReservation(c);
         if (c.inside) this.leaveBuilding(c);
+        // Track dead colonists for game over screen before removing them
+        this.state.deadColonists.push(c);
         // Remove dead colonists from the array
         this.colonists.splice(i, 1);
         continue;
