@@ -11,7 +11,7 @@ import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
-import { updateCookingState, updateStonecuttingState } from "./states";
+import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateCoolingState } from "./states";
 
 
 // Helper function to check if a position would collide with buildings or mountains
@@ -532,6 +532,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'eat': return 65;
         case 'cooking': return 42; // Cooking is productive work
         case 'stonecutting': return 42; // Stonecutting is productive work
+        case 'smelting': return 42; // Smelting is productive work
+        case 'cooling': return 42; // Cooling is productive work
         case 'research': return 41; // Research is productive work
         case 'haulFloorItem': return 40; // Hauling items via floor system
         case 'build':
@@ -1247,6 +1249,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'haulFloorItem': changeState('haulFloorItem', 'assigned floor hauling task'); break;
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
         case 'stonecutting': changeState('stonecutting', 'assigned stonecutting task'); break;
+        case 'smelting': changeState('smelting', 'assigned smelting task'); break;
+        case 'cooling': changeState('cooling', 'assigned cooling task'); break;
         case 'research': changeState('research', 'assigned research task'); break;
         case 'goto':
         case 'rest':
@@ -1996,6 +2000,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'stonecutting': {
       // Delegate to modular stonecutting state handler
       updateStonecuttingState(c, game, dt, changeState);
+      break;
+    }
+    
+    case 'smelting': {
+      // Delegate to modular smelting state handler
+      updateSmeltingState(c, game, dt, changeState);
+      break;
+    }
+    
+    case 'cooling': {
+      // Delegate to modular cooling state handler
+      updateCoolingState(c, game, dt, changeState);
       break;
     }
     

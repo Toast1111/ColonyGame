@@ -2,7 +2,7 @@ import type { Vec2 } from "../../core/utils";
 import type { ItemType, FloorItem, ItemStack } from "../types/items";
 
 // Item definitions with properties
-const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: number; stackRadius: number; color: string }> = {
+export const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: number; stackRadius: number; color: string }> = {
   wood: {
     weight: 1,
     stackLimit: 50,
@@ -87,6 +87,55 @@ const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: number; s
     stackLimit: 25,
     stackRadius: 18,
     color: '#fbbf24' // Golden yellow
+  },
+  // Refined ingots from smelting
+  steel_ingot: {
+    weight: 1.8,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#475569' // Darker steel blue
+  },
+  copper_ingot: {
+    weight: 1.5,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#ea580c' // Bright copper orange
+  },
+  silver_ingot: {
+    weight: 1.6,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#e4e4e7' // Bright silver
+  },
+  gold_ingot: {
+    weight: 2.0,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#f59e0b' // Rich gold
+  },
+  hot_steel_ingot: {
+    weight: 1.8,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#6366f1' // Bright blue-purple glow
+  },
+  hot_copper_ingot: {
+    weight: 1.5,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#fb923c' // Bright orange-red glow
+  },
+  hot_silver_ingot: {
+    weight: 1.6,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#fbbf24' // Bright yellow glow
+  },
+  hot_gold_ingot: {
+    weight: 2.0,
+    stackLimit: 50,
+    stackRadius: 24,
+    color: '#fde047' // Intense bright gold glow
   }
 };
 

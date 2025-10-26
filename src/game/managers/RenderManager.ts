@@ -979,6 +979,11 @@ export class RenderManager {
     
     // Debug console (always on top)
     drawDebugConsole(game);
+    
+    // Game over screen (absolute top layer - covers everything)
+    if (game.gameOverScreen.isActive()) {
+      game.gameOverScreen.render(ctx, canvas);
+    }
   }
 
   /**

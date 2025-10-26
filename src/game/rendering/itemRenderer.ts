@@ -1,5 +1,6 @@
-import type { ItemStack, FloorItem } from "../types/items";
+import type { ItemStack, FloorItem, ItemType } from "../types/items";
 import type { StockpileZone } from "../types/stockpiles";
+import { ITEM_DEFINITIONS } from "../systems/floorItems";
 
 export class ItemRenderer {
   private canvas: HTMLCanvasElement;
@@ -189,12 +190,26 @@ export class ItemRenderer {
     switch (type) {
       case 'wood': icon = 'W'; break;
       case 'stone': icon = 'S'; break;
+      case 'rubble': icon = 'R'; break;
       case 'food': icon = 'F'; break;
       case 'wheat': icon = 'W'; break;
       case 'bread': icon = 'B'; break;
       case 'metal': icon = 'M'; break;
       case 'cloth': icon = 'C'; break;
       case 'medicine': icon = '+'; break;
+      case 'coal': icon = 'C'; break;
+      case 'copper_ore': icon = 'Cu'; break;
+      case 'steel_ore': icon = 'Fe'; break;
+      case 'silver_ore': icon = 'Ag'; break;
+      case 'gold_ore': icon = 'Au'; break;
+      case 'steel_ingot': icon = 'I'; break;
+      case 'copper_ingot': icon = 'I'; break;
+      case 'silver_ingot': icon = 'I'; break;
+      case 'gold_ingot': icon = 'I'; break;
+      case 'hot_steel_ingot': icon = '🔥'; break;
+      case 'hot_copper_ingot': icon = '🔥'; break;
+      case 'hot_silver_ingot': icon = '🔥'; break;
+      case 'hot_gold_ingot': icon = '🔥'; break;
     }
 
     this.ctx.strokeText(icon, x, y);
@@ -205,17 +220,13 @@ export class ItemRenderer {
   }
 
   private getItemColor(type: string): string {
-    switch (type) {
-      case 'wood': return '#8B4513'; // Brown
-      case 'stone': return '#708090'; // Dark gray
-      case 'food': return '#90EE90'; // Light green
-      case 'wheat': return '#F0E68C'; // Khaki
-      case 'bread': return '#DEB887'; // Burlywood
-      case 'metal': return '#C0C0C0'; // Silver
-      case 'cloth': return '#F5F5DC'; // Beige
-      case 'medicine': return '#FF6347'; // Tomato
-      default: return '#808080'; // Gray
+    // Use color from ITEM_DEFINITIONS if available
+    const def = ITEM_DEFINITIONS[type as ItemType];
+    if (def) {
+      return def.color;
     }
+    // Fallback to gray for unknown types
+    return '#808080';
   }
 
   private darkenColor(color: string, factor: number): string {

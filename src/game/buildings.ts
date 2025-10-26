@@ -200,6 +200,29 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     color: '#3b82f6',
     popCap: 1  // One researcher at a time
   },
+  smelter: {
+    category: 'Production',
+    name: 'Smelter',
+    description: 'Smelt raw ores (coal, copper, steel, silver, gold) into refined metal ingots for crafting.',
+    key: 'M',
+    cost: { wood: 40, stone: 30 },
+    hp: 200,
+    size: { w: 2, h: 2 },
+    build: 120,
+    color: '#dc2626',  // Hot red for smelting
+    popCap: 1  // One smelter at a time
+  },
+  cooling_rack: {
+    category: 'Production',
+    name: 'Cooling Rack',
+    description: 'Decorative cooling station for freshly smelted ingots. Not currently functional.',
+    key: 'C',
+    cost: { wood: 15, stone: 10 },
+    hp: 100,
+    size: { w: 1, h: 1 },
+    build: 40,
+    color: '#94a3b8'  // Cool gray
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {

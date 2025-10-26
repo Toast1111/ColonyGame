@@ -482,6 +482,94 @@ export class ItemDatabase {
           weight: 2.0
         },
         {
+          defName: 'SteelIngot',
+          label: 'steel ingot',
+          description: 'Refined steel ingot smelted from raw steel ore. Essential for advanced crafting.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 6,
+          weight: 3.0
+        },
+        {
+          defName: 'CopperIngot',
+          label: 'copper ingot',
+          description: 'Refined copper ingot smelted from raw copper ore. Used for electrical components.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 4,
+          weight: 2.8
+        },
+        {
+          defName: 'SilverIngot',
+          label: 'silver ingot',
+          description: 'Refined silver ingot smelted from raw silver ore. Valuable for trade and electronics.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 10,
+          weight: 3.5
+        },
+        {
+          defName: 'GoldIngot',
+          label: 'gold ingot',
+          description: 'Refined gold ingot smelted from raw gold ore. Highly valuable for trade and advanced tech.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 15,
+          weight: 4.0
+        },
+        {
+          defName: 'HotSteelIngot',
+          label: 'hot steel ingot',
+          description: 'Freshly smelted steel ingot. Too hot to use - must be placed on a cooling rack first.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 6,
+          weight: 3.0
+        },
+        {
+          defName: 'HotCopperIngot',
+          label: 'hot copper ingot',
+          description: 'Freshly smelted copper ingot. Too hot to use - must be placed on a cooling rack first.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 4,
+          weight: 2.8
+        },
+        {
+          defName: 'HotSilverIngot',
+          label: 'hot silver ingot',
+          description: 'Freshly smelted silver ingot. Too hot to use - must be placed on a cooling rack first.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 10,
+          weight: 3.5
+        },
+        {
+          defName: 'HotGoldIngot',
+          label: 'hot gold ingot',
+          description: 'Freshly smelted gold ingot. Too hot to use - must be placed on a cooling rack first.',
+          category: 'Resource',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 75,
+          value: 15,
+          weight: 4.0
+        },
+        {
           defName: 'Steel',
           label: 'steel',
           description: 'Refined metal suitable for advanced construction and weapons.',

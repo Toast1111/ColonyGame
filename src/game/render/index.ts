@@ -592,6 +592,30 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.fillRect(b.x, b.y + b.h + 2, b.w * b.cookingProgress, 4);
   }
 
+  // Stonecutting progress bar for stonecutting_table
+  if (b.kind === 'stonecutting_table' && b.done && b.cuttingProgress !== undefined && b.cuttingProgress > 0) {
+    ctx.fillStyle = '#0b1220'; 
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w, 4);
+    ctx.fillStyle = '#708090'; // Slate gray for stonecutting progress
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w * b.cuttingProgress, 4);
+  }
+
+  // Smelting progress bar for smelter
+  if (b.kind === 'smelter' && b.done && b.smeltingProgress !== undefined && b.smeltingProgress > 0) {
+    ctx.fillStyle = '#0b1220'; 
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w, 4);
+    ctx.fillStyle = '#dc2626'; // Hot red for smelting progress
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w * b.smeltingProgress, 4);
+  }
+
+  // Cooling progress bar for cooling_rack
+  if (b.kind === 'cooling_rack' && b.done && b.coolingProgress !== undefined && b.coolingProgress > 0) {
+    ctx.fillStyle = '#0b1220'; 
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w, 4);
+    ctx.fillStyle = '#6366f1'; // Cool blue-purple for cooling progress
+    ctx.fillRect(b.x, b.y + b.h + 2, b.w * b.coolingProgress, 4);
+  }
+
   // Turret range visualization
   if (b.kind === 'turret' && (b as any).range) { 
     const cx = b.x + b.w / 2; const cy = b.y + b.h / 2;

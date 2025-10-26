@@ -324,6 +324,10 @@ export const AUDIO_MANIFEST = {
     { name: 'MeleeHit_Metal_Sharp_1f', volume: 0.85 },
     { name: 'MeleeHit_Metal_Sharp_1g', volume: 0.85 },
     { name: 'MeleeHit_Metal_Sharp_1h', volume: 0.85 }
+  ]),
+
+  'music.gameover.sad': variants('music/game_over', [
+    { name: 'New Horizons', loop: true, volume: 0.4 }
   ])
 } as const satisfies Record<string, readonly AudioVariant[]>;
 

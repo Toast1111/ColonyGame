@@ -8,3 +8,5 @@
 
 export { updateCookingState } from './cookingState';
 export { updateStonecuttingState } from './stonecuttingState';
+export { updateSmeltingState } from './smeltingState';
+export { updateCoolingState } from './coolingState';

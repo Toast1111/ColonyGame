@@ -49,6 +49,7 @@ import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from 
 // import { getInventoryItemCount } from './systems/buildingInventory';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor, findBlockingDoor, requestDoorOpen, isDoorBlocking, releaseDoorQueue } from './systems/doorSystem';
+import { GameOverScreen } from './ui/GameOverScreen';
 import { GameState } from './core/GameState';
 import { TimeSystem } from './systems/TimeSystem';
 import { CameraSystem } from './systems/CameraSystem';
@@ -93,6 +94,9 @@ export class Game {
   simulationClock = SimulationClock.getInstance({ simulationHz: 30 });
   budgetManager = BudgetedExecutionManager.getInstance();
   adaptiveTickRate = new AdaptiveTickRateManager();
+  
+  // Game over screen
+  gameOverScreen = new GameOverScreen(this);
   
   deferredRebuildSystem = new (class DeferredRebuildSystem {
     private game: Game;
@@ -2445,6 +2449,12 @@ export class Game {
     return this.inputManager.keyPressed(k);
   }
   update(dt: number) {
+    // Update game over screen if active
+    if (this.gameOverScreen.isActive()) {
+      this.gameOverScreen.update(dt);
+      return; // Don't process any other game logic during game over
+    }
+    
     // If debug console is open, ignore gameplay hotkeys (space, etc.)
     const dc = (this as any).debugConsole;
     const consoleOpen = !!(dc && dc.open);
@@ -2700,6 +2710,37 @@ export class Game {
           }
         }
       }
+      
+      // Passive cooling rack system - 180 ticks = 6 seconds at 30Hz
+      if (b.kind === 'cooling_rack' && b.done && b.coolingColonist === 'PASSIVE' && b.coolingIngotType) {
+        // Cooling takes 180 simulation ticks = 180/30 = 6 seconds
+        const coolingSpeed = 1.0 / 6.0; // Complete in 6 seconds
+        b.coolingProgress = (b.coolingProgress || 0) + coolingSpeed * dt * this.fastForward;
+        
+        if (b.coolingProgress >= 1.0) {
+          // Cooling complete - convert hot ingot to regular ingot
+          const hotIngotType = b.coolingIngotType;
+          const cooledIngotMap: Record<string, string> = {
+            hot_copper_ingot: 'copper_ingot',
+            hot_steel_ingot: 'steel_ingot',
+            hot_silver_ingot: 'silver_ingot',
+            hot_gold_ingot: 'gold_ingot'
+          };
+          
+          const cooledType = cooledIngotMap[hotIngotType];
+          if (cooledType) {
+            // Drop cooled ingot next to rack
+            const dropPos = { x: b.x + b.w / 2, y: b.y + b.h + 8 };
+            this.itemManager.dropItems(cooledType as any, 1, dropPos);
+            this.msg(`${cooledType.replace('_', ' ')} cooled and ready!`, 'good');
+          }
+          
+          // Reset rack
+          b.coolingProgress = 0;
+          b.coolingColonist = undefined;
+          b.coolingIngotType = undefined;
+        }
+      }
     }
   // resource respawn
     this.tryRespawn(dt);
@@ -2843,7 +2884,12 @@ export class Game {
 
   // Win/Lose
   win() { this.paused = true; this.msg('You survived! Day 20 reached.', 'good'); alert('You survived to Day 20 — victory!'); }
-  lose() { this.paused = true; this.msg('HQ destroyed. Colony fell.', 'bad'); alert('Your HQ was destroyed. Game over.'); }
+  lose() { 
+    this.paused = true; 
+    this.msg('HQ destroyed. Colony fell.', 'bad'); 
+    // Start dramatic game over sequence instead of alert
+    this.gameOverScreen.start();
+  }
 
   // Pathfinding grid and helpers
   grid = makeGrid();
