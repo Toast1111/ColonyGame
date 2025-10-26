@@ -2451,7 +2451,8 @@ export class Game {
       // If extremely fatigued, reduce work effectiveness slightly (handled via movement slow); no direct hp damage
       if (c.hp <= 0) { 
         c.alive = false; 
-        // Will be removed on next update cycle
+        // Will be removed on next update cycle (lines 2432-2439 above will catch them)
+        // No duplicate risk: they'll be added to deadColonists once and removed immediately
       }
     }
   }
