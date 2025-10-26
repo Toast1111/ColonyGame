@@ -42,6 +42,7 @@ export interface RockEntity {
 export class GameState {
   // Core entities
   colonists: Colonist[] = [];
+  deadColonists: Colonist[] = []; // Track dead colonists for game over screen
   enemies: Enemy[] = [];
   buildings: Building[] = [];
   trees: TreeEntity[] = [];
@@ -110,6 +111,7 @@ export class GameState {
    */
   reset(): void {
     this.colonists = [];
+    this.deadColonists = [];
     this.enemies = [];
     this.buildings = [];
     this.trees = [];
