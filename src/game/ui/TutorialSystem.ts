@@ -49,9 +49,9 @@ export class TutorialSystem {
       title: 'Welcome, Commander',
       instruction: 'Press SPACE to begin',
       description: [
-        'Your ship crashed on an alien planet',
-        'Build a base and survive the nights',
-        'Learn the essentials in this tutorial'
+        'If you wish to survive through the night',
+        'then you must learn the essentials.',
+        'Luckily, I am here to guide you.'
       ],
       blockAllClicks: true,
       allowedKeys: [' ', 'escape']
@@ -61,7 +61,6 @@ export class TutorialSystem {
       title: 'Step 1: Camera Movement',
       instruction: 'Use W/A/S/D keys to move the camera',
       description: [
-        'Your headquarters is at the center',
         'Move around to explore'
       ],
       waitForCondition: (game) => {
@@ -89,7 +88,7 @@ export class TutorialSystem {
         return Math.abs(game.camera.zoom - 1.0) > 0.2;
       },
       blockAllClicks: true,
-      allowedKeys: ['escape']
+      allowedKeys: ['escape', '+', '-']
     },
     {
       id: 'open-build-menu',
@@ -111,8 +110,8 @@ export class TutorialSystem {
       title: 'Step 4: Select House',
       instruction: 'Click on the "House" building in the menu',
       description: [
-        'Look for the house icon in the build panel',
-        'Houses shelter your colonists'
+        'Look for the housing tab in the build panel.',
+        'Then click on "house" to select it.'
       ],
       onEnter: (game) => {
         // Ensure build menu is open
@@ -129,7 +128,7 @@ export class TutorialSystem {
     {
       id: 'place-house',
       title: 'Step 5: Place House',
-      instruction: 'Left-click near your HQ to place it',
+      instruction: 'Left click near your HQ to place it',
       description: [
         'Green = valid, Red = blocked'
       ],
@@ -152,7 +151,7 @@ export class TutorialSystem {
     {
       id: 'work-tab',
       title: 'Step 6: Work Priorities',
-      instruction: 'Click "Work" at the bottom (or press P)',
+      instruction: 'Click "Work" at the bottom of your screen (or press P)',
       description: [
         'Opens the work priority panel'
       ],
@@ -233,7 +232,7 @@ export class TutorialSystem {
     {
       id: 'time-controls',
       title: 'Step 10: Time Controls',
-      instruction: 'Try using 1, 2, 3, 4 keys for game speed',
+      instruction: 'Try using the "F" key for fast forward',
       description: [
         '1 = Pause, 2 = Normal, 3 = Fast, 4 = Faster',
         'SPACE also pauses/unpauses',
@@ -245,7 +244,7 @@ export class TutorialSystem {
         game.selectedBuild = null;
       },
       blockAllClicks: true,
-      allowedKeys: ['escape', ' ', '1', '2', '3', '4']
+      allowedKeys: ['escape', ' ', '1', '2', '3', '4', 'f']
     },
     {
       id: 'debug-console',
