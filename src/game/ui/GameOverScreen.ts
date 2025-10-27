@@ -111,8 +111,8 @@ export class GameOverScreen {
   ];
   
   private creditsScrollY: number = 0;
-  private readonly CREDITS_SCROLL_SPEED = 50; // pixels per second
-  private readonly CREDIT_LINE_HEIGHT = 150; // Increased spacing for cinematic large text
+  private readonly CREDITS_SCROLL_SPEED_PERCENT = 0.05; // % of screen height per second
+  private readonly CREDIT_LINE_HEIGHT_PERCENT = 0.15; // % of screen height per credit line
   
   constructor(game: Game) {
     this.game = game;
@@ -142,6 +142,7 @@ export class GameOverScreen {
     if (!this.active) return;
     
     const elapsed = (performance.now() / 1000) - this.startTime;
+    const h = this.game.canvas.height;
     
     // Fade in black overlay
     if (elapsed < this.FADE_DURATION) {
@@ -152,7 +153,7 @@ export class GameOverScreen {
     
     // After guilt phase, scroll credits
     if (elapsed > this.TOTAL_BEFORE_CREDITS) {
-      this.creditsScrollY += this.CREDITS_SCROLL_SPEED * dt;
+      this.creditsScrollY += (this.CREDITS_SCROLL_SPEED_PERCENT * h) * dt;
     }
   }
   
@@ -182,9 +183,10 @@ export class GameOverScreen {
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       
-      // Calculate vertical positions for stacking messages
-      const centerY = h / 2;
-      const lineSpacing = 90; // Space between lines
+      // Calculate vertical positions for stacking messages (percentage-based)
+      // Moved higher up on screen to give memorial more room
+      const centerY = h * 0.35; // Was h / 2, now 35% down the screen
+      const lineSpacing = h * 0.09; // 9% of screen height between lines
       
       // Show messages based on timing - they stack vertically
       let currentLine = 0;
@@ -212,39 +214,42 @@ export class GameOverScreen {
             const yOffset = (currentLine - 1.5) * lineSpacing; // Center the stack
             const yPos = centerY + yOffset;
             
-            // Different styling for each message
+            // Different styling for each message (percentage-based font sizes)
             if (msg.text === 'EVERYONE' || msg.text === 'IS DEAD') {
-              // All caps messages - huge, bold, impact font style
-              ctx.font = 'bold 72px Arial, sans-serif'; // Use system font for impact
+              // All caps messages - huge, bold, impact font style (7% of screen height)
+              const fontSize = Math.max(32, h * 0.07);
+              ctx.font = `bold ${fontSize}px Arial, sans-serif`;
               ctx.fillStyle = '#ff0000'; // Stark red
               
-              // Add text shadow for more drama
+              // Add text shadow for more drama (percentage-based)
               ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-              ctx.shadowBlur = 20;
-              ctx.shadowOffsetX = 4;
-              ctx.shadowOffsetY = 4;
+              ctx.shadowBlur = h * 0.02;
+              ctx.shadowOffsetX = w * 0.003;
+              ctx.shadowOffsetY = h * 0.004;
               
               ctx.fillText(msg.text, w / 2, yPos);
             } else if (msg.text === 'YOU FAILED THEM') {
-              // Accusatory message - medium impact
-              ctx.font = 'bold 56px Arial, sans-serif';
+              // Accusatory message - medium impact (5.5% of screen height)
+              const fontSize = Math.max(28, h * 0.055);
+              ctx.font = `bold ${fontSize}px Arial, sans-serif`;
               ctx.fillStyle = '#ffffff';
               
               ctx.shadowColor = 'rgba(255, 0, 0, 0.6)';
-              ctx.shadowBlur = 15;
-              ctx.shadowOffsetX = 3;
-              ctx.shadowOffsetY = 3;
+              ctx.shadowBlur = h * 0.015;
+              ctx.shadowOffsetX = w * 0.002;
+              ctx.shadowOffsetY = h * 0.003;
               
               ctx.fillText(msg.text, w / 2, yPos);
             } else {
-              // Final message - softer, guilt-inducing
-              ctx.font = 'italic 40px Georgia, serif'; // Serif for emotion
+              // Final message - softer, guilt-inducing (4% of screen height)
+              const fontSize = Math.max(20, h * 0.04);
+              ctx.font = `italic ${fontSize}px Georgia, serif`;
               ctx.fillStyle = '#cccccc';
               
               ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
-              ctx.shadowBlur = 10;
-              ctx.shadowOffsetX = 2;
-              ctx.shadowOffsetY = 2;
+              ctx.shadowBlur = h * 0.01;
+              ctx.shadowOffsetX = w * 0.001;
+              ctx.shadowOffsetY = h * 0.002;
               
               ctx.fillText(msg.text, w / 2, yPos);
             }
@@ -267,48 +272,54 @@ export class GameOverScreen {
       ctx.textBaseline = 'top';
       
       // Start credits from bottom of screen
+      const creditLineHeight = h * this.CREDIT_LINE_HEIGHT_PERCENT;
       const startY = h - this.creditsScrollY + h * 0.2;
       
       // Draw each credit entry
       for (let i = 0; i < this.credits.length; i++) {
         const credit = this.credits[i];
-        const y = startY + i * this.CREDIT_LINE_HEIGHT;
+        const y = startY + i * creditLineHeight;
         
-        // Only draw if visible
-        if (y > -150 && y < h + 150) {
-          // Title (role) - smaller gray text
-          ctx.font = '28px "Press Start 2P", monospace';
+        // Only draw if visible (percentage-based culling)
+        const cullMargin = h * 0.15;
+        if (y > -cullMargin && y < h + cullMargin) {
+          // Title (role) - smaller gray text (2.8% of screen height)
+          const titleFontSize = Math.max(14, h * 0.028);
+          ctx.font = `${titleFontSize}px "Press Start 2P", monospace`;
           ctx.fillStyle = '#888888';
           ctx.fillText(credit.title, w / 2, y);
           
-          // Name (HUGE CINEMATIC!)
-          ctx.font = 'bold 64px "Press Start 2P", monospace';
+          // Name (HUGE CINEMATIC! 6.4% of screen height)
+          const nameFontSize = Math.max(32, h * 0.064);
+          ctx.font = `bold ${nameFontSize}px "Press Start 2P", monospace`;
           ctx.fillStyle = '#ffffff';
           
           // Add subtle glow for cinematic effect
           ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
-          ctx.shadowBlur = 8;
+          ctx.shadowBlur = h * 0.008;
           
-          ctx.fillText(credit.name, w / 2, y + 50);
+          ctx.fillText(credit.name, w / 2, y + h * 0.05);
           
           // Reset shadow
           ctx.shadowBlur = 0;
           
-          // Draw subtle dividing line below each entry
+          // Draw subtle dividing line below each entry (30% of screen width)
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.moveTo(w / 2 - 300, y + 110);
-          ctx.lineTo(w / 2 + 300, y + 110);
+          const lineWidth = w * 0.3;
+          ctx.moveTo(w / 2 - lineWidth, y + h * 0.11);
+          ctx.lineTo(w / 2 + lineWidth, y + h * 0.11);
           ctx.stroke();
         }
       }
       
       // Check if credits finished scrolling
-      const totalCreditsHeight = this.credits.length * this.CREDIT_LINE_HEIGHT;
+      const totalCreditsHeight = this.credits.length * creditLineHeight;
       if (this.creditsScrollY > totalCreditsHeight + h) {
         // Credits finished - could add a "Press any key to restart" message
-        ctx.font = '20px "Press Start 2P", monospace';
+        const endFontSize = Math.max(12, h * 0.02);
+        ctx.font = `${endFontSize}px "Press Start 2P", monospace`;
         ctx.fillStyle = '#ffff00';
         ctx.fillText('Press R to restart (if that was implemented)', w / 2, h / 2);
       }
@@ -352,7 +363,8 @@ export class GameOverScreen {
       // No dead colonists - show message in development
       ctx.save();
       ctx.globalAlpha = opacity;
-      ctx.font = '20px "Press Start 2P", monospace';
+      const noColonistsFontSize = Math.max(12, h * 0.02);
+      ctx.font = `${noColonistsFontSize}px "Press Start 2P", monospace`;
       ctx.fillStyle = '#888888';
       ctx.textAlign = 'center';
       ctx.fillText('(No fallen colonists to remember)', w / 2, h * 0.65);
@@ -360,10 +372,11 @@ export class GameOverScreen {
       return;
     }
     
-    // Calculate grid layout for photos
-    const photoSize = 120;
-    const spacing = 20;
-    const photosPerRow = Math.min(5, deadColonists.length);
+    // Calculate grid layout for photos (percentage-based)
+    // Scaled up by 25% from 8% to 10% of screen height
+    const photoSize = Math.min(100, h * 0.10); // 10% of screen height, max 100px
+    const spacing = photoSize * 0.25; // Proportional spacing (25% of photo size)
+    const photosPerRow = Math.min(8, deadColonists.length); // More photos per row since they're smaller
     const totalRows = Math.ceil(deadColonists.length / photosPerRow);
     
     // Calculate starting position to center the grid
@@ -384,9 +397,10 @@ export class GameOverScreen {
       const x = startX + col * (photoSize + spacing);
       const y = startY + row * (photoSize + spacing);
       
-      // Draw photo frame (dark border)
+      // Draw photo frame (dark border) - proportional to photo size
+      const borderWidth = photoSize * 0.033;
       ctx.fillStyle = '#222222';
-      ctx.fillRect(x - 4, y - 4, photoSize + 8, photoSize + 8);
+      ctx.fillRect(x - borderWidth, y - borderWidth, photoSize + borderWidth * 2, photoSize + borderWidth * 2);
       
       // Draw photo background
       ctx.fillStyle = '#1a1a1a';
@@ -402,9 +416,10 @@ export class GameOverScreen {
         // Draw colonist avatar centered and scaled
         tempCtx.save();
         
-        // Draw the actual colonist avatar at larger size
+        // Draw the actual colonist avatar at larger size (80% of photo size)
         // drawColonistAvatar signature: (ctx, x, y, colonist, size, isSelected)
-        drawColonistAvatar(tempCtx, photoSize / 2, photoSize / 2, colonist, 32, false);
+        const avatarSize = photoSize * 0.8;
+        drawColonistAvatar(tempCtx, photoSize / 2, photoSize / 2, colonist, avatarSize, false);
         
         tempCtx.restore();
         
@@ -423,11 +438,12 @@ export class GameOverScreen {
         ctx.drawImage(tempCanvas, x, y);
       }
       
-      // Draw colonist name below photo
-      ctx.font = '12px "Press Start 2P", monospace';
+      // Draw colonist name below photo (proportional font size)
+      const nameFontSize = Math.max(8, photoSize * 0.1);
+      ctx.font = `${nameFontSize}px "Press Start 2P", monospace`;
       ctx.fillStyle = '#cccccc';
       ctx.textAlign = 'center';
-      ctx.fillText(colonist.profile?.name || 'Unknown', x + photoSize / 2, y + photoSize + 16);
+      ctx.fillText(colonist.profile?.name || 'Unknown', x + photoSize / 2, y + photoSize + photoSize * 0.133);
       
       // Draw subtle vignette around photo
       const gradient = ctx.createRadialGradient(
