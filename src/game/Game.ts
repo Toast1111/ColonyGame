@@ -50,6 +50,7 @@ import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from 
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
 import { updateDoor, initializeDoor, findBlockingDoor, requestDoorOpen, isDoorBlocking, releaseDoorQueue } from './systems/doorSystem';
 import { GameOverScreen } from './ui/GameOverScreen';
+import { TutorialSystem } from './ui/TutorialSystem';
 import { GameState } from './core/GameState';
 import { TimeSystem } from './systems/TimeSystem';
 import { CameraSystem } from './systems/CameraSystem';
@@ -97,6 +98,9 @@ export class Game {
   
   // Game over screen
   gameOverScreen = new GameOverScreen(this);
+  
+  // Tutorial system
+  tutorialSystem = new TutorialSystem(this);
   
   deferredRebuildSystem = new (class DeferredRebuildSystem {
     private game: Game;
@@ -827,6 +831,11 @@ export class Game {
       this.setTouchUIEnabled(false);
       if (this.touchUIManualOverride === null) {
         this.isActuallyTouchDevice = false;
+      }
+
+      // TUTORIAL BLOCKS MOST CLICKS - Check FIRST
+      if (this.tutorialSystem.isActive() && this.tutorialSystem.shouldBlockClick(e)) {
+        return; // Tutorial is blocking this click
       }
 
       // PRIORITY PANEL IS MODAL - Check first and block all other interactions
@@ -1870,6 +1879,16 @@ export class Game {
     );
     this.itemManager.updateStockpileItems(foodZone.id, ['food', 'wheat', 'bread']);
     this.msg("Welcome! Build farms before night, then turrets.");
+    
+    // Start tutorial for first-time players
+    if (this.tutorialSystem.shouldAutoStart()) {
+      // Small delay before starting tutorial to let world render
+      setTimeout(() => {
+        if (this.tutorialSystem && !this.paused) {
+          this.tutorialSystem.start();
+        }
+      }, 500);
+    }
   }
 
   spawnColonist(pos: { x: number; y: number }) {
@@ -2460,6 +2479,12 @@ export class Game {
     return this.inputManager.keyPressed(k);
   }
   update(dt: number) {
+    // Update tutorial system if active
+    if (this.tutorialSystem.isActive()) {
+      this.tutorialSystem.update(dt);
+      return; // Don't process any other game logic during tutorial
+    }
+    
     // Update game over screen if active
     if (this.gameOverScreen.isActive()) {
       this.gameOverScreen.update(dt);

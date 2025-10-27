@@ -27,6 +27,13 @@ export class HelpPanel {
       <h2>How to play</h2>
       <div><b>Goal:</b> Gather wood & stone, build farms for food, add houses for pop cap; survive nightly raids with turrets/walls.</div>
       
+      <div style="margin-top: 12px;"><b>📚 Tutorial:</b></div>
+      <div style="margin-left: 16px;">
+        <button id="btnReplayTutorial" style="padding: 8px 16px; margin: 4px 0; cursor: pointer; background: #4a5568; color: white; border: none; border-radius: 4px;">
+          Replay Tutorial
+        </button>
+      </div>
+      
       <div style="margin-top: 12px;"><b>🎮 Controls:</b></div>
       <div style="margin-left: 16px;">
         • <b>B</b> - Build tab | <b>P</b> - Work tab | <b>H</b> - Help (this panel)<br>
@@ -53,10 +60,33 @@ export class HelpPanel {
   }
 
   /**
+   * Attach event listeners for tutorial button
+   */
+  private attachEventListeners(): void {
+    const btnReplayTutorial = document.getElementById('btnReplayTutorial');
+    if (btnReplayTutorial) {
+      btnReplayTutorial.addEventListener('click', () => {
+        const game = (window as any).game;
+        if (game && game.tutorialSystem) {
+          this.hide(); // Close help panel
+          game.tutorialSystem.start();
+        }
+      });
+    }
+  }
+
+  /**
    * Toggle help panel visibility
    */
   toggle(): void {
     this.element.hidden = !this.element.hidden;
+    
+    // Attach event listeners when showing
+    if (!this.element.hidden) {
+      // Need to wait for DOM update
+      setTimeout(() => this.attachEventListeners(), 0);
+    }
+    
     try { (window as any).game?.audioManager?.play(this.element.hidden ? 'ui.panel.close' : 'ui.panel.open'); } catch {}
   }
 
@@ -65,6 +95,7 @@ export class HelpPanel {
    */
   show(): void {
     this.element.hidden = false;
+    setTimeout(() => this.attachEventListeners(), 0);
     try { (window as any).game?.audioManager?.play('ui.panel.open'); } catch {}
   }
 
