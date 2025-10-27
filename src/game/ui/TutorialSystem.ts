@@ -36,6 +36,7 @@ export class TutorialSystem {
   private introPhase: 'fade-in' | 'title' | 'fade-out' | 'complete' = 'fade-in';
   private introTimer: number = 0;
   private fadeOpacity: number = 0;
+  private continueButtonBounds: { x: number; y: number; w: number; h: number } | null = null;
   
   // Intro timing (seconds)
   private readonly INTRO_FADE_IN = 2.0;
@@ -47,11 +48,11 @@ export class TutorialSystem {
     {
       id: 'welcome',
       title: 'Welcome, Commander',
-      instruction: 'Press SPACE to begin',
+      instruction: 'Tap Continue or press SPACE to begin',
       description: [
-        'If you wish to survive through the night',
-        'then you must learn the essentials.',
-        'Luckily, I am here to guide you.'
+        'Your ship crashed on an alien planet',
+        'Build a base and survive the nights',
+        'Learn the essentials in this tutorial'
       ],
       blockAllClicks: true,
       allowedKeys: [' ', 'escape']
@@ -59,9 +60,9 @@ export class TutorialSystem {
     {
       id: 'camera-movement',
       title: 'Step 1: Camera Movement',
-      instruction: 'Use W/A/S/D keys to move the camera',
+      instruction: 'Drag screen or use W/A/S/D to move camera',
       description: [
-        'Move around to explore'
+        'Tap Continue after moving around'
       ],
       waitForCondition: (game) => {
         const moved = Math.abs(game.camera.x - HQ_POS.x) > 150 || 
@@ -72,23 +73,22 @@ export class TutorialSystem {
         game.cameraSystem.centerOn(HQ_POS.x, HQ_POS.y);
         game.camera.zoom = 1.0;
       },
-      blockAllClicks: true,
-      allowedKeys: ['w', 'a', 's', 'd', 'escape']
+      blockAllClicks: false,
+      allowedKeys: ['w', 'a', 's', 'd', 'escape', ' ']
     },
     {
       id: 'camera-zoom',
       title: 'Step 2: Camera Zoom',
-      instruction: 'Scroll your mouse wheel UP to zoom in',
+      instruction: 'Pinch to zoom or use mouse wheel',
       description: [
-        'Scroll DOWN to zoom out',
-        'Or use + and - keys'
+        'Tap Continue after zooming'
       ],
-      arrowTo: { x: 0.5, y: 0.3 }, // Arrow pointing near center
+      arrowTo: { x: 0.5, y: 0.3 },
       waitForCondition: (game) => {
         return Math.abs(game.camera.zoom - 1.0) > 0.2;
       },
-      blockAllClicks: true,
-      allowedKeys: ['escape', '+', '-']
+      blockAllClicks: false,
+      allowedKeys: ['escape', ' ', '+', '-']
     },
     {
       id: 'open-build-menu',
@@ -676,6 +676,35 @@ export class TutorialSystem {
       ctx.fillText('[ESC] Skip Tutorial', boxX + boxWidth / 2, boxY + boxHeight - boxPadding + 5);
     }
     
+    // Add Continue button for steps that allow SPACE
+    if (step.allowedKeys?.includes(' ') && !step.waitForCondition) {
+      const btnY = boxY + boxHeight + 20;
+      const btnW = 140;
+      const btnH = 45;
+      const btnX = boxX + (boxWidth - btnW) / 2;
+      
+      // Store button bounds for click detection
+      this.continueButtonBounds = { x: btnX, y: btnY, w: btnW, h: btnH };
+      
+      // Button background
+      ctx.fillStyle = '#4a90e2';
+      ctx.fillRect(btnX, btnY, btnW, btnH);
+      
+      // Button border
+      ctx.strokeStyle = '#64b5f6';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(btnX, btnY, btnW, btnH);
+      
+      // Button text
+      ctx.font = 'bold 16px Arial';
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Continue', btnX + btnW / 2, btnY + btnH / 2);
+    } else {
+      this.continueButtonBounds = null;
+    }
+    
     ctx.restore();
   }
   
@@ -959,6 +988,29 @@ export class TutorialSystem {
    */
   wasSkipped(): boolean {
     return this.skipped;
+  }
+  
+  /**
+   * Handle click/tap events for Continue button
+   */
+  handleClick(x: number, y: number): boolean {
+    if (!this.active || this.introPhase !== 'complete') return false;
+    if (!this.continueButtonBounds) return false;
+    
+    const btn = this.continueButtonBounds;
+    const clickedButton = x >= btn.x && x <= btn.x + btn.w && 
+                          y >= btn.y && y <= btn.y + btn.h;
+    
+    if (clickedButton) {
+      // Simulate SPACE press to advance
+      const step = this.steps[this.currentStepIndex];
+      if (step.allowedKeys?.includes(' ') && !step.waitForCondition) {
+        this.advanceStep();
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   /**

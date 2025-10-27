@@ -1479,7 +1479,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Play construction work sounds while actively building
         const buildingDef = BUILD_TYPES[b.kind];
         if (buildingDef) {
-          const audioKey = getConstructionAudio(b.kind, buildingDef);
+          const audioClip = getConstructionAudio(b.kind, buildingDef);
           const currentTime = c.t || 0;
           
           // Play construction audio every 1-2 seconds (randomized for natural feel)
@@ -1487,16 +1487,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const audioInterval = 1.5 + Math.random() * 0.5; // 1.5-2.0 seconds
           
           if (!c.lastConstructionAudioTime || (currentTime - c.lastConstructionAudioTime) >= audioInterval) {
-            // Play construction sound (AudioManager will select random variant)
-            (game as any).playAudio?.(audioKey, { 
+            // Play construction sound with per-clip volume control
+            (game as any).playAudio?.(audioClip.key, { 
               category: 'buildings',
-              volume: 0.75,
+              volume: audioClip.volume ?? 0.75,
               rng: Math.random, // Pass the function, not the result
               position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
               listenerPosition: (game as any).audioManager?.getListenerPosition()
             });
             c.lastConstructionAudioTime = currentTime;
-            c.activeConstructionAudio = audioKey;
+            c.activeConstructionAudio = audioClip.key;
           }
         }
         // === END CONSTRUCTION AUDIO ===
@@ -1516,10 +1516,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           }
           // Play completion sound when building finishes
           if (buildingDef) {
-            const completeAudioKey = getConstructionCompleteAudio(b.kind, buildingDef);
-            (game as any).playAudio?.(completeAudioKey, {
+            const completeAudioClip = getConstructionCompleteAudio(b.kind, buildingDef);
+            (game as any).playAudio?.(completeAudioClip.key, {
               category: 'buildings',
-              volume: 0.85,
+              volume: completeAudioClip.volume ?? 0.85,
               position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
               listenerPosition: (game as any).audioManager?.getListenerPosition()
             });

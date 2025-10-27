@@ -833,9 +833,14 @@ export class Game {
         this.isActuallyTouchDevice = false;
       }
 
-      // TUTORIAL BLOCKS MOST CLICKS - Check FIRST
-      if (this.tutorialSystem.isActive() && this.tutorialSystem.shouldBlockClick(e)) {
-        return; // Tutorial is blocking this click
+      // TUTORIAL - Check for Continue button click first
+      if (this.tutorialSystem.isActive()) {
+        if (this.tutorialSystem.handleClick(e.offsetX * this.DPR, e.offsetY * this.DPR)) {
+          return; // Tutorial Continue button was clicked
+        }
+        if (this.tutorialSystem.shouldBlockClick(e)) {
+          return; // Tutorial is blocking this click
+        }
       }
 
       // PRIORITY PANEL IS MODAL - Check first and block all other interactions
