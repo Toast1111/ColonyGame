@@ -194,6 +194,137 @@ export function getDoorOpenAmount(door: Building): number {
 }
 
 /**
+ * Handle colonist waiting for door to open
+ * Returns true if colonist should continue movement, false if they should wait
+ */
+export function handleColonistWaitingForDoor(colonist: Colonist): boolean {
+  if (!colonist.waitingForDoor) return true;
+  
+  const door = colonist.waitingForDoor;
+  const doorValid = door && door.kind === 'door' && door.done;
+  
+  if (!doorValid) {
+    // Door no longer exists or valid - clear waiting state
+    if (door && door.doorQueue && colonist.id) {
+      releaseDoorQueue(door, colonist.id);
+    }
+    colonist.waitingForDoor = null;
+    colonist.doorWaitStart = undefined;
+    colonist.doorPassingThrough = null;
+    colonist.doorApproachVector = null;
+    return true;
+  } 
+  
+  if (isDoorBlocking(door)) {
+    // Still blocked - request door open and continue waiting
+    requestDoorOpen(door, colonist, 'colonist');
+    if (!colonist.doorWaitStart) {
+      colonist.doorWaitStart = colonist.t || 0;
+    }
+    return false; // Keep waiting
+  } 
+  
+  // Door is now passable - waitingAtDoor state will clear flags this frame
+  return false; // Let FSM handle transition
+}
+
+/**
+ * Check for blocking doors ahead and setup waiting if needed
+ * Returns true if colonist should wait, false if they can continue
+ */
+export function checkForBlockingDoorAhead(colonist: Colonist, dx: number, dy: number, L: number, game: any): boolean {
+  if (colonist.waitingForDoor || L <= 1e-3) return false;
+  
+  const blockingDoor = findBlockingDoor(game, colonist);
+  if (!blockingDoor || !isDoorBlocking(blockingDoor)) return false;
+  
+  const doorCenterX = blockingDoor.x + blockingDoor.w / 2;
+  const doorCenterY = blockingDoor.y + blockingDoor.h / 2;
+  const toDoorX = doorCenterX - colonist.x;
+  const toDoorY = doorCenterY - colonist.y;
+  const doorAheadDot = dx * toDoorX + dy * toDoorY;
+  
+  if (doorAheadDot > 0) {
+    const doorDist = Math.hypot(toDoorX, toDoorY);
+    // Require the door to be reasonably close to the current waypoint direction
+    const dirMag = L || 1;
+    const angleCos = doorDist > 0 ? doorAheadDot / (dirMag * doorDist) : 1;
+    
+    if (doorDist <= L + Math.max(blockingDoor.w, blockingDoor.h) && angleCos >= 0.4) {
+      // Setup waiting for door
+      requestDoorOpen(blockingDoor, colonist, 'colonist');
+      colonist.waitingForDoor = blockingDoor;
+      colonist.doorWaitStart = colonist.t || 0;
+      colonist.doorPassingThrough = null;
+      const approachX = colonist.x - doorCenterX;
+      const approachY = colonist.y - doorCenterY;
+      colonist.doorApproachVector = { x: approachX, y: approachY };
+      return true; // Start waiting
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * Handle colonist passing through door (cleanup after passing)
+ * Returns true if colonist is still passing through, false if done
+ */
+export function handleColonistPassingThroughDoor(colonist: Colonist): boolean {
+  if (!colonist.doorPassingThrough) return false;
+  
+  const door = colonist.doorPassingThrough;
+  const doorValid = door && door.kind === 'door' && door.done;
+  
+  if (!doorValid) {
+    // Door no longer valid - cleanup
+    if (door && colonist.id) {
+      releaseDoorQueue(door, colonist.id);
+    }
+    colonist.doorPassingThrough = null;
+    colonist.doorApproachVector = null;
+    return false;
+  }
+  
+  const centerX = door.x + door.w / 2;
+  const centerY = door.y + door.h / 2;
+  const relX = colonist.x - centerX;
+  const relY = colonist.y - centerY;
+  const relDist = Math.hypot(relX, relY);
+  const approach = colonist.doorApproachVector;
+  const clearance = Math.max(door.w, door.h) * 0.5;
+  const farThreshold = clearance * 4;
+  let shouldRelease = false;
+
+  if (approach) {
+    const approachMag = Math.hypot(approach.x, approach.y);
+    if (approachMag > 1e-3) {
+      const dot = relX * approach.x + relY * approach.y;
+      const denom = approachMag * Math.max(relDist, 1e-3);
+      const normalizedDot = dot / denom;
+      const crossedPlane = normalizedDot <= -0.15;
+      const overshoot = relDist > approachMag + clearance * 0.6;
+      shouldRelease = (crossedPlane && relDist >= clearance * 0.6) || overshoot || relDist >= farThreshold;
+    } else {
+      shouldRelease = relDist >= clearance;
+    }
+  } else {
+    shouldRelease = relDist >= clearance;
+  }
+
+  if (shouldRelease) {
+    if (door && colonist.id) {
+      releaseDoorQueue(door, colonist.id);
+    }
+    colonist.doorPassingThrough = null;
+    colonist.doorApproachVector = null;
+    return false;
+  }
+  
+  return true; // Still passing through
+}
+
+/**
  * Enemy attack on door
  */
 export function attackDoor(door: Building, damage: number, game: any): boolean {

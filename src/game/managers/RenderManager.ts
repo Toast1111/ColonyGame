@@ -9,6 +9,7 @@ import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloor
 import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/panels/colonistProfile';
+import { drawLongPressProgress } from '../ui/contextMenu';
 import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
 import { drawMobilePlacementUI } from '../ui/mobilePlacement';
@@ -451,7 +452,7 @@ export class RenderManager {
     }
 
     // Long press progress circle
-    (game as any).drawLongPressProgress();
+    drawLongPressProgress(game);
 
     // Enemies (with culling) - now use sprite rendering like colonists
     for (let i = 0; i < game.enemies.length; i++) {

@@ -17,6 +17,10 @@ import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, draw
 import { WorkGiverManager } from './systems/workGiverManager';
 import { ReservationManager } from './managers/ReservationManager';
 import { TaskManager } from './managers/TaskManager';
+import { MedicalManager } from './managers/MedicalManager';
+import { BuildingManager } from './managers/BuildingManager';
+import { ColonistActionManager } from './managers/ColonistActionManager';
+import { ColonistNavigationManager } from './managers/ColonistNavigationManager';
 import { createEnemyWithProfile } from './enemy_systems/enemyGenerator';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
@@ -351,6 +355,12 @@ export class Game {
   public inventoryManager = new InventoryManager(); // Equipment and item management - no more paste-eating! 🍝
   public researchManager!: ResearchManager; // Research system - technology progression
   public researchUI!: ResearchUI; // Research UI panel
+  
+  // New manager architecture refactor managers
+  public medicalManager!: MedicalManager; // Medical care and treatment coordination
+  public buildingManager!: BuildingManager; // Building queries and operations
+  public colonistActionManager!: ColonistActionManager; // Colonist actions and commands
+  public colonistNavigationManager!: ColonistNavigationManager; // Colonist movement and navigation
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -396,6 +406,12 @@ export class Game {
     this.researchManager = new ResearchManager();
     this.researchUI = new ResearchUI(this.researchManager, this);
     
+    // Initialize new managers (refactor)
+    this.medicalManager = new MedicalManager(this);
+    this.buildingManager = new BuildingManager(this);
+    this.colonistActionManager = new ColonistActionManager(this);
+    this.colonistNavigationManager = new ColonistNavigationManager(this);
+    
     // Initialize camera system
     this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
     this.cameraSystem.setZoom(1);
@@ -432,7 +448,7 @@ export class Game {
   // Previously more paste-eating behavior (Game.ts lines 395-555).
   // Now we delegate to InventoryManager - no more eating inventory paste! 🍝✨
   
-  /** Get equipped items - DELEGATED to InventoryManager */
+  /** Get equipped items - DELEGATED to InventoryManager so all this needs to be refactored and then moved*/
   private getEquippedItems(c: Colonist) {
     return this.inventoryManager.getEquippedItems(c);
   }
@@ -2062,343 +2078,20 @@ export class Game {
   // Expose reservation state for work givers (backward compatibility)
   get assignedTargets(): WeakSet<object> { return this.reservationManager.getAssignedTargets(); }
   get assignedTiles(): Set<string> { return this.reservationManager.getAssignedTiles(); }
-  moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10) {
-    // Check if colonist is using async pathfinding mode (via PathRequestQueue)
-    const colonistAny = c as any;
-    const useAsync = colonistAny.useAsyncPathfinding === true;
-
-    // periodic re-pathing but only if goal changed or timer elapsed - REPATH TIMER TEMPORARILY DISABLED
-    // c.repath = (c.repath || 0) - dt; // TEMPORARILY DISABLED
-    const goalChanged = target && (!c.pathGoal || Math.hypot(c.pathGoal.x - target.x, c.pathGoal.y - target.y) > 24);
-    if (target && (goalChanged || !c.path || c.pathIndex == null)) {
-      if (useAsync) {
-        const pending = colonistAny.pendingPathRequest as undefined | {
-          targetX: number;
-          targetY: number;
-          requestId: number;
-          startedAt: number;
-          fallbackIssued?: boolean;
-        };
-        const samePendingTarget = pending
-          ? Math.abs(pending.targetX - target.x) < 1 && Math.abs(pending.targetY - target.y) < 1
-          : false;
-
-        const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        if (pending && pending.startedAt && now - pending.startedAt > 750 && !pending.fallbackIssued) {
-          pending.fallbackIssued = true;
-          const fallback = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
-          if (fallback && fallback.length) {
-            colonistAny.pendingPathRequest = undefined;
-            colonistAny.pendingPathPromise = null;
-            c.path = fallback;
-            c.pathIndex = 0;
-            c.pathGoal = { x: target.x, y: target.y };
-            return false;
-          }
-        }
-
-        if (!samePendingTarget) {
-          const requestId = (pending?.requestId ?? 0) + 1;
-          const requestInfo = {
-            targetX: target.x,
-            targetY: target.y,
-            requestId,
-            startedAt: now,
-            fallbackIssued: false,
-          };
-          colonistAny.pendingPathRequest = requestInfo;
-          const promise = this.navigationManager.computePathWithDangerAvoidanceAsync(
-            c,
-            c.x,
-            c.y,
-            target.x,
-            target.y
-          );
-          colonistAny.pendingPathPromise = promise;
-
-          promise
-            .then(path => {
-              const current = (c as any).pendingPathRequest;
-              if (!current || current.requestId !== requestId) {
-                return;
-              }
-
-              (c as any).pendingPathRequest = undefined;
-              (c as any).pendingPathPromise = null;
-
-              let resolved = path ?? undefined;
-              if (!resolved || !resolved.length) {
-                resolved = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y) ?? undefined;
-              }
-
-              if (resolved && resolved.length) {
-                c.path = resolved;
-                c.pathIndex = 0;
-                c.pathGoal = { x: target.x, y: target.y };
-              } else {
-                this.clearPath(c);
-              }
-            })
-            .catch(error => {
-              const current = (c as any).pendingPathRequest;
-              if (current && current.requestId === requestId) {
-                (c as any).pendingPathRequest = undefined;
-                (c as any).pendingPathPromise = null;
-              }
-              console.warn('[Game] Async pathfinding failed, using fallback:', error);
-              const fallback = this.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
-              if (fallback && fallback.length) {
-                c.path = fallback;
-                c.pathIndex = 0;
-                c.pathGoal = { x: target.x, y: target.y };
-              }
-            });
-        }
-
-        return false;
-      }
-
-      // Compute path immediately when not using async workers
-      const p = this.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
-      if (p && p.length) {
-        c.path = p;
-        c.pathIndex = 0;
-        c.pathGoal = { x: target.x, y: target.y };
-      }
-    }
-
-    if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) {
-      if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
-      return false;
-    }
-    // Use pathIndex to get current node
-    const node = c.path[c.pathIndex];
-    if (!node || node.x == null || node.y == null) {
-      // Invalid node - clear path and return failure
-      console.log(`Invalid path node at index ${c.pathIndex}, clearing path`);
-      this.clearPath(c);
-      if (target) { const d = Math.hypot(c.x - target.x, c.y - target.y); return d <= arrive; }
-      return false;
-    }
-    const dx = node.x - c.x; const dy = node.y - c.y; let L = Math.hypot(dx, dy);
-
-    // Handle door interactions before movement so colonists don't clip through
-    if (c.waitingForDoor) {
-      const door = c.waitingForDoor;
-      const doorValid = door && door.kind === 'door' && door.done;
-      if (!doorValid) {
-        if (door && door.doorQueue && c.id) {
-          releaseDoorQueue(door, c.id);
-        }
-        c.waitingForDoor = null;
-        c.doorWaitStart = undefined;
-        c.doorPassingThrough = null;
-        c.doorApproachVector = null;
-      } else if (isDoorBlocking(door)) {
-        requestDoorOpen(door, c, 'colonist');
-        if (!c.doorWaitStart) {
-          c.doorWaitStart = c.t || 0;
-        }
-        return false;
-      } else {
-        // Door is now passable; waitingAtDoor state will clear flags this frame
-        return false;
-      }
-    }
-
-    if (!c.waitingForDoor && L > 1e-3) {
-      const blockingDoor = findBlockingDoor(this, c);
-      if (blockingDoor && isDoorBlocking(blockingDoor)) {
-        const doorCenterX = blockingDoor.x + blockingDoor.w / 2;
-        const doorCenterY = blockingDoor.y + blockingDoor.h / 2;
-        const toDoorX = doorCenterX - c.x;
-        const toDoorY = doorCenterY - c.y;
-        const doorAheadDot = dx * toDoorX + dy * toDoorY;
-        if (doorAheadDot > 0) {
-          const doorDist = Math.hypot(toDoorX, toDoorY);
-          // Require the door to be reasonably close to the current waypoint direction
-          const dirMag = L || 1;
-          const angleCos = doorDist > 0 ? doorAheadDot / (dirMag * doorDist) : 1;
-          if (doorDist <= L + Math.max(blockingDoor.w, blockingDoor.h) && angleCos >= 0.4) {
-            requestDoorOpen(blockingDoor, c, 'colonist');
-            c.waitingForDoor = blockingDoor;
-            c.doorWaitStart = c.t || 0;
-            c.doorPassingThrough = null;
-            const approachX = c.x - doorCenterX;
-            const approachY = c.y - doorCenterY;
-            c.doorApproachVector = { x: approachX, y: approachY };
-            return false;
-          }
-        }
-      }
-    }
-
-    // Hysteresis to avoid oscillation around a node
-    const arriveNode = 15; // base arrival radius for nodes (increased from 10 to be more forgiving)
-    const hysteresis = 6; // extra slack once we've been near a node (increased from 4)
-    
-    // Movement speed with terrain/floor modifiers
-    let baseSpeed = c.speed * ((c as any).fatigueSlow || 1) * this.getMoveSpeedMultiplier(c);
-    let speed = baseSpeed;
-    let onPath = false;
-    
-    // Apply floor speed bonus based on terrain cost
-    {
-      const gx = Math.floor(c.x / T), gy = Math.floor(c.y / T);
-      const inBounds = gx >= 0 && gy >= 0 && gx < this.grid.cols && gy < this.grid.rows;
-      if (inBounds) {
-        const idx = gy * this.grid.cols + gx;
-        const tileCost = this.grid.cost[idx];
-        
-        // Speed is inversely proportional to cost
-        // Cost of 1.0 (grass) = base speed
-        // Cost of 0.5 (stone road) = 2x speed
-        // Cost of 0.6 (dirt path) = 1.67x speed
-        // Cost of 2.5 (mud) = 0.4x speed
-        if (tileCost > 0 && tileCost < 1.0) {
-          // On a fast surface (floor) - speed boost!
-          speed = baseSpeed / tileCost;
-          onPath = true;
-        } else if (tileCost > 1.0) {
-          // On slow terrain (mud, etc.) - speed penalty
-          speed = baseSpeed / tileCost;
-        }
-        
-        if (onPath && Math.random() < 0.01) { // 1% chance to log
-          console.log(`Colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}) on floor - cost: ${tileCost.toFixed(2)}, speed: ${speed.toFixed(1)} (base: ${baseSpeed.toFixed(1)})`);
-        }
-      }
-    }
-    // Prevent overshoot that causes ping-pong around node: snap to node if close or step would overshoot
-    const step = speed * dt;
-    if (L <= Math.max(arriveNode, step)) {
-      // Snap to node and advance - PATHINDEX RE-ENABLED
-      c.x = node.x; c.y = node.y;
-      c.pathIndex++;
-      // Don't shift the array, just use pathIndex to track position
-      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
-      if (c.pathIndex >= c.path.length) { c.path = undefined; c.pathIndex = undefined; if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive; return true; }
-      return false;
-    }
-
-    // Jitter detection: only react to true oscillation (distance trend sign flip) when near the node
-    c.jitterWindow = (c.jitterWindow || 0) + dt;
-    if (c.lastDistToNode != null) {
-      const delta = L - c.lastDistToNode;
-      const sign = delta === 0 ? 0 : (delta > 0 ? 1 : -1);
-      const prevSign = (c as any).lastDistSign ?? sign;
-      // Count as jitter only if the distance trend flips while we're reasonably near the node
-      if (sign !== 0 && prevSign !== 0 && sign !== prevSign && L < arriveNode + 15) { // Increased threshold from 10 to 15
-        c.jitterScore = (c.jitterScore || 0) + 1;
-      } else {
-        c.jitterScore = Math.max(0, (c.jitterScore || 0) - 1);
-      }
-      (c as any).lastDistSign = sign;
-    }
-    c.lastDistToNode = L;
-    if ((c.jitterScore || 0) >= 8 || (c.jitterWindow || 0) > 3.0) { // Increased thresholds to be less aggressive
-      // If very close to node, just advance; otherwise, try a light replan once - PATHINDEX RE-ENABLED
-      if (L < arriveNode + hysteresis) {
-        c.pathIndex++;
-        // Check bounds after increment to prevent accessing invalid nodes
-        if (c.pathIndex >= c.path.length) {
-          this.clearPath(c);
-          if (target) return Math.hypot(c.x - target.x, c.y - target.y) <= arrive;
-          return false;
-        }
-        // Don't shift array when using pathIndex
-      } else if (target) {
-        const p = this.computePath(c.x, c.y, target.x, target.y);
-        if (p && p.length) { c.path = p; c.pathIndex = 0; } // PATHINDEX RE-ENABLED
-      }
-      c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
-      if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false; // RE-ENABLED
-    }
-
-    // Simple movement toward the waypoint - let A* handle the smart routing
-    // Update direction for sprite facing (only if moving significantly)
-    if (L > 1) {
-      c.direction = Math.atan2(dy, dx);
-    }
-    c.x = Math.max(0, Math.min(c.x + (dx / (L || 1)) * step, WORLD.w));
-    c.y = Math.max(0, Math.min(c.y + (dy / (L || 1)) * step, WORLD.h));
-
-    if (c.doorPassingThrough) {
-      const door = c.doorPassingThrough;
-      const doorValid = door && door.kind === 'door' && door.done;
-      if (!doorValid) {
-        if (door && c.id) {
-          releaseDoorQueue(door, c.id);
-        }
-        c.doorPassingThrough = null;
-        c.doorApproachVector = null;
-      } else {
-        const centerX = door.x + door.w / 2;
-        const centerY = door.y + door.h / 2;
-        const relX = c.x - centerX;
-        const relY = c.y - centerY;
-        const relDist = Math.hypot(relX, relY);
-        const approach = c.doorApproachVector;
-        const clearance = Math.max(door.w, door.h) * 0.5;
-        const farThreshold = clearance * 4;
-        let shouldRelease = false;
-
-        if (approach) {
-          const approachMag = Math.hypot(approach.x, approach.y);
-          if (approachMag > 1e-3) {
-            const dot = relX * approach.x + relY * approach.y;
-            const denom = approachMag * Math.max(relDist, 1e-3);
-            const normalizedDot = dot / denom;
-            const crossedPlane = normalizedDot <= -0.15;
-            const overshoot = relDist > approachMag + clearance * 0.6;
-            shouldRelease = (crossedPlane && relDist >= clearance * 0.6) || overshoot || relDist >= farThreshold;
-          } else {
-            shouldRelease = relDist >= clearance;
-          }
-        } else {
-          shouldRelease = relDist >= clearance;
-        }
-
-        if (shouldRelease) {
-          if (door && c.id) {
-            releaseDoorQueue(door, c.id);
-          }
-          c.doorPassingThrough = null;
-          c.doorApproachVector = null;
-        }
-      }
-    }
-    return false;
+  
+  // Movement delegation to ColonistNavigationManager
+  moveAlongPath(c: Colonist, dt: number, target?: { x: number; y: number }, arrive = 10): boolean {
+    return this.colonistNavigationManager.moveAlongPath(c, dt, target, arrive);
   }
 
-  findSafeTurret(c: Colonist, danger: Enemy): Building | null {
-    let best: Building | null = null; let bestScore = Infinity;
-    for (const b of this.buildings) {
-      if (b.kind !== 'turret' || !b.done) continue;
-      const bc = this.centerOf(b);
-      const dCol = Math.hypot(c.x - bc.x, c.y - bc.y);
-      const dEn = Math.hypot(danger.x - bc.x, danger.y - bc.y);
-      // Prefer closer turrets and those not too close to the enemy
-      const range = (b as any).range || 160;
-      const enemyBias = dEn < range ? 100 : 0; // discourage turrets already swarmed
-      const score = dCol + enemyBias;
-      if (score < bestScore) { bestScore = score; best = b; }
-    }
-    return best;
-  }
-
+  // Building methods moved to BuildingManager
   isProtectedByTurret(b: Building): boolean {
-    const bc = this.centerOf(b);
-    for (const t of this.buildings) {
-      if (t.kind !== 'turret' || !t.done) continue;
-      const range = (t as any).range || 120; const tc = this.centerOf(t);
-      if (dist2(bc as any, tc as any) < range * range) return true;
-    }
-    return false;
+    return this.buildingManager.isProtectedByTurret(b);
   }
 
-  // Enemies & combat
-  centerOf(b: Building) { return { x: b.x + b.w / 2, y: b.y + b.h / 2 }; }
+  centerOf(b: Building) {
+    return this.buildingManager.centerOf(b);
+  }
   pointInRect(p: { x: number; y: number }, r: { x: number; y: number; w: number; h: number }) { return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h; }
   updateTurret(b: Building, dt: number) { updateTurretCombat(this, b, dt); }
 
@@ -2976,551 +2669,71 @@ export class Game {
   // Context menu rendering moved to src/game/ui/contextMenu.ts
 
   handleContextMenuAction(actionId: string, colonist: Colonist) {
-    console.log(`Context menu action: ${actionId} for colonist:`, colonist.profile?.name);
-    
-    switch (actionId) {
-      // Draft/Undraft
-      case 'draft':
-        if (colonist.isDrafted) {
-          // Undraft
-          colonist.isDrafted = false;
-          colonist.draftedTarget = null;
-          colonist.draftedPosition = null;
-          this.msg(`${colonist.profile?.name || 'Colonist'} undrafted`, 'info');
-        } else {
-          // Draft
-          colonist.isDrafted = true;
-          colonist.draftedTarget = null;
-          colonist.draftedPosition = null;
-          
-          // Force clear any existing tasks/paths to allow immediate control
-          colonist.task = null;
-          colonist.target = null;
-          colonist.path = undefined;
-          colonist.pathIndex = undefined;
-          colonist.pathGoal = undefined;
-          
-          // Force state change to drafted (will be picked up by FSM)
-          colonist.state = 'drafted';
-          colonist.stateSince = 0;
-          
-          this.msg(`${colonist.profile?.name || 'Colonist'} drafted for combat`, 'info');
-        }
-        break;
-        
-      // Prioritize actions
-      case 'prioritize_medical':
-        // Set high priority for medical work
-        this.setColonistMedicalPriority(colonist, true);
-        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing medical work`, 'info');
-        break;
-      case 'prioritize_work':
-        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), { isPlayerCommand: true });
-        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing work tasks`, 'info');
-        break;
-      case 'prioritize_build':
-        this.setTask(colonist, 'build', this.findNearestBuildTarget(colonist), { isPlayerCommand: true });
-        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing construction`, 'info');
-        break;
-      case 'prioritize_haul':
-        // Future: implement hauling system
-        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing hauling`, 'info');
-        break;
-      case 'prioritize_research':
-        // Future: implement research system
-        this.msg(`${colonist.profile?.name || 'Colonist'} prioritizing research`, 'info');
-        break;
-        
-      // Force actions
-      case 'force_rest':
-        this.forceColonistToRest(colonist, true);
-        break;
-      case 'force_eat':
-        this.forceColonistToEat(colonist, true);
-        break;
-      case 'force_work':
-        this.setTask(colonist, 'work', this.findNearestWorkTarget(colonist), { isPlayerCommand: true });
-        this.msg(`${colonist.profile?.name || 'Colonist'} forced to work`, 'info');
-        break;
-      case 'force_guard':
-        this.setTask(colonist, 'guard', { x: colonist.x, y: colonist.y }, { isPlayerCommand: true });
-        this.msg(`${colonist.profile?.name || 'Colonist'} guarding area`, 'info');
-        break;
-        
-      // Go to actions
-      case 'goto_hq':
-        this.sendColonistToHQ(colonist);
-        break;
-      case 'goto_safety':
-        this.sendColonistToSafety(colonist);
-        break;
-      case 'goto_bed':
-        this.sendColonistToBed(colonist);
-        break;
-      case 'goto_food':
-        this.sendColonistToFood(colonist);
-        break;
-        
-      // Medical actions
-      case 'medical_bandage': // keep existing single bandage behavior fallback
-        this.assignMedicalTreatment(colonist, 'bandage_wound');
-        break;
-      case 'medical_treat_infection':
-        this.assignMedicalTreatment(colonist, 'treat_infection');
-        break;
-      case 'medical_surgery':
-        this.assignMedicalTreatment(colonist, 'remove_bullet');
-        break;
-      case 'medical_pain_relief':
-        this.assignMedicalTreatment(colonist, 'pain_management');
-        break;
-      case 'medical_treat_all':
-        this.assignComprehensiveMedicalCare(colonist);
-        break;
-      case 'medical_treat':
-        this.treatColonist(colonist);
-        break;
-      case 'medical_rest':
-        this.forceColonistToRest(colonist);
-        this.msg(`${colonist.profile?.name || 'Colonist'} ordered to bed rest`, 'info');
-        break;
-      case 'medical_injury_summary':
-        if (colonist.health) {
-          const summary = getInjurySummary(colonist.health);
-          this.msg(`${colonist.profile?.name || 'Colonist'}: ${summary}`, 'info');
-        } else {
-          this.msg('No health data', 'warn');
-        }
-        break;
-      case 'medical_bandage_all_bleeding':
-        if (colonist.health) {
-          let count = 0;
-            for (const inj of colonist.health.injuries) {
-              if (inj.bleeding > 0 && !inj.bandaged) { inj.bandaged = true; inj.bleeding *= 0.2; inj.infectionChance *= 0.5; count++; }
-            }
-          this.msg(count ? `Applied bandages to ${count} wound${count>1?'s':''}` : 'No bleeding wounds', count? 'good':'info');
-        }
-        break;
-      case 'prioritize_treat_patient': {
-        // Active selection is doctor; colonist param is patient
-        const doctor = this.selColonist;
-        if (doctor && doctor !== colonist) {
-          // Ensure doctor has some medical capability (placeholder skill check)
-            (doctor as any).assignedMedicalPatientId = (colonist as any).id || ((colonist as any).id = `colonist_${Date.now()}_${Math.random().toString(36).slice(2,9)}`);
-            (doctor as any).medicalPriorityUntil = doctor.t + 60; // expires in ~60s game time
-            this.msg(`${doctor.profile?.name || 'Doctor'} will prioritize treating ${colonist.profile?.name || 'Patient'}`, 'info');
-        }
-        break; }
-      case 'clear_prioritize_treat': {
-        const doctor = this.selColonist;
-        if (doctor && (doctor as any).assignedMedicalPatientId) {
-          (doctor as any).assignedMedicalPatientId = undefined;
-          (doctor as any).medicalPriorityUntil = undefined;
-          this.msg(`${doctor.profile?.name || 'Doctor'} cleared treatment priority`, 'info');
-        }
-        break; }
-      case 'medical_rescue':
-        // Find best doctor or nearest healthy colonist to rescue
-        const rescuer = this.findBestDoctor(colonist) || this.colonists.find(c=>c!==colonist && c.alive && c.state!=='downed');
-        if (rescuer) {
-          // Placeholder: just move colonist to nearest bed instantly for now
-          const bed = this.findBestRestBuilding(colonist, { preferMedical: true, allowShelterFallback: true });
-          if (bed) {
-            colonist.x = bed.x + bed.w/2;
-            colonist.y = bed.y + bed.h/2;
-            const bedLabel = bed.kind === 'bed' ? (bed.isMedicalBed ? 'medical bed' : 'bed') : bed.name || 'shelter';
-            this.msg(`${colonist.profile?.name || 'Colonist'} rescued to ${bedLabel}`, bed.isMedicalBed ? 'good' : 'info');
-          } else {
-            this.msg('No bed available for rescue', 'warn');
-          }
-        } else {
-          this.msg('No rescuer available', 'warn');
-        }
-        break;
-        
-      // Basic actions
-      case 'cancel':
-        this.setTask(colonist, 'idle', { x: colonist.x, y: colonist.y });
-        this.msg(`${colonist.profile?.name || 'Colonist'} task cancelled`, 'info');
-        break;
-      case 'follow':
-        if (this.follow && this.selColonist === colonist) {
-          this.follow = false;
-          this.selColonist = null;
-          this.msg('Stopped following', 'info');
-        } else {
-          this.selColonist = colonist;
-          this.follow = true;
-          this.msg(`Following ${colonist.profile?.name || 'colonist'}`, 'info');
-        }
-        break;
-    }
-    
-  hideContextMenuUI(this);
+    // Delegate to the new ColonistActionManager
+    this.colonistActionManager.handleContextMenuAction(actionId, colonist);
   }
 
-  // Helper functions for context menu actions
-  findNearestWorkTarget(colonist: Colonist) {
-    // Find nearest unfinished building
-    let nearest = null;
-    let minDist = Infinity;
-    
-    for (const building of this.buildings) {
-      if (!building.done) {
-        const dist = Math.hypot(colonist.x - (building.x + building.w/2), colonist.y - (building.y + building.h/2));
-        if (dist < minDist) {
-          minDist = dist;
-          nearest = building;
-        }
-      }
-    }
-    
-    return nearest || { x: colonist.x + rand(-50, 50), y: colonist.y + rand(-50, 50) };
-  }
+  // Helper functions for context menu actions - moved to ColonistActionManager
 
-  findNearestBuildTarget(colonist: Colonist) {
-    return this.findNearestWorkTarget(colonist);
-  }
-
+  // Medical methods moved to MedicalManager
   colonistNeedsMedicalBed(colonist: Colonist): boolean {
-    if (colonist.state === 'downed') return true;
-    if (colonist.hp < 60) return true;
-    const injuries = colonist.health?.injuries ?? [];
-    return injuries.some((inj) => inj.bleeding > 0 || inj.severity > 0.25 || inj.infected);
+    return this.medicalManager.colonistNeedsMedicalBed(colonist);
   }
 
+  // Building methods moved to BuildingManager
   findBestRestBuilding(colonist: Colonist, opts?: { requireMedical?: boolean; preferMedical?: boolean; allowShelterFallback?: boolean }): Building | null {
-    const { requireMedical = false, preferMedical = false, allowShelterFallback = true } = opts || {};
-    const beds = this.buildings.filter((b) => b.kind === 'bed' && b.done && this.buildingHasSpace(b, colonist));
-    const medicalBeds = beds.filter((b) => b.isMedicalBed);
-    const standardBeds = beds.filter((b) => !b.isMedicalBed);
-
-    const orderedBeds: Building[] = [];
-    if (requireMedical) {
-      orderedBeds.push(...medicalBeds);
-    } else if (preferMedical && medicalBeds.length > 0) {
-      orderedBeds.push(...medicalBeds, ...standardBeds);
-    } else {
-      orderedBeds.push(...standardBeds, ...medicalBeds);
-    }
-
-    const nearestFrom = (list: Building[]): Building | null => {
-      let best: Building | null = null;
-      let bestDist = Infinity;
-      for (const b of list) {
-        const c = this.centerOf(b);
-        const d = Math.hypot(c.x - colonist.x, c.y - colonist.y);
-        if (d < bestDist) {
-          bestDist = d;
-          best = b;
-        }
-      }
-      return best;
-    };
-
-    const bed = nearestFrom(orderedBeds);
-    if (bed) return bed;
-
-    if (!allowShelterFallback) return null;
-
-    const shelters = this.buildings.filter((b) =>
-      (b.kind === 'house' || b.kind === 'tent' || b.kind === 'hq' || b.kind === 'infirmary') &&
-      b.done &&
-      this.buildingHasSpace(b, colonist)
-    );
-
-    return nearestFrom(shelters);
+    return this.buildingManager.findBestRestBuilding(colonist, opts);
   }
 
+  // Colonist navigation methods moved to ColonistNavigationManager
   forceColonistToRest(colonist: Colonist, isPlayerCommand = false) {
-    const needsMedical = this.colonistNeedsMedicalBed(colonist);
-    const restBuilding = this.findBestRestBuilding(colonist, { preferMedical: needsMedical, allowShelterFallback: true });
-    
-    if (restBuilding) {
-      this.setTask(colonist, 'rest', restBuilding, { isPlayerCommand });
-      const targetLabel = restBuilding.kind === 'bed' ? (restBuilding.isMedicalBed ? 'medical bed' : 'bed') : restBuilding.name || restBuilding.kind;
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to ${targetLabel}`, needsMedical ? 'info' : 'info');
-    } else {
-      this.msg('No available sleeping quarters', 'warn');
-    }
+    this.colonistNavigationManager.forceColonistToRest(colonist, isPlayerCommand);
   }
 
   forceColonistToEat(colonist: Colonist, isPlayerCommand = false) {
-    if (this.RES.food > 0) {
-      // Mark as player command if forced by player
-      if (isPlayerCommand) {
-        colonist.playerCommand = {
-          issued: true,
-          timestamp: colonist.t || 0,
-          task: 'eat',
-          expires: (colonist.t || 0) + 60 // Eating command expires after 1 minute
-        };
-      }
-      // Simulate eating
-      colonist.hunger = Math.max(0, (colonist.hunger || 0) - 30);
-      this.RES.food = Math.max(0, this.RES.food - 1);
-      this.msg(`${colonist.profile?.name || 'Colonist'} eating food`, 'good');
-    } else {
-      this.msg('No food available', 'warn');
-    }
+    this.colonistNavigationManager.forceColonistToEat(colonist, isPlayerCommand);
   }
 
   sendColonistToHQ(colonist: Colonist) {
-    const hq = this.buildings.find(b => b.kind === 'hq');
-    if (hq) {
-      const target = { x: hq.x + hq.w/2, y: hq.y + hq.h/2 };
-      this.setTask(colonist, 'goto', target);
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to HQ`, 'info');
-    }
+    this.colonistNavigationManager.sendColonistToHQ(colonist);
   }
 
   sendColonistToSafety(colonist: Colonist) {
-    // Find a building protected by turrets
-    for (const building of this.buildings) {
-      if (building.done && this.isProtectedByTurret(building) && this.buildingHasSpace(building)) {
-        this.setTask(colonist, 'goto', building);
-        this.msg(`${colonist.profile?.name || 'Colonist'} going to safety`, 'info');
-        return;
-      }
-    }
-    this.sendColonistToHQ(colonist);
+    this.colonistNavigationManager.sendColonistToSafety(colonist);
   }
 
   sendColonistToBed(colonist: Colonist) {
-    const preferMedical = this.colonistNeedsMedicalBed(colonist);
-    const bed = this.findBestRestBuilding(colonist, { preferMedical, allowShelterFallback: true });
-
-    if (bed) {
-      this.setTask(colonist, 'rest', bed);
-      const label = bed.kind === 'bed' ? (bed.isMedicalBed ? 'medical bed' : 'bed') : 'shelter';
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to ${label}`, 'info');
-    } else {
-      this.msg('No available beds', 'warn');
-    }
+    this.colonistNavigationManager.sendColonistToBed(colonist);
   }
 
   sendColonistToFood(colonist: Colonist) {
-    const storage = this.buildings.find(b => 
-      (b.kind === 'warehouse' || b.kind === 'hq') && b.done
-    );
-    
-    if (storage) {
-      const target = { x: storage.x + storage.w/2, y: storage.y + storage.h/2 };
-      this.setTask(colonist, 'goto', target);
-      this.msg(`${colonist.profile?.name || 'Colonist'} going to food storage`, 'info');
-    } else {
-      this.sendColonistToHQ(colonist);
-    }
+    this.colonistNavigationManager.sendColonistToFood(colonist);
   }
 
+  // Medical methods moved to MedicalManager
   treatColonist(colonist: Colonist) {
-    const infirmary = this.buildings.find(b => b.kind === 'infirmary' && b.done);
-    
-    if (infirmary) {
-      this.setTask(colonist, 'medical', infirmary);
-      this.msg(`${colonist.profile?.name || 'Colonist'} going for medical treatment`, 'info');
-    } else {
-      if (colonist.health) {
-        const result = basicFieldTreatment(colonist.health);
-        colonist.hp = Math.min(100, calculateOverallHealth(colonist.health));
-        this.msg(`${colonist.profile?.name || 'Colonist'} field-treated (${result.bandaged} bandaged, pain -${result.painReduced.toFixed(2)})`, 'good');
-      } else {
-        colonist.hp = Math.min(100, colonist.hp + 10);
-        this.msg(`${colonist.profile?.name || 'Colonist'} received crude aid`, 'info');
-      }
-    }
+    this.medicalManager.treatColonist(colonist);
   }
 
-  // Set colonist medical priority
   setColonistMedicalPriority(colonist: Colonist, highPriority: boolean) {
-    (colonist as any).medicalPriority = highPriority;
-    if (highPriority) {
-      // Clear current task to seek medical work
-      this.setTask(colonist, 'seekMedical', null);
-    }
+    this.medicalManager.setColonistMedicalPriority(colonist, highPriority);
   }
 
-  // Assign specific medical treatment
   assignMedicalTreatment(patient: Colonist, treatmentId: string) {
-    // Find a suitable doctor
-    const doctor = this.findBestDoctor(patient);
-    if (!doctor) {
-      this.msg(`No available doctor for treatment`, 'warn');
-      return;
-    }
-    
-    const job = medicalWorkGiver.createForcedJob(doctor, patient, treatmentId);
-    if (job) {
-      // Reserve the job and assign it to the doctor
-      medicalWorkGiver.reserveJob(job, doctor);
-      (doctor as any).medicalJob = job;
-      
-      // Force the doctor into doctoring state immediately
-      // Clear their current task and path
-      doctor.task = null;
-      doctor.target = null;
-      this.clearPath(doctor);
-      
-      // The FSM will pick up the medicalJob on next update and enter doctoring state
-      this.msg(`${doctor.profile?.name || 'Doctor'} treating ${patient.profile?.name || 'patient'} with ${job.treatment?.name || 'treatment'}`, 'info');
-    } else {
-      this.msg(`Cannot apply ${treatmentId} treatment`, 'warn');
-    }
+    this.medicalManager.assignMedicalTreatment(patient, treatmentId);
   }
 
-  // Assign comprehensive medical care
   assignComprehensiveMedicalCare(patient: Colonist) {
-    if (!patient.health?.injuries?.length) {
-      this.msg(`${patient.profile?.name || 'Colonist'} has no injuries to treat`, 'info');
-      return;
-    }
-
-    // Find most urgent injury and create a forced job for it
-    const doctor = this.findBestDoctor(patient);
-    if (!doctor) {
-      this.msg('No available doctor for comprehensive care', 'warn');
-      return;
-    }
-
-    // Prioritize most severe/urgent injury first
-    const sortedInjuries = [...patient.health.injuries].sort((a, b) => {
-      // Bleeding + severity combo
-      const urgencyA = (a.bleeding || 0) * 2 + (a.severity || 0);
-      const urgencyB = (b.bleeding || 0) * 2 + (b.severity || 0);
-      return urgencyB - urgencyA;
-    });
-
-    const mostUrgentInjury = sortedInjuries[0];
-    
-    // Determine best treatment for this injury
-    let treatmentId = 'bandage_wound';
-    if (mostUrgentInjury.infected) {
-      treatmentId = 'treat_infection';
-    } else if (mostUrgentInjury.type === 'gunshot') {
-      treatmentId = 'surgical_repair';
-    } else if (mostUrgentInjury.bleeding > 0) {
-      treatmentId = 'bandage_wound';
-    } else if (mostUrgentInjury.severity > 0.6) {
-      treatmentId = 'advanced_treatment';
-    }
-
-    // Create forced job for the most urgent injury
-    const job = medicalWorkGiver.createForcedJob(doctor, patient, treatmentId);
-    if (job) {
-      medicalWorkGiver.reserveJob(job, doctor);
-      (doctor as any).medicalJob = job;
-      
-      // Clear doctor's current task
-      doctor.task = null;
-      doctor.target = null;
-      this.clearPath(doctor);
-      
-      this.msg(`${doctor.profile?.name || 'Doctor'} providing comprehensive care to ${patient.profile?.name || 'patient'}`, 'info');
-    } else {
-      this.msg('Failed to create medical job', 'warn');
-    }
+    this.medicalManager.assignComprehensiveMedicalCare(patient);
   }
 
-  // Find the best available doctor
   findBestDoctor(patient: Colonist): Colonist | null {
-    const availableDoctors = this.colonists.filter(c => {
-      if (c === patient) return false; // Can't treat self
-      if (!c.alive) return false;
-      if (c.task && c.task !== 'idle' && c.task !== 'seekTask') return false; // Must be available
-      return true;
-    });
-
-    if (availableDoctors.length === 0) return null;
-
-    // Sort by medical skill (prioritize medics and those with First Aid)
-    availableDoctors.sort((a, b) => {
-      const skillA = this.getColonistMedicalSkill(a);
-      const skillB = this.getColonistMedicalSkill(b);
-      return skillB - skillA;
-    });
-
-    return availableDoctors[0];
+    return this.medicalManager.findBestDoctor(patient);
   }
 
-  // Get colonist's medical skill level
   getColonistMedicalSkill(colonist: Colonist): number {
-    const firstAidSkill = colonist.profile?.detailedInfo.skills.includes('First Aid');
-    const medicBackground = colonist.profile?.background === 'Medic';
-    
-    let skill = 0;
-    if (firstAidSkill) skill += 3;
-    if (medicBackground) skill += 5;
-    
-    return skill;
+    return this.medicalManager.getColonistMedicalSkill(colonist);
   }
-
-  // Context menu drawing moved to src/game/ui/contextMenu.ts SO WHY IS drawLongPressProgress HERE???
-
-  drawLongPressProgress() {
-    if (!this.longPressStartTime || !this.longPressTarget || !this.longPressStartPos) return;
-    
-    const ctx = this.ctx;
-    const currentTime = performance.now();
-    const elapsed = currentTime - this.longPressStartTime;
-    const progress = Math.min(elapsed / 500, 1); // 500ms total duration
-    
-    if (progress >= 1) return; // Don't draw when complete
-    
-    // Convert world position to screen position
-    const target = this.longPressTarget;
-    const isBuildingTarget = this.longPressTargetType === 'building';
-    const worldPos = isBuildingTarget && target
-      ? this.centerOf(target as Building)
-      : { x: (target as Colonist).x, y: (target as Colonist).y };
-
-    const screenX = (worldPos.x - this.camera.x) * this.camera.zoom;
-    const screenY = (worldPos.y - this.camera.y) * this.camera.zoom;
-    
-    ctx.save();
-    
-    // Draw progress circle
-    const radius = this.scale(20);
-    const centerX = screenX;
-    const centerY = screenY;
-    
-    // Background circle
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = this.scale(3);
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Progress arc
-    ctx.strokeStyle = '#60a5fa'; // Blue color
-    ctx.lineWidth = this.scale(3);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    const startAngle = -Math.PI / 2; // Start at top
-    const endAngle = startAngle + (progress * Math.PI * 2);
-    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
-    ctx.stroke();
-    
-    // Inner pulse effect
-    if (progress > 0.3) {
-      const pulseAlpha = Math.sin((elapsed / 100) * Math.PI) * 0.3 + 0.1;
-      ctx.fillStyle = `rgba(96, 165, 250, ${pulseAlpha})`;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    
-    // Context menu icon hint
-    if (progress > 0.5) {
-      ctx.fillStyle = '#ffffff';
-      ctx.font = this.getScaledFont(12, '600');
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('⚙️', centerX, centerY);
-    }
-    
-    ctx.restore();
-  }
-
 
   barRow(x: number, y: number, label: string, val: number, color: string) {
     const ctx = this.ctx; 

@@ -97,8 +97,11 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
     game.toast(`Placed ${def.name} blueprint`);
     
     // Play audio based on building type
-    const audioKey = getBuildingPlacementAudio(t, def);
-    game.playAudio(audioKey);
+    const audioClip = getBuildingPlacementAudio(t, def);
+    game.playAudio(audioClip.key, { 
+      volume: audioClip.volume, 
+      playbackRate: audioClip.playbackRate 
+    });
     return;
   }
   
@@ -121,8 +124,11 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
   game.rebuildNavGrid();
   
   // Play audio based on building type
-  const audioKey = getBuildingPlacementAudio(t, def);
-  game.playAudio(audioKey);
+  const audioClip = getBuildingPlacementAudio(t, def);
+  game.playAudio(audioClip.key, { 
+    volume: audioClip.volume, 
+    playbackRate: audioClip.playbackRate 
+  });
 }
 
 // Entry point from click/tap
