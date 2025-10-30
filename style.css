@@ -123,3 +123,250 @@ body.touch-ui #toast{bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 20px
 	max-width:280px;
 	pointer-events:none;
 }
+
+/* Changelog Modal */
+.changelog-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	animation: fadeIn 0.2s ease;
+}
+
+.changelog-modal .modal-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.7);
+	backdrop-filter: blur(4px);
+}
+
+.changelog-modal .modal-container {
+	position: relative;
+	background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+	border: 2px solid #334155;
+	border-radius: 16px;
+	box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+	width: min(90vw, 800px);
+	height: min(85vh, 700px);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.changelog-modal .modal-header {
+	padding: 20px 24px;
+	background: rgba(15, 23, 42, 0.8);
+	border-bottom: 2px solid #334155;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-shrink: 0;
+}
+
+.changelog-modal .modal-header h2 {
+	margin: 0;
+	color: #f1f5f9;
+	font-size: clamp(20px, 2.5vw, 26px);
+	font-weight: 700;
+}
+
+.changelog-modal .modal-close {
+	background: #dc2626;
+	border: none;
+	color: white;
+	width: 36px;
+	height: 36px;
+	border-radius: 8px;
+	cursor: pointer;
+	font-size: 24px;
+	font-weight: bold;
+	line-height: 1;
+	transition: all 0.2s;
+	outline: none;
+}
+
+.changelog-modal .modal-close:hover {
+	background: #b91c1c;
+	transform: scale(1.1);
+}
+
+.changelog-modal .modal-body {
+	flex: 1;
+	overflow: auto;
+	padding: 0;
+}
+
+.changelog-content {
+	padding: 24px;
+}
+
+.changelog-loading {
+	text-align: center;
+	padding: 60px 20px;
+	color: #94a3b8;
+}
+
+.changelog-loading .spinner {
+	width: 40px;
+	height: 40px;
+	border: 4px solid #334155;
+	border-top: 4px solid #3b82f6;
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+	margin: 0 auto 20px;
+}
+
+@keyframes spin {
+	0% { transform: rotate(0deg); }
+	100% { transform: rotate(360deg); }
+}
+
+.changelog-entry {
+	margin-bottom: 32px;
+	padding-bottom: 24px;
+	border-bottom: 1px solid #334155;
+}
+
+.changelog-entry:last-child {
+	border-bottom: none;
+	margin-bottom: 0;
+}
+
+.changelog-entry.prerelease {
+	opacity: 0.8;
+}
+
+.changelog-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	margin-bottom: 16px;
+	gap: 16px;
+}
+
+.changelog-header h3 {
+	margin: 0;
+	color: #f1f5f9;
+	font-size: clamp(18px, 2.2vw, 22px);
+	font-weight: 700;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.prerelease-badge {
+	background: #f59e0b;
+	color: #1c1917;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 4px 8px;
+	border-radius: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.changelog-date {
+	color: #94a3b8;
+	font-size: 14px;
+	font-weight: 500;
+	flex-shrink: 0;
+}
+
+.changelog-body {
+	color: #cbd5e1;
+	line-height: 1.6;
+}
+
+.changelog-body h1, .changelog-body h2, .changelog-body h3 {
+	color: #f1f5f9;
+	margin: 20px 0 12px 0;
+}
+
+.changelog-body h1 { font-size: 24px; }
+.changelog-body h2 { font-size: 20px; }
+.changelog-body h3 { font-size: 18px; }
+
+.changelog-body ul {
+	padding-left: 20px;
+	margin: 12px 0;
+}
+
+.changelog-body li {
+	margin: 6px 0;
+}
+
+.changelog-body p {
+	margin: 12px 0;
+}
+
+.changelog-body code {
+	background: #374151;
+	color: #fbbf24;
+	padding: 2px 6px;
+	border-radius: 4px;
+	font-size: 0.9em;
+}
+
+.changelog-body strong {
+	color: #f1f5f9;
+	font-weight: 600;
+}
+
+.changelog-body a {
+	color: #60a5fa;
+	text-decoration: none;
+}
+
+.changelog-body a:hover {
+	text-decoration: underline;
+}
+
+.changelog-error {
+	text-align: center;
+	padding: 60px 20px;
+	color: #94a3b8;
+}
+
+.changelog-error h3 {
+	color: #f87171;
+	margin: 0 0 16px 0;
+}
+
+.changelog-error p {
+	margin: 12px 0;
+}
+
+@keyframes fadeIn {
+	from { opacity: 0; transform: scale(0.95); }
+	to { opacity: 1; transform: scale(1); }
+}
+
+/* Mobile adjustments for changelog */
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+	.changelog-modal .modal-container {
+		width: calc(100vw - 24px);
+		height: min(90vh, 600px);
+		border-radius: 20px;
+	}
+	
+	.changelog-modal .modal-header {
+		padding: 16px 20px;
+	}
+	
+	.changelog-content {
+		padding: 20px;
+	}
+	
+	.changelog-entry {
+		margin-bottom: 24px;
+		padding-bottom: 20px;
+	}
+	
+	.changelog-header {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 8px;
+	}
+}

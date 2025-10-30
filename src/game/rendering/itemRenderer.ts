@@ -188,28 +188,31 @@ export class ItemRenderer {
 
     let icon = '?';
     switch (type) {
-      case 'wood': icon = 'W'; break;
-      case 'stone': icon = 'S'; break;
-      case 'rubble': icon = 'R'; break;
-      case 'food': icon = 'F'; break;
-      case 'wheat': icon = 'W'; break;
-      case 'bread': icon = 'B'; break;
+      case 'wood': icon = '🪵'; break;
+      case 'stone': icon = '🪨'; break;
+      case 'rubble': icon = '⛰️'; break;
+      case 'food': icon = '🍖'; break;
+      case 'wheat': icon = '🌾'; break;
+      case 'bread': icon = '🍞'; break;
       case 'metal': icon = 'M'; break;
-      case 'cloth': icon = 'C'; break;
-      case 'medicine': icon = '+'; break;
-      case 'coal': icon = 'C'; break;
-      case 'copper_ore': icon = 'Cu'; break;
-      case 'steel_ore': icon = 'Fe'; break;
-      case 'silver_ore': icon = 'Ag'; break;
-      case 'gold_ore': icon = 'Au'; break;
-      case 'steel_ingot': icon = 'I'; break;
-      case 'copper_ingot': icon = 'I'; break;
-      case 'silver_ingot': icon = 'I'; break;
-      case 'gold_ingot': icon = 'I'; break;
-      case 'hot_steel_ingot': icon = '🔥'; break;
-      case 'hot_copper_ingot': icon = '🔥'; break;
-      case 'hot_silver_ingot': icon = '🔥'; break;
-      case 'hot_gold_ingot': icon = '🔥'; break;
+      case 'cloth': icon = 'T'; break; // T for Textile
+      case 'medicine': icon = '💊'; break;
+      // Raw materials from mining
+      case 'coal': icon = '●'; break; // Black circle
+      case 'copper': icon = 'Cu'; break; // Chemical symbol
+      case 'steel': icon = 'Fe'; break; // Iron/Steel symbol
+      case 'silver': icon = 'Ag'; break; // Silver symbol
+      case 'gold': icon = 'Au'; break; // Gold symbol
+      // Refined ingots
+      case 'steel_ingot': icon = '■'; break; // Dark square block
+      case 'copper_ingot': icon = '▪'; break; // Copper block
+      case 'silver_ingot': icon = '□'; break; // Silver outlined square
+      case 'gold_ingot': icon = '◆'; break; // Gold diamond
+      // Hot ingots (glowing)
+      case 'hot_steel_ingot': icon = '▲'; break; // Hot triangle
+      case 'hot_copper_ingot': icon = '◊'; break; // Hot diamond outline
+      case 'hot_silver_ingot': icon = '◈'; break; // Hot diamond filled
+      case 'hot_gold_ingot': icon = '★'; break; // Hot star
     }
 
     this.ctx.strokeText(icon, x, y);

@@ -10,6 +10,7 @@ import { ToastManager } from './dom/toast';
 import { HelpPanel } from './dom/helpPanel';
 import { MobileControls, type MobileControlsCallbacks } from './dom/mobileControls';
 import { Header, type HeaderCallbacks } from './dom/header';
+import { ChangelogModal } from './dom/changelogModal';
 import type { Game } from '../Game';
 
 export interface UIComponents {
@@ -18,6 +19,7 @@ export interface UIComponents {
   helpPanel: HelpPanel;
   mobileControls: MobileControls;
   header: Header;
+  changelogModal: ChangelogModal;
   canvas: HTMLCanvasElement;
   wrap: HTMLDivElement;
   gameRef: { current: Game | null };
@@ -61,6 +63,9 @@ export function initializeUI(game: Game | null = null): UIComponents {
         gameRef.current.setTouchUIEnabled(next, true);
         gameRef.current.toast('Mobile mode: ' + (next ? 'ON' : 'OFF'));
       }
+    },
+    onChangelog: () => {
+      changelogModal.show();
     }
   };
   
@@ -69,6 +74,9 @@ export function initializeUI(game: Game | null = null): UIComponents {
   
   // Create help panel
   const helpPanel = new HelpPanel();
+  
+  // Create changelog modal
+  const changelogModal = new ChangelogModal();
   
   // Setup mobile controls callbacks
   const mobileCallbacks: MobileControlsCallbacks = {
@@ -135,6 +143,7 @@ export function initializeUI(game: Game | null = null): UIComponents {
     helpPanel,
     mobileControls,
     header,
+    changelogModal,
     canvas,
     wrap,
     gameRef

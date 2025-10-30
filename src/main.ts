@@ -43,7 +43,12 @@ async function initGame() {
   linkGameToUI(ui, game);
 
   // Make game and assets available globally for debugging
-  (Object.assign(window as any, { game, BUILD_TYPES, imageAssets: ImageAssets.getInstance() }));
+  (Object.assign(window as any, { 
+    game, 
+    BUILD_TYPES, 
+    imageAssets: ImageAssets.getInstance(),
+    uiComponents: ui
+  }));
 
   console.log('Game initialized successfully');
 }

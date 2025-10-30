@@ -9,6 +9,7 @@ export interface HeaderCallbacks {
   onHelp: () => void;
   onBuildMenu: () => void;
   onToggleMobile: () => void;
+  onChangelog: () => void;
 }
 
 export class Header {
@@ -70,11 +71,13 @@ export class Header {
     const btnNew = this.createDropdownButton('hd-new', 'New Game', callbacks.onNewGame);
     const btnHelp = this.createDropdownButton('hd-help', 'Help', callbacks.onHelp);
     const btnBuild = this.createDropdownButton('hd-build', 'Build Menu', callbacks.onBuildMenu);
+    const btnChangelog = this.createDropdownButton('hd-changelog', 'Change Logs', callbacks.onChangelog);
     const btnToggleMobile = this.createDropdownButton('hd-toggle-mobile', 'Toggle Mobile UI', callbacks.onToggleMobile);
     
     dropdown.appendChild(btnNew);
     dropdown.appendChild(btnHelp);
     dropdown.appendChild(btnBuild);
+    dropdown.appendChild(btnChangelog);
     dropdown.appendChild(btnToggleMobile);
     
     return dropdown;

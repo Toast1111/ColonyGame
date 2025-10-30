@@ -362,6 +362,17 @@ export class Game {
   public colonistActionManager!: ColonistActionManager; // Colonist actions and commands
   public colonistNavigationManager!: ColonistNavigationManager; // Colonist movement and navigation
 
+  // UI Click Regions (populated during render)
+  public modernHotbarRects?: import('./ui/hud/modernHotbar').HotbarTabRect[];
+  public controlPanelRects?: import('./ui/hud/controlPanel').ControlPanelRect[];
+  public modernBuildMenuRects?: any; // TODO: Add proper type for build menu rects
+
+  // Zoom Overlay System (for highlighting entities when fully zoomed out)
+  public zoomOverlayActive = false;
+  public zoomOverlayTimer: number | null = null;
+  private static readonly ZOOM_OVERLAY_DELAY = 1000; // 1 second delay
+  private static readonly MIN_ZOOM_FOR_OVERLAY = 0.65; // Slightly above minimum zoom to trigger
+
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
     this.canvas = canvas; this.ctx = ctx;
@@ -684,6 +695,13 @@ export class Game {
 
   private computeStockpileRect(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut: boolean): { x: number; y: number; width: number; height: number } | null {
     if (!start || !end) { return null; }
+    
+    // Validate input coordinates
+    if (typeof start.x !== 'number' || typeof start.y !== 'number' ||
+        typeof end.x !== 'number' || typeof end.y !== 'number') {
+      console.error('Invalid coordinates in computeStockpileRect:', { start, end });
+      return null;
+    }
 
     const dx = Math.abs(end.x - start.x);
     const dy = Math.abs(end.y - start.y);
@@ -734,21 +752,38 @@ export class Game {
   }
 
   private finalizeMiningZoneDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
-    const rect = this.computeStockpileRect(start, end, allowTapShortcut);
-    if (!rect) { return false; }
+    try {
+      const rect = this.computeStockpileRect(start, end, allowTapShortcut);
+      if (!rect) { return false; }
 
-    // Create a new mining zone
-    const miningZone: MiningZone = {
-      id: `mine_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      x: rect.x,
-      y: rect.y,
-      w: rect.width,
-      h: rect.height,
-      color: '#f59e0b' // Orange color
-    };
-    this.miningZones.push(miningZone);
-    this.msg('Mining zone created', 'good');
-    return true;
+      // Validate rect properties
+      if (typeof rect.x !== 'number' || typeof rect.y !== 'number' || 
+          typeof rect.width !== 'number' || typeof rect.height !== 'number') {
+        console.error('Invalid rect properties in finalizeMiningZoneDrag:', rect);
+        return false;
+      }
+
+      // Create a new mining zone
+      const miningZone: MiningZone = {
+        id: `mine_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+        x: rect.x,
+        y: rect.y,
+        w: rect.width,
+        h: rect.height,
+        color: '#f59e0b' // Orange color
+      };
+      
+      if (!this.miningZones) {
+        this.miningZones = [];
+      }
+      
+      this.miningZones.push(miningZone);
+      this.msg('Mining zone created', 'good');
+      return true;
+    } catch (error) {
+      console.error('Error in finalizeMiningZoneDrag:', error);
+      return false;
+    }
   }
 
   getZoneDragPreviewRect(): { x: number; y: number; width: number; height: number } | null {
@@ -759,6 +794,25 @@ export class Game {
       ? this.touchZoneLastPos
       : { x: this.mouse.wx, y: this.mouse.wy };
     return this.computeStockpileRect(this.uiManager.zoneDragStart, current, this.touchZoneDragActive);
+  }
+
+  private updateZoomOverlay(): void {
+    const isFullyZoomedOut = this.camera.zoom <= Game.MIN_ZOOM_FOR_OVERLAY;
+    
+    if (isFullyZoomedOut && !this.zoomOverlayActive && !this.zoomOverlayTimer) {
+      // Start timer to show overlay after delay
+      this.zoomOverlayTimer = window.setTimeout(() => {
+        this.zoomOverlayActive = true;
+        this.zoomOverlayTimer = null;
+      }, Game.ZOOM_OVERLAY_DELAY);
+    } else if (!isFullyZoomedOut) {
+      // Hide overlay immediately when zooming in
+      this.zoomOverlayActive = false;
+      if (this.zoomOverlayTimer) {
+        clearTimeout(this.zoomOverlayTimer);
+        this.zoomOverlayTimer = null;
+      }
+    }
   }
 
   bindInput() {
@@ -783,11 +837,10 @@ export class Game {
       }
       
       // Hotbar hover SFX (play when entering a new tab)
-      const hotbarRects = (this as any).modernHotbarRects || [];
-      if (hotbarRects.length) {
+      if (this.modernHotbarRects && Array.isArray(this.modernHotbarRects) && this.modernHotbarRects.length) {
         const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
         let hoveredTab: any = null;
-        for (const r of hotbarRects) {
+        for (const r of this.modernHotbarRects) {
           if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) { hoveredTab = r.tab; break; }
         }
         if (hoveredTab !== (this.uiManager as any).lastHoveredHotbarTab) {
@@ -801,7 +854,7 @@ export class Game {
       // Build menu hover SFX (categories and building items)
       if (this.uiManager.activeHotbarTab === 'build') {
         const buildMenuRects = (this as any).modernBuildMenuRects;
-        if (buildMenuRects) {
+        if (buildMenuRects && Array.isArray(buildMenuRects.categories) && Array.isArray(buildMenuRects.buildings)) {
           const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
           // Category hover
           let hoveredCategory: string | null = null;
@@ -895,11 +948,14 @@ export class Game {
             }
           }
           // Check for tab clicks
-          if (this.colonistTabRects) {
+          if (this.colonistTabRects && Array.isArray(this.colonistTabRects)) {
             for (const tabRect of this.colonistTabRects) {
-              if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
-                this.colonistProfileTab = tabRect.tab as any;
-                return;
+              if (tabRect && typeof tabRect.x === 'number' && typeof tabRect.y === 'number' && 
+                  typeof tabRect.w === 'number' && typeof tabRect.h === 'number') {
+                if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
+                  this.colonistProfileTab = tabRect.tab as any;
+                  return;
+                }
               }
             }
           }
@@ -939,24 +995,26 @@ export class Game {
         }
         // Detect modern hotbar tab click first
         const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-        const modernHotbarRects = (this as any).modernHotbarRects || [];
-        const clickedTab = handleHotbarClick(mx, my, modernHotbarRects);
-        if (clickedTab) {
-          // Toggle tab or switch to new tab
-          this.uiManager.setHotbarTab(clickedTab);
-          return;
+        if (this.modernHotbarRects && Array.isArray(this.modernHotbarRects)) {
+          const clickedTab = handleHotbarClick(mx, my, this.modernHotbarRects);
+          if (clickedTab) {
+            // Toggle tab or switch to new tab
+            this.uiManager.setHotbarTab(clickedTab);
+            return;
+          }
         }
         
         // Check for control panel clicks (speed, pause, zoom, delete)
-        const controlPanelRects = (this as any).controlPanelRects || [];
-        if (handleControlPanelClick(mx, my, controlPanelRects, this)) {
-          return; // Click was handled by control panel
+        if (this.controlPanelRects && Array.isArray(this.controlPanelRects)) {
+          if (handleControlPanelClick(mx, my, this.controlPanelRects, this)) {
+            return; // Click was handled by control panel
+          }
         }
         
         // Check for modern build menu clicks
         if (this.uiManager.activeHotbarTab === 'build') {
           const buildMenuRects = (this as any).modernBuildMenuRects;
-          if (buildMenuRects) {
+          if (buildMenuRects && Array.isArray(buildMenuRects.categories) && Array.isArray(buildMenuRects.buildings)) {
             const clickResult = handleModernBuildMenuClick(mx, my, buildMenuRects);
             if (clickResult) {
               if (clickResult.type === 'category') {
@@ -986,33 +1044,38 @@ export class Game {
           let clickedOnMenu = false;
           const menu = this.contextMenu;
 
-          for (const rect of this.contextMenuRects) {
-            if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
-              const item = rect.item;
-              if (!item) continue;
-              const enabled = item.enabled !== false;
+          if (this.contextMenuRects && Array.isArray(this.contextMenuRects)) {
+            for (const rect of this.contextMenuRects) {
+              if (rect && typeof rect.x === 'number' && typeof rect.y === 'number' && 
+                  typeof rect.w === 'number' && typeof rect.h === 'number') {
+                if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
+                  const item = rect.item;
+                  if (!item) continue;
+                  const enabled = item.enabled !== false;
 
-              if (!rect.isSubmenu && item.submenu && item.submenu.length) {
-                if (enabled) {
-                  menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
-                  if (menu.openSubmenu) { void this.audioManager.play('ui.panel.open').catch(() => {}); }
+                  if (!rect.isSubmenu && item.submenu && item.submenu.length) {
+                    if (enabled) {
+                      menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
+                      if (menu.openSubmenu) { void this.audioManager.play('ui.panel.open').catch(() => {}); }
+                    }
+                    clickedOnMenu = true;
+                    return;
+                  }
+
+                  if (enabled) {
+                    if (item.action) {
+                      item.action({ game: this, target: menu.target, item });
+                    } else if (menu.onSelect) {
+                      menu.onSelect({ game: this, target: menu.target, item });
+                    }
+                    void this.audioManager.play('ui.click.primary').catch(() => {});
+                  }
+
+                  hideContextMenuUI(this);
+                  clickedOnMenu = true;
+                  return;
                 }
-                clickedOnMenu = true;
-                return;
               }
-
-              if (enabled) {
-                if (item.action) {
-                  item.action({ game: this, target: menu.target, item });
-                } else if (menu.onSelect) {
-                  menu.onSelect({ game: this, target: menu.target, item });
-                }
-                void this.audioManager.play('ui.click.primary').catch(() => {});
-              }
-
-              hideContextMenuUI(this);
-              clickedOnMenu = true;
-              return;
             }
           }
 
@@ -1166,6 +1229,7 @@ export class Game {
       this.setTouchUIEnabled(true);
       if (e.touches.length === 1) {
         this.skipNextTapAfterLongPress = false;
+        if (!c) return; // Safety check for canvas element
         const rect = c.getBoundingClientRect();
         const sx = e.touches[0].clientX - rect.left;
         const sy = e.touches[0].clientY - rect.top;
@@ -1193,6 +1257,9 @@ export class Game {
         this.touchZoneLastPos = null;
         this.uiManager.zoneDragStart = null;
         this.mouse.rdown = false;
+        
+        // Reset pending drag state on touch start
+        this.pendingDragging = false;
 
         this.touchLastPan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
 
@@ -1277,6 +1344,7 @@ export class Game {
       }
       
       if (this.touchZoneDragActive && e.touches.length === 1) {
+        if (!c) return; // Safety check for canvas element
         const rect = c.getBoundingClientRect();
         const sx = e.touches[0].clientX - rect.left;
         const sy = e.touches[0].clientY - rect.top;
@@ -1289,11 +1357,20 @@ export class Game {
       if (e.touches.length === 1 && this.touchLastPan) {
         // If adjusting a pending placement ghost, move it with the finger
         if (this.pendingPlacement) {
+          if (!c) return; // Safety check for canvas element
           const rect = c.getBoundingClientRect();
           const sx = e.touches[0].clientX - rect.left;
           const sy = e.touches[0].clientY - rect.top;
           const wpt = this.screenToWorld(sx, sy);
           this.mouse.x = sx; this.mouse.y = sy; this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+          
+          // Set dragging flag to prevent auto-confirm on touch end
+          if (!this.pendingDragging) {
+            this.pendingDragging = true;
+            // UI drag start SFX (only play once per drag session)
+            void this.audioManager.play('ui.drag.start').catch(() => {});
+          }
+          
           const def = BUILD_TYPES[this.pendingPlacement.key];
           const rot = this.pendingPlacement.rot || 0; const rotated = (rot === 90 || rot === 270);
           const gx = Math.floor(this.mouse.wx / T) * T; const gy = Math.floor(this.mouse.wy / T) * T;
@@ -1316,6 +1393,7 @@ export class Game {
         if (this.touchLastDist != null && this.touchLastDist > 0) {
           const factor = dist / this.touchLastDist;
           // Zoom around midpoint between touches
+          if (!c) return; // Safety check for canvas element
           const rect = c.getBoundingClientRect();
           const cx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
           const cy = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
@@ -1351,6 +1429,7 @@ export class Game {
       }
 
       if (this.touchZoneDragActive && this.uiManager.zoneDragStart) {
+        if (!c) return; // Safety check for canvas element
         const rect = c.getBoundingClientRect();
         const changed = e.changedTouches[0];
         let endWorld: { x: number; y: number } | null = null;
@@ -1388,6 +1467,7 @@ export class Game {
 
       // Treat single-finger touchend as a tap/click if not panning or suppressed by long press
       if (!suppressTap && e.changedTouches.length === 1 && e.touches.length === 0) {
+        if (!c) return; // Safety check for canvas element
         const rect = c.getBoundingClientRect();
         const sx = e.changedTouches[0].clientX - rect.left;
         const sy = e.changedTouches[0].clientY - rect.top;
@@ -1449,6 +1529,7 @@ export class Game {
   // Mirrors the left mouse button logic to support touch taps.
   handleTapOrClickAtScreen(sx: number, sy: number) {
     const c = this.canvas;
+    if (!c) return; // Safety check for canvas element
     const rect = c.getBoundingClientRect();
     this.mouse.x = sx;
     this.mouse.y = sy;
@@ -1496,6 +1577,9 @@ export class Game {
         // Only confirm if this wasn't a drag operation
         if (!this.pendingDragging) {
           this.confirmPending();
+        } else {
+          // Play drag end sound for touch dragging
+          void this.audioManager.play('ui.drag.end').catch(() => {});
         }
         // Clear drag state regardless
         this.pendingDragging = false;
@@ -1520,11 +1604,14 @@ export class Game {
         }
       }
       // Check for tab clicks
-      if (this.colonistTabRects) {
+      if (this.colonistTabRects && Array.isArray(this.colonistTabRects)) {
         for (const tabRect of this.colonistTabRects) {
-          if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
-            this.colonistProfileTab = tabRect.tab as any;
-            return;
+          if (tabRect && typeof tabRect.x === 'number' && typeof tabRect.y === 'number' && 
+              typeof tabRect.w === 'number' && typeof tabRect.h === 'number') {
+            if (mx0 >= tabRect.x && mx0 <= tabRect.x + tabRect.w && my0 >= tabRect.y && my0 <= tabRect.y + tabRect.h) {
+              this.colonistProfileTab = tabRect.tab as any;
+              return;
+            }
           }
         }
       }
@@ -1540,33 +1627,40 @@ export class Game {
 
     const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
 
-    // Modern hotbar tabs (touch)
-    const modernHotbarRects = (this as any).modernHotbarRects || [];
-    const touchedTab = handleHotbarClick(mx, my, modernHotbarRects);
-    if (touchedTab) {
-      this.uiManager.setHotbarTab(touchedTab);
-      return;
+    // Modern hotbar tabs (touch) - ensure array is valid before calling handleHotbarClick
+    if (this.modernHotbarRects && Array.isArray(this.modernHotbarRects)) {
+      const touchedTab = handleHotbarClick(mx, my, this.modernHotbarRects);
+      if (touchedTab) {
+        this.uiManager.setHotbarTab(touchedTab);
+        return;
+      }
     }
 
     // Control panel (speed, pause, zoom, delete) - touch events
-    const controlPanelRects = (this as any).controlPanelRects || [];
-    if (handleControlPanelClick(mx, my, controlPanelRects, this)) {
-      return; // Click was handled by control panel
+    if (this.controlPanelRects && Array.isArray(this.controlPanelRects)) {
+      if (handleControlPanelClick(mx, my, this.controlPanelRects, this)) {
+        return; // Click was handled by control panel
+      }
     }
 
     // Legacy hotbar fallback (desktop-only UI still available in some screens)
-    for (const r of this.hotbarRects) {
-      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        const key = this.hotbar[r.index];
-        if (key) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); }
-        return;
+    if (this.hotbarRects && Array.isArray(this.hotbarRects)) {
+      for (const r of this.hotbarRects) {
+        if (r && typeof r.x === 'number' && typeof r.y === 'number' && 
+            typeof r.w === 'number' && typeof r.h === 'number') {
+          if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+            const key = this.hotbar[r.index];
+            if (key) { this.selectedBuild = key; this.toast('Selected: ' + BUILD_TYPES[key].name); }
+            return;
+          }
+        }
       }
     }
 
     // Modern build menu (build tab)
     if (this.uiManager.activeHotbarTab === 'build') {
       const buildMenuRects = (this as any).modernBuildMenuRects;
-      if (buildMenuRects) {
+      if (buildMenuRects && Array.isArray(buildMenuRects.categories) && Array.isArray(buildMenuRects.buildings)) {
         const clickResult = handleModernBuildMenuClick(mx, my, buildMenuRects);
         if (clickResult) {
           if (clickResult.type === 'category') {
@@ -1589,31 +1683,36 @@ export class Game {
       let clickedOnMenu = false;
       const menu = this.contextMenu;
 
-      for (const rect of this.contextMenuRects) {
-        if (mxMenu >= rect.x && mxMenu <= rect.x + rect.w && myMenu >= rect.y && myMenu <= rect.y + rect.h) {
-          const item = rect.item;
-          if (!item) continue;
-          const enabled = item.enabled !== false;
+      if (this.contextMenuRects && Array.isArray(this.contextMenuRects)) {
+        for (const rect of this.contextMenuRects) {
+          if (rect && typeof rect.x === 'number' && typeof rect.y === 'number' && 
+              typeof rect.w === 'number' && typeof rect.h === 'number') {
+            if (mxMenu >= rect.x && mxMenu <= rect.x + rect.w && myMenu >= rect.y && myMenu <= rect.y + rect.h) {
+              const item = rect.item;
+              if (!item) continue;
+              const enabled = item.enabled !== false;
 
-          if (!rect.isSubmenu && item.submenu && item.submenu.length) {
-            if (enabled) {
-              menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
+              if (!rect.isSubmenu && item.submenu && item.submenu.length) {
+                if (enabled) {
+                  menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
+                }
+                clickedOnMenu = true;
+                return;
+              }
+
+              if (enabled) {
+                if (item.action) {
+                  item.action({ game: this, target: menu.target, item });
+                } else if (menu.onSelect) {
+                  menu.onSelect({ game: this, target: menu.target, item });
+                }
+              }
+
+              hideContextMenuUI(this);
+              clickedOnMenu = true;
+              return;
             }
-            clickedOnMenu = true;
-            return;
           }
-
-          if (enabled) {
-            if (item.action) {
-              item.action({ game: this, target: menu.target, item });
-            } else if (menu.onSelect) {
-              menu.onSelect({ game: this, target: menu.target, item });
-            }
-          }
-
-          hideContextMenuUI(this);
-          clickedOnMenu = true;
-          return;
         }
       }
 
@@ -2194,6 +2293,9 @@ export class Game {
     const consoleOpen = !!(dc && dc.open);
     
     // Note: Work priority panel is now non-modal (like build menu), so it doesn't block input
+    
+    // Update zoom overlay system
+    this.updateZoomOverlay();
     
     // Handle toggles even when paused
     if (!consoleOpen && this.keyPressed(' ')) { this.paused = !this.paused; const btn = document.getElementById('btnPause'); if (btn) btn.textContent = this.paused ? 'Resume' : 'Pause'; }

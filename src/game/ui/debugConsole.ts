@@ -62,6 +62,79 @@ export function initDebugConsole(game: Game) {
 
   reg("pause", (g) => { g.paused = !g.paused; return `paused = ${g.paused}`; }, "pause — toggle pause");
 
+  reg("overlay", (g, args) => {
+    const action = (args[0] || "toggle").toLowerCase();
+    if (action === "on" || action === "enable") {
+      g.zoomOverlayActive = true;
+      return "zoom overlay enabled";
+    } else if (action === "off" || action === "disable") {
+      g.zoomOverlayActive = false;
+      if (g.zoomOverlayTimer) {
+        clearTimeout(g.zoomOverlayTimer);
+        g.zoomOverlayTimer = null;
+      }
+      return "zoom overlay disabled";
+    } else {
+      g.zoomOverlayActive = !g.zoomOverlayActive;
+      if (!g.zoomOverlayActive && g.zoomOverlayTimer) {
+        clearTimeout(g.zoomOverlayTimer);
+        g.zoomOverlayTimer = null;
+      }
+      return `zoom overlay ${g.zoomOverlayActive ? 'enabled' : 'disabled'}`;
+    }
+  }, "overlay [on|off|toggle] — toggle zoom overlay for testing");
+
+  reg("zoom", (g, args) => {
+    if (args.length === 0) {
+      return `current zoom: ${g.camera.zoom.toFixed(2)} (overlay threshold: 0.65)`;
+    }
+    const newZoom = parseFloat(args[0]);
+    if (isNaN(newZoom)) {
+      return "invalid zoom value";
+    }
+    g.camera.zoom = Math.max(0.6, Math.min(2.2, newZoom));
+    return `zoom set to ${g.camera.zoom.toFixed(2)}`;
+  }, "zoom [level] — get/set camera zoom level");
+
+  reg("changelog", (g) => {
+    try {
+      const modal = (window as any).uiComponents?.changelogModal;
+      if (modal) {
+        modal.show();
+        return "opening changelog modal";
+      } else {
+        return "changelog modal not available";
+      }
+    } catch (error) {
+      return `error: ${error}`;
+    }
+  }, "changelog — open changelog modal");
+
+  reg("test-sanitize", (g) => {
+    try {
+      const modal = (window as any).uiComponents?.changelogModal;
+      if (modal && modal.sanitizeContent) {
+        const testContent = `
+## New Features
+- Added healing system by @username
+- Fixed bug in combat (by developer123)
+- Enhanced UI - by @designer
+- New building types authored by contributor
+Signed-off-by: Test User <test@example.com>
+Co-authored-by: Another User <another@example.com>
+        `;
+        const sanitized = modal.sanitizeContent(testContent);
+        console.log("Original:", testContent);
+        console.log("Sanitized:", sanitized);
+        return "sanitization test completed (check console)";
+      } else {
+        return "sanitization function not available";
+      }
+    } catch (error) {
+      return `error: ${error}`;
+    }
+  }, "test-sanitize — test content sanitization");
+
   reg("give", (g, args) => {
     const what = (args[0] || "").toLowerCase();
     const target = (args[1] || "selected").toLowerCase();

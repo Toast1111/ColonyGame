@@ -468,6 +468,11 @@ export class RenderManager {
       }
     }
 
+    // Zoom overlay for highlighting entities when fully zoomed out
+    if (game.zoomOverlayActive) {
+      this.drawZoomOverlay(game, ctx, inViewport);
+    }
+
     // Bullets (with culling)
     drawBullets(ctx, game.bullets.filter(b => inViewport(b.x, b.y, 20)));
 
@@ -934,17 +939,17 @@ export class RenderManager {
     const hotbarRects = drawModernHotbar(ctx, canvas, game.uiManager.activeHotbarTab, game);
     
     // Store hotbar click regions for the new system
-    (game as any).modernHotbarRects = hotbarRects;
+    game.modernHotbarRects = hotbarRects;
 
     // Control Panel (speed, pause, zoom, delete) - always visible
     const controlPanelRects = drawControlPanel(ctx, canvas, game);
-    (game as any).controlPanelRects = controlPanelRects;
+    game.controlPanelRects = controlPanelRects;
 
     // Show panel based on active tab
     if (game.uiManager.activeHotbarTab === 'build') {
       // Build menu - two-panel category system
       const buildMenuRects = drawModernBuildMenu(ctx, canvas, game.uiManager.selectedBuildCategory, game);
-      (game as any).modernBuildMenuRects = buildMenuRects;
+      game.modernBuildMenuRects = buildMenuRects;
     } else if (game.uiManager.activeHotbarTab === 'work') {
       // Work priority panel - modal overlay, no container needed
       drawWorkPriorityPanel(ctx, game.colonists, canvas, game);
@@ -1109,5 +1114,123 @@ export class RenderManager {
     }
 
     return speed;
+  }
+
+  /**
+   * Draw zoom overlay - highlights colonists (blue) and enemies (red) when fully zoomed out
+   * Also shows off-screen arrows for colonists
+   */
+  private drawZoomOverlay(
+    game: Game, 
+    ctx: CanvasRenderingContext2D, 
+    inViewport: (x: number, y: number, r?: number) => boolean
+  ): void {
+    const canvas = game.canvas;
+    
+    // Draw highlights for colonists (blue)
+    ctx.save();
+    for (let i = 0; i < game.colonists.length; i++) {
+      const c = game.colonists[i];
+      if (!c.alive) continue;
+      
+      // Skip if colonist is hidden inside a building
+      const hiddenInside = c.inside && (c.inside as any).kind !== 'bed';
+      if (hiddenInside) continue;
+      
+      if (inViewport(c.x, c.y, 50)) {
+        // Draw blue highlight circle around visible colonists
+        ctx.strokeStyle = '#3b82f6'; // Blue
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.2)'; // Semi-transparent blue
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, c.r + 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    
+    // Draw highlights for enemies (red)
+    ctx.save();
+    for (let i = 0; i < game.enemies.length; i++) {
+      const e = game.enemies[i];
+      if (inViewport(e.x, e.y, 50)) {
+        // Draw red highlight circle around visible enemies
+        ctx.strokeStyle = '#ef4444'; // Red
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.2)'; // Semi-transparent red
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(e.x, e.y, e.r + 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    
+    // Draw off-screen arrows for colonists (in screen space)
+    ctx.restore(); // Exit world transform
+    ctx.save(); // Start screen-space rendering
+    
+    const screenMargin = 40;
+    const arrowSize = 20;
+    
+    for (let i = 0; i < game.colonists.length; i++) {
+      const c = game.colonists[i];
+      if (!c.alive) continue;
+      
+      // Skip if colonist is hidden inside a building
+      const hiddenInside = c.inside && (c.inside as any).kind !== 'bed';
+      if (hiddenInside) continue;
+      
+      // Convert world position to screen position
+      const screenX = (c.x - game.camera.x) * game.camera.zoom;
+      const screenY = (c.y - game.camera.y) * game.camera.zoom;
+      
+      // Check if colonist is off-screen
+      if (screenX < -arrowSize || screenX > canvas.width + arrowSize || 
+          screenY < -arrowSize || screenY > canvas.height + arrowSize) {
+        
+        // Calculate arrow position at screen edge
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        
+        const dx = screenX - centerX;
+        const dy = screenY - centerY;
+        const angle = Math.atan2(dy, dx);
+        
+        // Find intersection with screen edge
+        let edgeX = centerX + Math.cos(angle) * (canvas.width / 2 - screenMargin);
+        let edgeY = centerY + Math.sin(angle) * (canvas.height / 2 - screenMargin);
+        
+        // Clamp to screen bounds with margin
+        edgeX = Math.max(screenMargin, Math.min(canvas.width - screenMargin, edgeX));
+        edgeY = Math.max(screenMargin, Math.min(canvas.height - screenMargin, edgeY));
+        
+        // Draw arrow pointing toward off-screen colonist
+        ctx.fillStyle = '#3b82f6'; // Blue
+        ctx.strokeStyle = '#1e40af'; // Darker blue
+        ctx.lineWidth = 2;
+        
+        ctx.save();
+        ctx.translate(edgeX, edgeY);
+        ctx.rotate(angle);
+        
+        // Draw arrow shape
+        ctx.beginPath();
+        ctx.moveTo(arrowSize / 2, 0);
+        ctx.lineTo(-arrowSize / 2, -arrowSize / 3);
+        ctx.lineTo(-arrowSize / 4, 0);
+        ctx.lineTo(-arrowSize / 2, arrowSize / 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.restore();
+      }
+    }
+    
+    ctx.restore(); // End screen-space rendering
+    ctx.save(); // Resume world transform for subsequent rendering
+    applyWorldTransform(ctx, game.camera);
   }
 }

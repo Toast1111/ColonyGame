@@ -117,7 +117,7 @@ export interface CategoryRect {
 }
 
 export interface BuildingItemRect {
-  buildingKey: keyof typeof BUILD_TYPES;
+  buildingKey: keyof typeof BUILD_TYPES | string; // Allow both building keys and zone keys
   x: number;
   y: number;
   w: number;
@@ -318,7 +318,7 @@ export function drawModernBuildMenu(
       }
 
       const rect: BuildingItemRect = {
-        buildingKey: key as keyof typeof BUILD_TYPES,
+        buildingKey: key, // No more unsafe casting - key can be building or zone
         x: buildingPanelX,
         y: buildingY,
         w: buildingPanelWidth,
@@ -418,7 +418,7 @@ export function handleBuildMenuClick(
   mouseX: number,
   mouseY: number,
   rects: BuildMenuRects
-): { type: 'category'; value: string } | { type: 'building'; value: keyof typeof BUILD_TYPES } | null {
+): { type: 'category'; value: string } | { type: 'building'; value: string } | null {
   // Check category clicks
   for (const rect of rects.categories) {
     if (mouseX >= rect.x && mouseX <= rect.x + rect.w && mouseY >= rect.y && mouseY <= rect.y + rect.h) {

@@ -26,7 +26,7 @@ export function drawColonistProfile(game: any, c: any) {
   const maxH = ch * (isTouchUI ? 0.8 : 0.85);
   const W = Math.max(minW, Math.min(game.scale(baseW * scale), maxW));
   const H = Math.max(minH, Math.min(game.scale(baseH * scale), maxH));
-  const X = isTouchUI ? PAD : Math.max(PAD, (cw - W) / 2); // Anchor left on touch to free the center view
+  const X = PAD; // Always anchor left (like mobile) to free the center view
   const Y = isTouchUI ? PAD + game.scale(28) : game.scale(54);
   const finalY = Math.max(PAD, Math.min(Y, ch - H - PAD));
 
