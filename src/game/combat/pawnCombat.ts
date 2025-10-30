@@ -4,6 +4,7 @@ import { grantSkillXP, skillLevel } from "../skills/skills";
 import { itemDatabase } from "../../data/itemDatabase";
 import { createMuzzleFlash, createProjectileTrail } from "../../core/particles";
 import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";
+import { isUnarmed, selectUnarmedAttack, calculateUnarmedDamage } from "./unarmedCombat";
 
 // Reuse utility from turret combat via a local copy (keeps decoupled)
 function lineIntersectsRect(x1: number, y1: number, x2: number, y2: number, r: { x: number; y: number; w: number; h: number }): boolean {
@@ -455,12 +456,14 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         const meleeLvl = c.skills ? skillLevel(c, 'Melee') : 0;
         const weaponDef = stats ? itemDatabase.getItemDef((c.inventory?.equipment?.weapon as any)?.defName) : null;
         
-        // Determine animation type based on weapon
+        // Determine animation type based on weapon or unarmed
         const weaponDefName = c.inventory?.equipment?.weapon?.defName;
         if (weaponDefName === 'Knife') {
           c.meleeAttackType = 'stab';
-        } else {
+        } else if (weaponDefName) {
           c.meleeAttackType = 'swing'; // Club and other weapons use swing
+        } else {
+          c.meleeAttackType = 'swing'; // Unarmed attacks (fists, head, teeth) use swing animation
         }
         c.meleeAttackProgress = 0; // Start animation
         
@@ -472,14 +475,38 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         // Check if hit lands
         if (Math.random() > hitChance) {
           // Miss!
+          game.playAudio('weapons.miss.melee', { 
+            volume: 0.6, 
+            rng: Math.random,
+            position: { x: c.x, y: c.y },
+            listenerPosition: game.audioManager.getListenerPosition()
+          });
           (c as any).meleeCd = 0.8; // attack every 0.8s
           return;
         }
         
-        const dmg = Math.round((stats?.damage || 10) * (1 + meleeLvl * 0.03));
+        let dmg: number;
+        let damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture';
+        let shouldStun = false;
+        let stunDuration = 0;
         
-        // Determine damage type from weapon
-        const damageType = weaponDef?.damageType === 'blunt' ? 'bruise' : 'cut';
+        // Check if colonist has a weapon or is unarmed
+        if (stats && stats.damage && weaponDef) {
+          // Has weapon - use weapon damage
+          dmg = Math.round(stats.damage * (1 + meleeLvl * 0.03));
+          damageType = weaponDef.damageType === 'blunt' ? 'bruise' : 'cut';
+        } else {
+          // Unarmed combat - use unarmed combat system
+          const unarmedAttack = selectUnarmedAttack();
+          const targetArmor = typeof (game as any).getArmorReduction === 'function' ? 
+                            (game as any).getArmorReduction(target) : 0;
+          
+          const unarmedResult = calculateUnarmedDamage(unarmedAttack, targetArmor);
+          dmg = Math.round(unarmedResult.finalDamage);
+          damageType = unarmedResult.damageType === 'bite' ? 'bite' : 'bruise';
+          shouldStun = unarmedResult.shouldStun;
+          stunDuration = unarmedResult.stunDuration || 0;
+        }
         
         // Check if hitting a colonist (friendly fire in melee)
         const isColonist = (game.colonists as any[]).includes(target);
@@ -490,10 +517,13 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
           // Regular enemy damage
           target.hp -= dmg;
           
-          // Check for stun on blunt damage
-          if (damageType === 'bruise' && weaponDef?.stunChance) {
+          // Check for stun (weapon-based or unarmed)
+          if (shouldStun && stunDuration > 0) {
+            // Unarmed fist stun
+            (target as any).stunnedUntil = performance.now() / 1000 + stunDuration;
+          } else if (damageType === 'bruise' && weaponDef?.stunChance) {
+            // Weapon-based stun (blunt weapons)
             if (Math.random() < weaponDef.stunChance) {
-              // Stun the enemy for 1.5 seconds (reduce speed to near zero)
               (target as any).stunnedUntil = performance.now() / 1000 + 1.5;
             }
           }
@@ -512,7 +542,15 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         
         // XP for landing a melee hit
         if (c.skills) grantSkillXP(c, 'Melee', 18, (c as any).t || 0);
-        (c as any).meleeCd = 0.8; // attack every 0.8s
+        
+        // Set cooldown based on weapon type
+        if (stats && stats.damage && weaponDef) {
+          // Weapon attack cooldown
+          (c as any).meleeCd = 0.8; // attack every 0.8s
+        } else {
+          // Unarmed attack cooldown (RimWorld standard: 2 seconds)
+          (c as any).meleeCd = 2.0;
+        }
       }
     } else {
       // No target in melee range - clear aim data unless drafted
@@ -597,6 +635,12 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       // Check if hit lands
       if (Math.random() > hitChance) {
         // Miss!
+        game.playAudio('weapons.miss.melee', { 
+          volume: 0.5, 
+          rng: Math.random,
+          position: { x: c.x, y: c.y },
+          listenerPosition: game.audioManager.getListenerPosition()
+        });
         (c as any).meleeCd = 0.9;
         return;
       }

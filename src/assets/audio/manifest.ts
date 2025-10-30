@@ -326,6 +326,15 @@ export const AUDIO_MANIFEST = {
     { name: 'MeleeHit_Metal_Sharp_1h', volume: 0.85 }
   ]),
 
+  'weapons.miss.melee': variants('ui', [
+    { name: 'FlickWhoosh', volume: 0.6 },
+    { name: 'FlickWhooshRev', volume: 0.6 }
+  ]),
+
+  'weapons.miss.ranged': variants('ui', [
+    { name: 'FlickWhoosh', volume: 0.4 }
+  ]),
+
   'music.gameover.sad': variants('music/game_over', [
     { name: 'New Horizons', loop: true, volume: 0.4 }
   ])

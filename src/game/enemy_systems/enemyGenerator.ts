@@ -155,7 +155,12 @@ function selectWeaponForEnemy(role: EnemyRole, threatLevel: number, dayNumber: n
   
   switch (role) {
     case 'melee':
-      weaponPool = dayNumber < 5 ? ['Club', 'Knife'] : ['Club', 'Knife'];
+      // 40% chance of truly unarmed melee enemies for proper unarmed combat testing
+      if (Math.random() < 0.4) {
+        weaponPool = []; // No weapon - truly unarmed, will use fists/head/teeth
+      } else {
+        weaponPool = dayNumber < 5 ? ['Club', 'Knife'] : ['Club', 'Knife'];
+      }
       break;
     case 'shooter':
       if (dayNumber < 3) {
@@ -206,7 +211,8 @@ function calculateEnemyStats(role: EnemyRole, threatLevel: number, dayNumber: nu
   // Role modifiers
   switch (role) {
     case 'melee':
-      baseDamage += 4;
+      // Reduced base damage since many melee enemies will be unarmed (using 8.2 damage fists)
+      baseDamage += 0; // Base 8 damage, unarmed combat system will handle the rest
       baseSpeed += 8;
       baseHealth += 10;
       break;

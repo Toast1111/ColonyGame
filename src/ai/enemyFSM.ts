@@ -4,6 +4,9 @@ import type { Building, Enemy, Colonist } from "../game/types";
 import { isDoorBlocking, isNearDoor, attackDoor } from "../game/systems/doorSystem";
 import { computeEnemyPath } from "../core/pathfinding";
 import { isMountainTile } from "../game/terrain";
+import { itemDatabase } from "../data/itemDatabase";
+import { isUnarmed, selectUnarmedAttack, calculateUnarmedDamage } from "../game/combat/unarmedCombat";
+import { getWeaponAudioByDefName } from "../game/audio/weaponAudioMap";
 
 // Helper function to check if a position would collide with buildings or mountains (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -342,18 +345,91 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
       }
       
       if (!movedThisTick && (e as any).meleeCd <= 0) {
-        // Apply armor-aware damage with appropriate damage type (discrete hit)
+        // Check if enemy has a weapon or is unarmed
+        const weapon = (e as any).inventory?.equipment?.weapon;
+        let finalDamage = e.dmg;
         let damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise';
-        const enemyColor = e.color?.toLowerCase() || '';
-        if (enemyColor.includes('red') || enemyColor.includes('orange')) damageType = 'burn';
-        else if (enemyColor.includes('green') || enemyColor.includes('brown')) damageType = 'bite';
-        else if (e.dmg > 15) damageType = 'cut';
-        if (typeof (game as any).applyDamageToColonist === 'function') {
-          (game as any).applyDamageToColonist(c, e.dmg, damageType);
+        let cooldown = 1.0;
+        let shouldStun = false;
+        let stunDuration = 0;
+        let hitChance = 0.8; // Base 80% hit chance for enemies
+        
+        if (weapon && weapon.defName) {
+          // Enemy has a weapon - use weapon damage
+          const weaponDef = itemDatabase.getItemDef(weapon.defName);
+          if (weaponDef && weaponDef.damage) {
+            finalDamage = weaponDef.damage;
+            damageType = weaponDef.damageType === 'cut' ? 'cut' : 
+                        weaponDef.damageType === 'blunt' ? 'bruise' : 'cut';
+            cooldown = weaponDef.cooldownTicks ? (weaponDef.cooldownTicks / 30) : 1.0; // Convert ticks to seconds
+            hitChance = weaponDef.meleeHitChance || 0.8; // Use weapon hit chance if available
+          }
         } else {
-          c.hp -= e.dmg;
+          // Enemy is unarmed - use unarmed combat system
+          const unarmedAttack = selectUnarmedAttack();
+          const targetArmor = typeof (game as any).getArmorReduction === 'function' ? 
+                            (game as any).getArmorReduction(c) : 0;
+          
+          const unarmedResult = calculateUnarmedDamage(unarmedAttack, targetArmor);
+          finalDamage = unarmedResult.finalDamage;
+          damageType = unarmedResult.damageType === 'bite' ? 'bite' : 'bruise';
+          cooldown = 2.0; // All unarmed attacks have 2 second cooldown
+          shouldStun = unarmedResult.shouldStun;
+          stunDuration = unarmedResult.stunDuration || 0;
+          hitChance = 0.75; // Unarmed enemies have 75% hit chance
         }
-        (e as any).meleeCd = 1.0; // enemy swing cooldown
+        
+        // Check if attack hits
+        if (Math.random() > hitChance) {
+          // Miss!
+          (game as any).playAudio('weapons.miss.melee', { 
+            volume: 0.5, 
+            rng: Math.random,
+            position: { x: e.x, y: e.y },
+            listenerPosition: (game as any).audioManager.getListenerPosition()
+          });
+          (e as any).meleeCd = cooldown;
+          return;
+        }
+        
+        // Apply damage
+        if (typeof (game as any).applyDamageToColonist === 'function') {
+          (game as any).applyDamageToColonist(c, finalDamage, damageType);
+        } else {
+          c.hp -= finalDamage;
+        }
+        
+        // Play hit sound effect
+        if (weapon && weapon.defName) {
+          // Weapon hit sound
+          const weaponDefName = weapon.defName;
+          const impactAudioKey = (game as any).itemDatabase ? 
+            getWeaponAudioByDefName((game as any).itemDatabase, weaponDefName, false) : null;
+          if (impactAudioKey) {
+            (game as any).playAudio(impactAudioKey, { 
+              volume: 0.8, 
+              rng: Math.random,
+              position: { x: e.x, y: e.y },
+              listenerPosition: (game as any).audioManager.getListenerPosition()
+            });
+          }
+        } else {
+          // Unarmed hit sound (use blunt impact for fists/head, different for bite)
+          const hitSound = damageType === 'bite' ? 'weapons.melee.sword.impact' : 'weapons.melee.club.impact';
+          (game as any).playAudio(hitSound, { 
+            volume: 0.7, 
+            rng: Math.random,
+            position: { x: e.x, y: e.y },
+            listenerPosition: (game as any).audioManager.getListenerPosition()
+          });
+        }
+        
+        // Apply stun effect if applicable (for unarmed fist attacks)
+        if (shouldStun && stunDuration > 0) {
+          (c as any).stunnedUntil = performance.now() / 1000 + stunDuration;
+        }
+        
+        (e as any).meleeCd = cooldown;
         if (c.hp <= 0) { c.alive = false; (game.colonists as Colonist[]).splice((game.colonists as Colonist[]).indexOf(c), 1); game.msg('A colonist has fallen', 'warn'); }
       }
     }
