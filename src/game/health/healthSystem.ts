@@ -436,9 +436,10 @@ export function healInjuries(colonist: Colonist, deltaTime: number): void {
     const healAmount = injuryHealingPerSecond * deltaTime;
     injury.severity = Math.max(0, injury.severity - healAmount);
     
-    // Update injury effects proportional to severity
-    injury.pain = injury.pain * (injury.severity / (injury.severity + 0.1));
-    injury.bleeding = injury.bleeding * injury.severity;
+    // Update injury effects proportional to severity using base values
+    const baseValues = getInjuryBaseValues(injury.type);
+    injury.pain = baseValues.pain * injury.severity;
+    injury.bleeding = baseValues.bleeding * injury.severity;
     
     // Remove healed injuries
     if (injury.severity <= 0.05) {
@@ -486,6 +487,26 @@ export function getMostCriticalInjury(health: ColonistHealth): Injury | undefine
     const bs = (b.bleeding*2)+(b.severity)+(b.infected?0.5:0);
     return bs - as;
   })[0];
+}
+
+// Get base injury values for consistent scaling during healing
+function getInjuryBaseValues(type: InjuryType): { pain: number; bleeding: number } {
+  switch (type) {
+    case 'cut':
+      return { pain: 0.2, bleeding: 0.1 };
+    case 'bruise':
+      return { pain: 0.1, bleeding: 0 };
+    case 'burn':
+      return { pain: 0.4, bleeding: 0.05 };
+    case 'bite':
+      return { pain: 0.3, bleeding: 0.15 };
+    case 'gunshot':
+      return { pain: 0.6, bleeding: 0.3 };
+    case 'fracture':
+      return { pain: 0.5, bleeding: 0 };
+    default:
+      return { pain: 0.2, bleeding: 0.1 };
+  }
 }
 
 // Basic field treatment: quick, low-skill stabilization when no doctor available.

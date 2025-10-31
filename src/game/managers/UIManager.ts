@@ -23,7 +23,7 @@ export class UIManager {
   selectedBuildCategory: string | null = null; // Selected category in build menu
   
   // Building selection
-  selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
+  selectedBuild: keyof typeof BUILD_TYPES | null = null;
   hotbar: Array<keyof typeof BUILD_TYPES> = [
     'house',
     'farm',
@@ -341,7 +341,7 @@ export class UIManager {
   reset(): void {
     this.activeHotbarTab = null;
     this.selectedBuildCategory = null;
-    this.selectedBuild = 'house';
+    this.selectedBuild = null;
     this.showBuildMenu = false;
     this.selColonist = null;
     this.follow = false;

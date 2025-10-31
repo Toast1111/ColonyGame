@@ -9,9 +9,9 @@ export function drawColonistProfile(game: any, c: any) {
 
   // Responsive sizing - scale down for smaller screens
   const baseW = isTouchUI ? 420 : 550;
-  const baseH = isTouchUI ? 400 : 450;
+  const baseH = isTouchUI ? 600 : 700;
   const minW = isTouchUI ? 260 : 320;
-  const minH = isTouchUI ? 260 : 280;
+  const minH = isTouchUI ? 400 : 480;
 
   const scaleW = isTouchUI
     ? Math.max(0.6, Math.min(0.95, cw / 720))
@@ -23,7 +23,7 @@ export function drawColonistProfile(game: any, c: any) {
 
   const PAD = game.scale(8);
   const maxW = cw * (isTouchUI ? 0.55 : 0.9);
-  const maxH = ch * (isTouchUI ? 0.8 : 0.85);
+  const maxH = ch * (isTouchUI ? 0.9 : 0.95);
   const W = Math.max(minW, Math.min(game.scale(baseW * scale), maxW));
   const H = Math.max(minH, Math.min(game.scale(baseH * scale), maxH));
   const X = PAD; // Always anchor left (like mobile) to free the center view

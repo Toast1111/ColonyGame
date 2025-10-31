@@ -1,6 +1,6 @@
 import type { Game } from "../Game";
 import { itemDatabase } from "../../data/itemDatabase";
-import { initializeColonistHealth } from "../health/healthSystem";
+import { initializeColonistHealth, applyDamageToColonist } from "../health/healthSystem";
 import { addItemToInventory } from "../systems/buildingInventory";
 import { RESEARCH_TREE } from "../research/researchDatabase";
 
@@ -368,8 +368,50 @@ Co-authored-by: Another User <another@example.com>
         }
       }
       return `initialized health system for ${initialized} colonist(s)`;
+    } else if (action === "testpain") {
+      // Test pain calculation by adding a test injury
+      const colonist = targets[0];
+      if (!colonist) return "no colonist selected";
+      
+      if (!colonist.health) {
+        initializeColonistHealth(colonist);
+      }
+      
+      // Apply damage using the health system
+      const result = applyDamageToColonist(g, colonist, 15, 'cut');
+      
+      const pain = Math.round((colonist.health.totalPain || 0) * 100);
+      const injuries = colonist.health.injuries?.length || 0;
+      
+      return `Applied test damage. Pain: ${pain}%, Injuries: ${injuries}, Result: ${JSON.stringify(result)}`;
+    } else if (action === "debug") {
+      // Detailed debugging of pain calculation
+      const colonist = targets[0];
+      if (!colonist) return "no colonist selected";
+      
+      if (!colonist.health) {
+        return "no health system initialized";
+      }
+      
+      let debugInfo = `=== Health Debug ===\n`;
+      debugInfo += `Total Pain: ${(colonist.health.totalPain * 100).toFixed(1)}%\n`;
+      debugInfo += `Injuries Count: ${colonist.health.injuries.length}\n`;
+      
+      if (colonist.health.injuries.length > 0) {
+        debugInfo += `Individual Injuries:\n`;
+        colonist.health.injuries.forEach((inj: any, i: number) => {
+          debugInfo += `  ${i+1}. ${inj.type} (${inj.bodyPart}): severity=${(inj.severity * 100).toFixed(1)}%, pain=${(inj.pain * 100).toFixed(1)}%\n`;
+        });
+        
+        // Manually calculate total pain
+        const manualTotal = colonist.health.injuries.reduce((sum: number, inj: any) => sum + inj.pain, 0);
+        debugInfo += `Manual Pain Sum: ${(manualTotal * 100).toFixed(1)}%\n`;
+      }
+      
+      console.log(debugInfo);
+      return debugInfo;
     } else {
-      return "usage: health check|init [target]. Target: selected,all,name";
+      return "usage: health check|init|testpain|debug [target]. Target: selected,all,name";
     }
   }, "health check|init [target] — check health status or initialize health system");
 

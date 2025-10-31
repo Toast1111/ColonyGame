@@ -74,7 +74,7 @@ export class GameState {
   messages: Message[] = [];
   
   // Selection state
-  selectedBuild: keyof typeof BUILD_TYPES | null = 'house';
+  selectedBuild: keyof typeof BUILD_TYPES | null = null;
   selColonist: Colonist | null = null;
   
   // Building hotbar
@@ -135,7 +135,7 @@ export class GameState {
     this.prevIsNight = false;
     
     this.messages = [];
-    this.selectedBuild = 'house';
+    this.selectedBuild = null;
     this.selColonist = null;
     this.respawnTimer = 0;
     
