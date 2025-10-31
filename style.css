@@ -338,6 +338,60 @@ body.touch-ui #toast{bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 20px
 	margin: 12px 0;
 }
 
+/* Commit information styling */
+.changelog-commits {
+	margin-top: 20px;
+	padding: 16px;
+	background: rgba(15, 23, 42, 0.6);
+	border-radius: 8px;
+	border-left: 4px solid #3b82f6;
+}
+
+.changelog-commits h4 {
+	margin: 0 0 12px 0;
+	color: #f1f5f9;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.changelog-commit {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 0;
+	border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+	flex-wrap: wrap;
+}
+
+.changelog-commit:last-child {
+	border-bottom: none;
+}
+
+.commit-sha {
+	font-family: 'Courier New', Consolas, monospace;
+	background: #374151;
+	color: #fbbf24;
+	padding: 3px 8px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.commit-message {
+	flex: 1;
+	color: #cbd5e1;
+	font-size: 14px;
+	line-height: 1.4;
+	min-width: 0; /* Allow text to wrap */
+}
+
+.commit-date {
+	color: #94a3b8;
+	font-size: 12px;
+	flex-shrink: 0;
+}
+
 @keyframes fadeIn {
 	from { opacity: 0; transform: scale(0.95); }
 	to { opacity: 1; transform: scale(1); }
@@ -368,5 +422,16 @@ body.touch-ui #toast{bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 20px
 		flex-direction: column;
 		align-items: flex-start;
 		gap: 8px;
+	}
+	
+	.changelog-commit {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 6px;
+		padding: 12px 0;
+	}
+	
+	.commit-message {
+		font-size: 13px;
 	}
 }

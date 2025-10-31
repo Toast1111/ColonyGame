@@ -4,12 +4,21 @@
  * Fetches changelog data from GitHub releases API or falls back to local markdown files
  */
 
+export interface CommitInfo {
+  sha: string;
+  message: string;
+  author: string;
+  date: string;
+  url: string;
+}
+
 export interface ChangelogEntry {
   version: string;
   date: string;
   title: string;
   content: string;
   isPrerelease?: boolean;
+  commits?: CommitInfo[];
 }
 
 export class ChangelogModal {
@@ -129,17 +138,95 @@ export class ChangelogModal {
       }
 
       const releases = await response.json();
-      return releases.slice(0, 10).map((release: any) => ({
-        version: release.tag_name || release.name || 'Unknown',
-        date: new Date(release.published_at).toLocaleDateString(),
-        title: release.name || release.tag_name || 'Release',
-        content: this.parseMarkdown(this.sanitizeContent(release.body || 'No changelog available.')),
-        isPrerelease: release.prerelease
-      }));
+      const releaseData = releases.slice(0, 10);
+      
+      // Fetch commits for each release
+      const entriesWithCommits = await Promise.all(
+        releaseData.map(async (release: any, index: number) => {
+          const commits = await this.fetchCommitsForRelease(release, releaseData[index + 1]);
+          
+          return {
+            version: release.tag_name || release.name || 'Unknown',
+            date: new Date(release.published_at).toLocaleDateString(),
+            title: release.name || release.tag_name || 'Release',
+            content: this.parseMarkdown(this.sanitizeContent(release.body || 'No changelog available.')),
+            isPrerelease: release.prerelease,
+            commits: commits
+          };
+        })
+      );
+      
+      return entriesWithCommits;
     } catch (error) {
       console.warn('Failed to fetch from GitHub:', error);
       return [];
     }
+  }
+
+  /**
+   * Fetch commits for a specific release
+   */
+  private async fetchCommitsForRelease(release: any, previousRelease?: any): Promise<CommitInfo[]> {
+    try {
+      let commitsUrl = '';
+      
+      if (previousRelease && previousRelease.tag_name) {
+        // Compare between previous release and current release
+        commitsUrl = `https://api.github.com/repos/Toast1111/ColonyGame/compare/${previousRelease.tag_name}...${release.tag_name}`;
+      } else {
+        // For the first/latest release, get commits since the release date
+        const releaseDate = new Date(release.published_at);
+        releaseDate.setDate(releaseDate.getDate() - 30); // Look back 30 days max
+        const since = releaseDate.toISOString();
+        commitsUrl = `https://api.github.com/repos/Toast1111/ColonyGame/commits?since=${since}&until=${release.published_at}`;
+      }
+
+      const response = await fetch(commitsUrl);
+      if (!response.ok) {
+        console.warn(`Failed to fetch commits for ${release.tag_name}: ${response.status}`);
+        return [];
+      }
+
+      const data = await response.json();
+      
+      // Handle both compare API (data.commits) and commits API (data directly)
+      const commits = data.commits || data;
+      
+      return commits.slice(0, 20).map((commit: any) => ({
+        sha: commit.sha.substring(0, 7), // Short SHA
+        message: this.sanitizeCommitMessage(commit.commit?.message || commit.message || 'No message'),
+        author: this.sanitizeAuthor(commit.commit?.author?.name || commit.author?.login || 'Unknown'),
+        date: new Date(commit.commit?.author?.date || commit.commit?.committer?.date || release.published_at).toLocaleDateString(),
+        url: commit.html_url || `https://github.com/Toast1111/ColonyGame/commit/${commit.sha}`
+      }));
+    } catch (error) {
+      console.warn(`Failed to fetch commits for release ${release.tag_name}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Sanitize commit message to remove sensitive information
+   */
+  private sanitizeCommitMessage(message: string): string {
+    return message
+      .split('\n')[0] // Take only the first line (commit title)
+      .replace(/\(#\d+\)/g, '') // Remove PR numbers like (#123)
+      .replace(/Co-authored-by:.*$/gmi, '') // Remove co-author tags
+      .replace(/Signed-off-by:.*$/gmi, '') // Remove sign-off tags
+      .trim();
+  }
+
+  /**
+   * Sanitize author information
+   */
+  private sanitizeAuthor(author: string): string {
+    // For security, we can either remove authors completely or use generic names
+    // Option 1: Remove completely
+    return 'Developer';
+    
+    // Option 2: If you want to keep some info, uncomment below:
+    // return author.replace(/@.*$/g, '').trim() || 'Developer';
   }
 
   /**
@@ -314,11 +401,36 @@ export class ChangelogModal {
         </div>
         <div class="changelog-body">
           ${entry.content}
+          ${this.renderCommits(entry.commits)}
         </div>
       </div>
     `).join('');
 
     this.content.innerHTML = html;
+  }
+
+  /**
+   * Render commit information for a release
+   */
+  private renderCommits(commits?: CommitInfo[]): string {
+    if (!commits || commits.length === 0) {
+      return '';
+    }
+
+    const commitHtml = commits.map(commit => `
+      <div class="changelog-commit">
+        <span class="commit-sha">${commit.sha}</span>
+        <span class="commit-message">${commit.message}</span>
+        <span class="commit-date">${commit.date}</span>
+      </div>
+    `).join('');
+
+    return `
+      <div class="changelog-commits">
+        <h4>📝 Commits in this release</h4>
+        ${commitHtml}
+      </div>
+    `;
   }
 
   /**

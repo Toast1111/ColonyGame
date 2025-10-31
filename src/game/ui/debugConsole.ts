@@ -966,6 +966,30 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: research complete|reset|start <id> — manipulate research";
   }, "research complete|reset|start <id> — complete all, reset, or start specific research");
+
+  reg("changelog", (g, args) => {
+    const action = (args[0] || "").toLowerCase();
+    
+    if (action === "test") {
+      // Test the changelog modal
+      const modal = (g as any).ui?.changelogModal;
+      if (!modal) return "changelog modal not found";
+      modal.show();
+      return "opened changelog modal";
+    } else if (action === "sanitize") {
+      // Test content sanitization
+      const modal = (g as any).ui?.changelogModal;
+      if (!modal) return "changelog modal not found";
+      
+      const testContent = "Added healing - by @username\n* Fixed bug (by developer)\n- New feature authored by someone";
+      const sanitized = modal.sanitizeContent(testContent);
+      console.log("Original:", testContent);
+      console.log("Sanitized:", sanitized);
+      return "sanitization test logged to console";
+    }
+    
+    return "usage: changelog test|sanitize — test changelog modal or content sanitization";
+  }, "changelog test|sanitize — test changelog modal functionality");
 }
 
 export function toggleDebugConsole(game: Game) {
