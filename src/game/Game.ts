@@ -151,6 +151,7 @@ export class Game {
   private touchZoneLastPos: { x: number; y: number } | null = null;
   private skipNextTapAfterLongPress = false;
   private defaultStockpileSize = 64;
+  private justUnlockedFollow = false; // Flag to prevent bio panel close after unlocking follow
   // lastInputWasTouch moved to inputManager (see getter/setter below)
 
   getStorageCapacity(): number {
@@ -282,6 +283,9 @@ export class Game {
   
   get colonistPanelCloseRect() { return this.uiManager.colonistPanelCloseRect; }
   set colonistPanelCloseRect(value) { this.uiManager.colonistPanelCloseRect = value; }
+  
+  get colonistAvatarRect() { return this.uiManager.colonistAvatarRect; }
+  set colonistAvatarRect(value) { this.uiManager.colonistAvatarRect = value; }
   
   get colonistProfileTab() { return this.uiManager.colonistProfileTab; }
   set colonistProfileTab(value) { 
@@ -947,6 +951,16 @@ export class Game {
               this.selColonist = null; this.follow = false; return;
             }
           }
+          // Check for avatar click (toggle camera follow)
+          if (this.colonistAvatarRect) {
+            const r = this.colonistAvatarRect;
+            if (mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h) {
+              this.follow = !this.follow;
+              const colonistName = this.selColonist.profile?.name || 'colonist';
+              this.msg(this.follow ? `Following ${colonistName}` : `Stopped following ${colonistName}`, 'info');
+              return;
+            }
+          }
           // Check for tab clicks
           if (this.colonistTabRects && Array.isArray(this.colonistTabRects)) {
             for (const tabRect of this.colonistTabRects) {
@@ -1383,6 +1397,14 @@ export class Game {
         const nx = e.touches[0].clientX, ny = e.touches[0].clientY;
         const dx = nx - this.touchLastPan.x, dy = ny - this.touchLastPan.y;
         this.touchLastPan = { x: nx, y: ny };
+        
+        // If bio panel is open and camera is following, unlock follow mode when panning
+        if ((Math.abs(dx) > 5 || Math.abs(dy) > 5) && this.follow && this.selColonist) {
+          this.follow = false;
+          this.justUnlockedFollow = true;
+          this.msg(`Stopped following ${this.selColonist.profile?.name || 'colonist'}`, 'info');
+        }
+        
         this.camera.x -= dx / this.camera.zoom;
         this.camera.y -= dy / this.camera.zoom;
         this.clampCameraToWorld();
@@ -1535,6 +1557,10 @@ export class Game {
     this.mouse.y = sy;
     const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
     this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
+    
+    // Clear follow unlock flag at start of each tap/click event
+    const wasJustUnlocked = this.justUnlockedFollow;
+    this.justUnlockedFollow = false;
 
     // PRIORITY PANEL IS MODAL - Check first and block all other interactions
     if (isWorkPriorityPanelOpen()) {
@@ -1603,6 +1629,16 @@ export class Game {
           this.selColonist = null; this.follow = false; return;
         }
       }
+      // Check for avatar click (toggle camera follow)
+      if (this.colonistAvatarRect) {
+        const r = this.colonistAvatarRect;
+        if (mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h) {
+          this.follow = !this.follow;
+          const colonistName = this.selColonist.profile?.name || 'colonist';
+          this.msg(this.follow ? `Following ${colonistName}` : `Stopped following ${colonistName}`, 'info');
+          return;
+        }
+      }
       // Check for tab clicks
       if (this.colonistTabRects && Array.isArray(this.colonistTabRects)) {
         for (const tabRect of this.colonistTabRects) {
@@ -1620,7 +1656,10 @@ export class Game {
         const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
         if (!inside) {
           const keepSelection = this.lastInputWasTouch && this.selColonist?.isDrafted;
-          if (!keepSelection) { this.selColonist = null; this.follow = false; return; }
+          const justUnlocked = wasJustUnlocked;
+          if (!keepSelection && !justUnlocked) { 
+            this.selColonist = null; this.follow = false; return; 
+          }
         }
       }
     }
@@ -2356,6 +2395,15 @@ export class Game {
     
     // Camera movement (works even when paused)
     const camSpd = 360 * dt / this.camera.zoom;
+    const wasdPressed = this.keyState['w'] || this.keyState['s'] || this.keyState['a'] || this.keyState['d'];
+    
+    // If bio panel is open and camera is following, unlock follow mode when WASD is pressed
+    if (wasdPressed && this.follow && this.selColonist) {
+      this.follow = false;
+      this.justUnlockedFollow = true;
+      this.msg(`Stopped following ${this.selColonist.profile?.name || 'colonist'}`, 'info');
+    }
+    
     if (this.keyState['w']) this.camera.y -= camSpd;
     if (this.keyState['s']) this.camera.y += camSpd;
     if (this.keyState['a']) this.camera.x -= camSpd;

@@ -100,18 +100,23 @@ export function drawColonistProfile(game: any, c: any) {
       drawBioTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'health':
+      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
       drawHealthTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'gear':
+      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
       drawGearTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'social':
+      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
       drawSocialTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'skills':
+      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
       drawSkillsTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'log':
+      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
       drawLogTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
   }
@@ -151,6 +156,12 @@ function drawBioTab(game: any, c: any, x: number, y: number, w: number, h: numbe
   const avatarSize = game.scale(64);
   const ax = x + game.scale(8);
   const ay = textY;
+  
+  // Store avatar click area (only when bio tab is active)
+  if (game.colonistProfileTab === 'bio') {
+    game.colonistAvatarRect = { x: ax, y: ay, w: avatarSize, h: avatarSize };
+  }
+  
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(ax, ay, avatarSize, avatarSize);
   ctx.strokeStyle = '#1e293b';
