@@ -208,15 +208,11 @@ export const AUDIO_MANIFEST = {
   ]),
 
   'ui.panel.open': variants('ui', [
-    { name: 'TabOpen', volume: 0.6 },
-    { name: 'FloatMenuOpen', volume: 0.55 },
-    { name: 'PageChange', volume: 0.55 }
+    { name: 'TabOpen', volume: 0.6 }
   ]),
 
   'ui.panel.close': variants('ui', [
-    { name: 'TabClose', volume: 0.6 },
-    { name: 'FloatMenuCancel', volume: 0.55 },
-    { name: 'InfoCard_Close', volume: 0.55 }
+    { name: 'TabClose', volume: 0.6 }
   ]),
 
   // Hotbar specific (single-variant each to avoid shuffling)

@@ -288,7 +288,7 @@ export class UIManager {
       
       // Close work priority panel if we're closing work tab
       if (tab === 'work') {
-        closeWorkPriorityPanel();
+        closeWorkPriorityPanel(false); // Don't clear hotbar tab (avoid circular call)
       }
       
       // Close research panel if we're closing research tab

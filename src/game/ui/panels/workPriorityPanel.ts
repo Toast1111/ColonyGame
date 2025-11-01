@@ -124,9 +124,19 @@ export function isWorkPriorityPanelOpen(): boolean {
 /**
  * Close the work priority panel
  */
-export function closeWorkPriorityPanel(): void {
+export function closeWorkPriorityPanel(clearHotbarTab = true): void {
   isPanelOpen = false;
   try { (window as any).game?.audioManager?.play('ui.panel.close'); } catch {}
+  
+  // Clear hotbar tab state when panel is closed externally (ESC, click outside, etc.)
+  // This prevents the Work tab from staying highlighted when panel is closed
+  // Skip this when called from UIManager to avoid circular calls
+  if (clearHotbarTab) {
+    const game = (window as any).game;
+    if (game?.uiManager?.activeHotbarTab === 'work') {
+      game.uiManager.setHotbarTab(null);
+    }
+  }
   
   // Restore mobile controls visibility
   const mobileControls = document.getElementById('mobileControls');
