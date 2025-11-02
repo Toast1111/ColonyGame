@@ -111,6 +111,7 @@ export class Game {
     private game: Game;
     private rebuildQueued: boolean = false;
     private fullRebuildQueued: boolean = false;
+    private cacheInvalidationQueued: boolean = false;
     
     constructor(game: Game) {
       this.game = game;
@@ -121,7 +122,17 @@ export class Game {
       this.rebuildQueued = true;
     }
     
+    requestCacheInvalidation(): void {
+      this.cacheInvalidationQueued = true;
+    }
+    
     processQueue(): void {
+      if (this.cacheInvalidationQueued) {
+        // Invalidate world cache (deferred to prevent performance issues)
+        this.game.renderManager?.invalidateWorldCache();
+        this.cacheInvalidationQueued = false;
+      }
+      
       if (!this.rebuildQueued) return;
       if (this.fullRebuildQueued) {
         // Rebuild navigation grid

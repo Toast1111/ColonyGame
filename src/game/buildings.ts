@@ -215,7 +215,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
   cooling_rack: {
     category: 'Production',
     name: 'Cooling Rack',
-    description: 'Decorative cooling station for freshly smelted ingots. Not currently functional.',
+    description: 'Cooling station for hot metal ingots. Smelters automatically place hot ingots here to cool into usable metal ingots for smithing.',
     key: 'C',
     cost: { wood: 15, stone: 10 },
     hp: 100,

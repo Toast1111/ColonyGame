@@ -1562,8 +1562,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               const idx = ty * game.grid.cols + tx;
               game.terrainGrid.floors[idx] = floorTypeId;
               
-              // Invalidate world cache so floor appears immediately
-              game.renderManager?.invalidateWorldCache();
+              // Use deferred cache invalidation to prevent performance issues during
+              // rapid floor placement (immediate invalidation caused 200%+ render time)
+              game.deferredRebuildSystem.requestCacheInvalidation();
               
               // Sync terrain to pathfinding grid
               (game as any).syncTerrainToGrid?.();

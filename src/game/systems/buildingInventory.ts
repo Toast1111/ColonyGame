@@ -31,6 +31,8 @@ export function getDefaultInventoryCapacity(buildingKind: string): number {
       return 15; // Medium storage
     case 'hq':
       return 30; // Very large storage
+    case 'cooling_rack':
+      return 3; // Small queue for hot ingots (can cool 3 ingots sequentially)
     default:
       return 0; // No inventory by default
   }
@@ -41,7 +43,8 @@ export function getDefaultInventoryCapacity(buildingKind: string): number {
  */
 export function shouldHaveInventory(buildingKind: string): boolean {
   // Removed 'farm', 'stove', 'pantry' - now using floor-based item system with hauling
-  return ['warehouse', 'stock', 'hq'].includes(buildingKind);
+  // Added 'cooling_rack' for small ingot queue management
+  return ['warehouse', 'stock', 'hq', 'cooling_rack'].includes(buildingKind);
 }
 
 /**

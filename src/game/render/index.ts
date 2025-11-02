@@ -634,6 +634,25 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     ctx.fillRect(b.x, b.y + b.h + 2, b.w, 4);
     ctx.fillStyle = '#6366f1'; // Cool blue-purple for cooling progress
     ctx.fillRect(b.x, b.y + b.h + 2, b.w * b.coolingProgress, 4);
+    
+    // Show ingot type indicator on top of cooling rack
+    if (b.coolingIngotType) {
+      const ingotEmoji = {
+        'hot_copper_ingot': '🟤',
+        'hot_steel_ingot': '⚫',
+        'hot_silver_ingot': '⚪',
+        'hot_gold_ingot': '🟡'
+      }[b.coolingIngotType] || '🔥';
+      
+      ctx.font = '12px system-ui';
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      const centerX = b.x + b.w / 2;
+      const centerY = b.y + b.h / 2;
+      ctx.strokeText(ingotEmoji, centerX - 6, centerY + 4);
+      ctx.fillText(ingotEmoji, centerX - 6, centerY + 4);
+    }
   }
 
   // Turret range visualization
