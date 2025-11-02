@@ -14,4 +14,12 @@ export default defineConfig({
   build: {
     target: 'esnext',
   },
+  // FIXED: Ensure audio files are properly served by Vite
+  assetsInclude: ['**/*.ogg', '**/*.wav', '**/*.mp3'],
+  server: {
+    // Ensure proper MIME type handling for audio files
+    headers: {
+      'Access-Control-Allow-Origin': '*'
+    }
+  }
 });

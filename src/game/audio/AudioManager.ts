@@ -298,7 +298,14 @@ export class AudioManager {
 
     try {
       const url = resolveAudioSrc(file);
+      
+      // FIXED: Better error handling for missing audio files
       const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(`[AudioManager] HTTP ${response.status} for audio file: ${file} (${url})`);
+        return null;
+      }
+      
       const arrayBuffer = await response.arrayBuffer();
       const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
       
@@ -306,7 +313,15 @@ export class AudioManager {
       this.bufferCache.set(file, cached);
       return cached;
     } catch (error) {
-      console.warn('[AudioManager] Failed to load audio buffer:', file, error);
+      // FIXED: More detailed error logging without throwing
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        console.warn(`[AudioManager] Network error loading audio: ${file} - File may not exist or server may be unavailable`);
+      } else {
+        console.warn('[AudioManager] Failed to load audio buffer:', file, error);
+      }
+      
+      // Cache the failure to avoid repeated attempts for same file
+      this.bufferCache.set(file, null as any);
       return null;
     }
   }

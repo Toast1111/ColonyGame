@@ -5,7 +5,7 @@
 
 import type { Game } from '../Game';
 import { COLORS, T, WORLD } from '../constants';
-import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawMountains, drawBullets, drawHUD, drawBuilding, drawColonistAvatar, drawPersonIcon } from '../render/index';
+import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawMountains, drawBullets, drawHUD, drawBuilding, drawBuildingProgressBars, drawColonistAvatar, drawPersonIcon } from '../render/index';
 import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/panels/colonistProfile';
@@ -535,6 +535,16 @@ export class RenderManager {
     if (game.zoomOverlayActive) {
       this.drawZoomOverlay(game, ctx, inViewport);
     }
+
+    // Building progress bars and HP bars - drawn after all buildings to ensure proper z-ordering
+    // Filter to only visible buildings to match the main building rendering culling
+    const visibleBuildings = game.buildings.filter(b => {
+      const radius = Math.max(b.w, b.h) / 2;
+      const centerX = b.x + b.w / 2;
+      const centerY = b.y + b.h / 2;
+      return inViewport(centerX, centerY, radius);
+    });
+    drawBuildingProgressBars(ctx, visibleBuildings);
 
     // Bullets (with culling)
     drawBullets(ctx, game.bullets.filter(b => inViewport(b.x, b.y, 20)));
