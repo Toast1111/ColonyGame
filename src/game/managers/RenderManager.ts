@@ -157,6 +157,11 @@ export class RenderManager {
     if ((game as any).miningZones) {
       this.renderMiningZones();
     }
+
+    // Render tree growing zones
+    if (game.treeGrowingManager) {
+      this.renderTreeZones();
+    }
   }
 
   /**
@@ -180,6 +185,64 @@ export class RenderManager {
       ctx.strokeStyle = '#f59e0b'; // Solid orange border
       ctx.lineWidth = 2 / zoom;
       ctx.strokeRect(x, y, w, h);
+    }
+  }
+
+  /**
+   * Render tree growing zones with green overlay and planting spots
+   */
+  private renderTreeZones(): void {
+    const { game } = this;
+    const { ctx } = game;
+    const zones = game.treeGrowingManager.getAllZones();
+    const zoom = game.camera.zoom;
+
+    for (const zone of zones) {
+      const x = Math.round(zone.x * zoom) / zoom;
+      const y = Math.round(zone.y * zoom) / zoom;
+      const w = Math.round(zone.width * zoom) / zoom;
+      const h = Math.round(zone.height * zoom) / zoom;
+
+      // Zone background
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.1)'; // Green with low transparency
+      ctx.fillRect(x, y, w, h);
+
+      // Zone border
+      ctx.strokeStyle = '#22c55e'; // Solid green border
+      ctx.lineWidth = 2 / zoom;
+      ctx.strokeRect(x, y, w, h);
+
+      // Render planting spots
+      for (const spot of zone.spots) {
+        const spotX = Math.round(spot.x * zoom) / zoom;
+        const spotY = Math.round(spot.y * zoom) / zoom;
+        const radius = 8 / zoom;
+
+        // Different colors based on tree stage
+        switch (spot.growthStage) {
+          case 'empty':
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.3)'; // Light green - empty spot
+            break;
+          case 'sapling':
+            ctx.fillStyle = 'rgba(132, 204, 22, 0.6)'; // Lime green - sapling
+            break;
+          case 'young':
+            ctx.fillStyle = 'rgba(34, 197, 94, 0.8)'; // Green - young tree
+            break;
+          case 'mature':
+            ctx.fillStyle = 'rgba(21, 128, 61, 1.0)'; // Dark green - mature tree
+            break;
+        }
+
+        ctx.beginPath();
+        ctx.arc(spotX, spotY, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Border for all spots
+        ctx.strokeStyle = '#059669'; // Darker green border
+        ctx.lineWidth = 1 / zoom;
+        ctx.stroke();
+      }
     }
   }
 

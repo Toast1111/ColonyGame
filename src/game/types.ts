@@ -20,7 +20,7 @@ export type Resources = {
 
 export type Circle = { x: number; y: number; r: number; hp: number; type: "tree" | "rock" };
 
-export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door" | "stove" | "pantry" | "research_bench" | "stonecutting_table" | "smelter" | "cooling_rack";
+export type BuildingKind = "hq" | "house" | "farm" | "turret" | "wall" | "stock" | "tent" | "warehouse" | "well" | "infirmary" | "path" | "bed" | "door" | "stove" | "pantry" | "research_bench" | "stonecutting_table" | "smelter" | "cooling_rack" | "smithing_bench";
 
 export type BuildingDef = {
   name: string;
@@ -52,6 +52,8 @@ export type BuildingDef = {
   prodRateSec?: number; // amount per second
   // movement
   speedBonus?: number; // movement speed multiplier on this tile
+  // research
+  requiresResearch?: string; // Research ID required to unlock this building
 };
 
 export type Building = BuildingDef & {
@@ -83,6 +85,10 @@ export type Building = BuildingDef & {
   coolingProgress?: number; // 0-1, how far through cooling
   coolingColonist?: string; // ID of colonist currently using the rack
   coolingIngotType?: string; // Type of hot ingot being cooled
+  // Smithing-specific properties (for smithing_bench)
+  smithingProgress?: number; // 0-1, how far through smithing
+  smithingColonist?: string; // ID of colonist currently smithing
+  smithingRecipe?: string; // Recipe being crafted (gladius, mace, knife)
   // Pantry-specific properties
   breadStored?: number; // Amount of bread in pantry
   // Building inventory system (for storage buildings like pantry, farm, warehouses)
@@ -104,7 +110,7 @@ export interface BuildingInventory {
 
 export type ColonistCommandIntent = 'goto' | 'rest' | 'medical' | 'seekMedical' | 'guard';
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'stonecutting' | 'smelting' | 'cooling' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted' | 'research';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'stonecutting' | 'smelting' | 'cooling' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted' | 'research' | 'plantTree' | 'harvestPlantedTree' | 'smithing' | 'equipment';
 
 // Inventory and equipment types
 export interface InventoryItem {
@@ -291,6 +297,7 @@ export type Colonist = {
   // Smelting system
   carryingOre?: number;  // Amount of ore being carried for smelting
   carryingOreType?: string;  // Type of ore being carried (coal, copper, steel, silver, gold)
+  carryingSteel?: number;  // Amount of steel ingots being carried for smithing
   
   // Cooling system
   carryingHotIngot?: number;  // Amount of hot ingot being carried for cooling

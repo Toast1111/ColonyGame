@@ -136,6 +136,24 @@ export const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: nu
     stackLimit: 50,
     stackRadius: 24,
     color: '#fde047' // Intense bright gold glow
+  },
+  gladius: {
+    weight: 3.0,
+    stackLimit: 10,
+    stackRadius: 20,
+    color: '#C0C0C0' // Silver steel blade
+  },
+  mace: {
+    weight: 4.0,
+    stackLimit: 8,
+    stackRadius: 22,
+    color: '#708090' // Gray steel with weight
+  },
+  knife: {
+    weight: 1.5,
+    stackLimit: 15,
+    stackRadius: 16,
+    color: '#A9A9A9' // Light gray utility blade
   }
 };
 

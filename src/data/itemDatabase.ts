@@ -282,6 +282,49 @@ export class ItemDatabase {
           stunChance: 0.25 // 25% chance to stun
         },
         {
+          defName: 'Gladius',
+          label: 'gladius',
+          description: 'A well-balanced Roman short sword. Excellent for thrusting and slashing in close combat.',
+          category: 'Weapon',
+          equipSlot: 'weapon',
+          maxDurability: 100,
+          stackable: false,
+          value: 150,
+          weight: 1.2,
+          damage: 18,
+          range: 1,
+          accuracy: 0.88,
+          armorPenetration: 0.25, // Good armor penetration from quality steel
+          stoppingPower: 0.8,
+          burstCount: 1,
+          aimTimeTicks: 15,          // 15 RimWorld ticks = 0.25 sec in RimWorld = 0.5 sec in game
+          cooldownTicks: 42,         // 42 RimWorld ticks = 0.7 sec in RimWorld = 1.4 sec in game
+          meleeHitChance: 0.88,
+          damageType: 'cut'
+        },
+        {
+          defName: 'Mace',
+          label: 'steel mace',
+          description: 'A heavy steel mace with brutal stopping power. Devastating against unarmored foes.',
+          category: 'Weapon',
+          equipSlot: 'weapon',
+          maxDurability: 120,
+          stackable: false,
+          value: 180,
+          weight: 3.0,
+          damage: 22,
+          range: 1,
+          accuracy: 0.82,
+          armorPenetration: 0.4, // High blunt force can bypass some armor
+          stoppingPower: 1.5, // Very high stagger chance
+          burstCount: 1,
+          aimTimeTicks: 20,          // 20 RimWorld ticks = 0.33 sec in RimWorld = 0.67 sec in game
+          cooldownTicks: 54,         // 54 RimWorld ticks = 0.9 sec in RimWorld = 1.8 sec in game
+          meleeHitChance: 0.82,
+          damageType: 'blunt',
+          stunChance: 0.4 // 40% chance to stun - very high
+        },
+        {
           defName: 'SniperRifle',
           label: 'sniper rifle',
           description: 'Long-range precision rifle with high damage and armor penetration.',

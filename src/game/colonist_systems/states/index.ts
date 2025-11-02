@@ -10,3 +10,5 @@ export { updateCookingState } from './cookingState';
 export { updateStonecuttingState } from './stonecuttingState';
 export { updateSmeltingState } from './smeltingState';
 export { updateCoolingState } from './coolingState';
+export { updateSmithingState } from './smithingState';
+export { updateEquipmentState, findBestWeaponUpgrade } from './equipmentState';

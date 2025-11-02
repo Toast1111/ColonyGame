@@ -16,6 +16,61 @@ import { colonistSpriteCache } from "../../../core/RenderCache";
 import { drawWeapon } from "./weaponRenderer";
 
 /**
+ * Draw progress bar for resource gathering activities (chopping trees, mining rocks/mountains)
+ */
+function drawResourceGatheringProgress(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  colonist: any
+): void {
+  if (!colonist.target || colonist.target.hp === undefined) return;
+  
+  // Determine initial HP based on target type
+  let initialHp = 0;
+  if (colonist.target.type === 'tree') {
+    initialHp = 40; // Trees start with 40 HP
+  } else if (colonist.target.type === 'rock') {
+    initialHp = 50; // Rocks start with 50 HP
+  } else if (colonist.target.isMountain) {
+    // Mountain tiles have variable HP based on ore type (70-120 HP)
+    // If we have the maxHp stored, use it; otherwise estimate based on current HP
+    initialHp = colonist.target.maxHp || Math.max(70, colonist.target.hp + 30);
+  } else {
+    return; // Unknown target type
+  }
+  
+  // Calculate progress (0 to 1)
+  const currentHp = colonist.target.hp;
+  const progress = Math.max(0, Math.min(1, (initialHp - currentHp) / initialHp));
+  
+  // Only show progress bar if there's meaningful progress (> 2% damage dealt)
+  if (progress < 0.02) return;
+  
+  // Progress bar dimensions
+  const barWidth = 24;
+  const barHeight = 4;
+  const barY = y + 20; // Position below colonist
+  
+  // Background border
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillRect(x - barWidth/2 - 1, barY - 1, barWidth + 2, barHeight + 2);
+  
+  // Background bar
+  ctx.fillStyle = 'rgba(60, 60, 60, 0.9)';
+  ctx.fillRect(x - barWidth/2, barY, barWidth, barHeight);
+  
+  // Progress fill - different colors based on activity
+  let progressColor = '#84cc16'; // Lime green for chopping (default)
+  if (colonist.state === 'mine') {
+    progressColor = '#f59e0b'; // Amber for mining
+  }
+  
+  ctx.fillStyle = progressColor;
+  ctx.fillRect(x - barWidth/2, barY, barWidth * progress, barHeight);
+}
+
+/**
  * Enhanced colonist avatar with directional sprite rendering
  * Renders the full colonist with body, clothing, head, hair, and status indicators
  */
@@ -234,6 +289,14 @@ export function drawColonistAvatar(
     ctx.lineWidth = 2;
     ctx.strokeText('❗', 12, -offsetY + spriteHeight * 0.15);
     ctx.fillText('❗', 12, -offsetY + spriteHeight * 0.15);
+  }
+  
+  // Resource gathering progress bar (chopping, mining) - drawn in world coordinates
+  if ((colonist.state === 'chop' || colonist.state === 'mine') && colonist.target) {
+    // We need to draw this in world coordinates, so we need to transform back
+    // The progress bar function expects screen coordinates (x, y params)
+    // but we're currently in colonist-relative coordinates due to ctx.translate(x, y)
+    drawResourceGatheringProgress(ctx, 0, offsetY, colonist);
   }
   
   // Carrying indicator - show icon if colonist is carrying something

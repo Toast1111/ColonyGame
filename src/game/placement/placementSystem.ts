@@ -93,7 +93,7 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
     (floorBuilding as any).floorType = def.floorType;
     
     game.buildings.push(floorBuilding);
-    game.rebuildNavGrid();
+    game.deferredRebuildSystem.requestFullRebuild();
     game.toast(`Placed ${def.name} blueprint`);
     
     // Play audio based on building type
@@ -121,7 +121,7 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
     }
   }
   game.buildings.push(b);
-  game.rebuildNavGrid();
+  game.deferredRebuildSystem.requestFullRebuild();
   
   // Play audio based on building type
   const audioClip = getBuildingPlacementAudio(t, def);
@@ -244,7 +244,7 @@ export function paintPathAtMouse(game: Game, force = false) {
   if (game.lastPaintCell == null) {
     tryPlace(gx, gy);
     game.lastPaintCell = { gx, gy };
-    game.rebuildNavGrid();
+    game.deferredRebuildSystem.requestFullRebuild();
     return;
   }
   
@@ -264,7 +264,7 @@ export function paintPathAtMouse(game: Game, force = false) {
   }
   
   game.lastPaintCell = { gx, gy };
-  game.rebuildNavGrid();
+  game.deferredRebuildSystem.requestFullRebuild();
 }
 
 export function paintWallAtMouse(game: Game, force = false) {
@@ -281,7 +281,7 @@ export function paintWallAtMouse(game: Game, force = false) {
     game.buildings.push(b);
   };
   if (game.lastPaintCell == null) {
-    tryPlace(gx, gy); game.lastPaintCell = { gx, gy }; game.rebuildNavGrid(); return;
+    tryPlace(gx, gy); game.lastPaintCell = { gx, gy }; game.deferredRebuildSystem.requestFullRebuild(); return;
   }
   let x0 = game.lastPaintCell.gx, y0 = game.lastPaintCell.gy, x1 = gx, y1 = gy;
   const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0);
@@ -292,7 +292,7 @@ export function paintWallAtMouse(game: Game, force = false) {
     if (x0 === x1 && y0 === y1) break;
     const e2 = 2 * err; if (e2 > -dy) { err -= dy; x0 += sx; } if (e2 < dx) { err += dx; y0 += sy; }
   }
-  game.lastPaintCell = { gx, gy }; game.rebuildNavGrid();
+  game.lastPaintCell = { gx, gy }; game.deferredRebuildSystem.requestFullRebuild();
 }
 
 export function eraseInRect(game: Game, rect: { x: number; y: number; w: number; h: number }) {
@@ -366,7 +366,7 @@ export function eraseInRect(game: Game, rect: { x: number; y: number; w: number;
     }
     
     game.msg(`Removed ${msgs.join(', ')}`); 
-    game.rebuildNavGrid(); 
+    game.deferredRebuildSystem.requestFullRebuild(); 
   }
 }
 
@@ -419,7 +419,7 @@ export function cancelOrErase(game: Game) {
       }
       
       game.buildings.splice(i, 1);
-      game.rebuildNavGrid();
+      game.deferredRebuildSystem.requestFullRebuild();
       return;
     }
   }

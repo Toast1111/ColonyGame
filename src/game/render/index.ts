@@ -425,11 +425,21 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     
     ctx.restore();
     
-    // Build progress bar
-    if (!b.done) {
-      ctx.fillStyle = '#0b1220'; ctx.fillRect(b.x, b.y - 6, b.w, 4);
-      ctx.fillStyle = '#6ee7ff'; const pct = 1 - (b.buildLeft / b.build);
-      ctx.fillRect(b.x, b.y - 6, pct * b.w, 4);
+    // Build progress bar - only show if construction has actually started
+    if (!b.done && b.buildLeft < b.build) {
+      const pct = 1 - (b.buildLeft / b.build);
+      
+      // Position progress bar below the building to avoid overlapping with adjacent buildings
+      const barY = b.y + b.h + 2;
+      const barHeight = 4;
+      
+      // Background
+      ctx.fillStyle = '#0b1220'; 
+      ctx.fillRect(b.x, barY, b.w, barHeight);
+      
+      // Progress fill
+      ctx.fillStyle = '#6ee7ff'; 
+      ctx.fillRect(b.x, barY, pct * b.w, barHeight);
     }
     
     // HP bar if damaged
@@ -558,11 +568,21 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     }
   }
 
-  // Build progress bar
-  if (!b.done) {
-    ctx.fillStyle = '#0b1220'; ctx.fillRect(b.x, b.y - 6, b.w, 4);
-    ctx.fillStyle = '#6ee7ff'; const pct = 1 - (b.buildLeft / b.build);
-    ctx.fillRect(b.x, b.y - 6, pct * b.w, 4);
+  // Build progress bar - only show if construction has actually started
+  if (!b.done && b.buildLeft < b.build) {
+    const pct = 1 - (b.buildLeft / b.build);
+    
+    // Position progress bar below the building to avoid overlapping with adjacent buildings
+    const barY = b.y + b.h + 2;
+    const barHeight = 4;
+    
+    // Background
+    ctx.fillStyle = '#0b1220'; 
+    ctx.fillRect(b.x, barY, b.w, barHeight);
+    
+    // Progress fill
+    ctx.fillStyle = '#6ee7ff'; 
+    ctx.fillRect(b.x, barY, pct * b.w, barHeight);
   }
 
   // Building labels (skip for houses and completed farms since they have images)

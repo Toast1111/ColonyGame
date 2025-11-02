@@ -223,6 +223,19 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     build: 40,
     color: '#94a3b8'  // Cool gray
   },
+  smithing_bench: {
+    category: 'Production',
+    name: 'Smithing Bench',
+    description: 'Forge melee weapons and tools from metal ingots. Requires smithing research.',
+    key: 'F',
+    cost: { wood: 50, stone: 40 },
+    hp: 250,
+    size: { w: 2, h: 2 },
+    build: 150,
+    color: '#b45309',  // Bronze/forge color
+    requiresResearch: 'smithing',
+    popCap: 1  // One smith at a time
+  },
 };
 
 export function hasCost(res: Resources, cost?: Partial<Resources>) {
@@ -286,19 +299,29 @@ export function costText(cost: Partial<Resources>): string {
 /**
  * Group buildings and zones by category for the build menu
  * Zones are drag-to-create areas (like stockpiles) that aren't physical buildings
+ * Buildings and zones with research requirements are filtered out if research is not complete
  */
-export function groupByCategory(defs: Record<string, BuildingDef>) {
+export function groupByCategory(defs: Record<string, BuildingDef>, game?: any) {
   const out: Record<string, Array<[string, BuildingDef]>> = {};
   
   // Add buildings
   for (const k of Object.keys(defs)) {
-    const d = defs[k]; const cat = d.category || 'Other';
+    const d = defs[k]; 
+    // Filter by research requirements if game is provided
+    if (game && d.requiresResearch && !game.researchManager?.isCompleted(d.requiresResearch)) {
+      continue; // Skip if research not completed
+    }
+    const cat = d.category || 'Other';
     (out[cat] ||= []).push([k, d]);
   }
   
   // Add zones (these are drag-to-create areas, not physical buildings)
   for (const k of Object.keys(ZONE_TYPES)) {
     const z = ZONE_TYPES[k];
+    // Filter by research requirements if game is provided
+    if (game && z.requiresResearch && !game.researchManager?.isCompleted(z.requiresResearch)) {
+      continue; // Skip if research not completed
+    }
     const cat = z.category || 'Other';
     // Zones use the same structure as BuildingDef for UI purposes
     (out[cat] ||= []).push([k, z as any]);

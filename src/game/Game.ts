@@ -55,6 +55,7 @@ import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugC
 import { updateDoor, initializeDoor, findBlockingDoor, requestDoorOpen, isDoorBlocking, releaseDoorQueue } from './systems/doorSystem';
 import { GameOverScreen } from './ui/GameOverScreen';
 import { TutorialSystem } from './ui/TutorialSystem';
+import { TreeGrowingManager } from './systems/treeGrowingZones';
 import { GameState } from './core/GameState';
 import { TimeSystem } from './systems/TimeSystem';
 import { CameraSystem } from './systems/CameraSystem';
@@ -365,6 +366,7 @@ export class Game {
   public buildingManager!: BuildingManager; // Building queries and operations
   public colonistActionManager!: ColonistActionManager; // Colonist actions and commands
   public colonistNavigationManager!: ColonistNavigationManager; // Colonist movement and navigation
+  public treeGrowingManager!: TreeGrowingManager; // Tree planting and growing zones
 
   // UI Click Regions (populated during render)
   public modernHotbarRects?: import('./ui/hud/modernHotbar').HotbarTabRect[];
@@ -426,6 +428,7 @@ export class Game {
     this.buildingManager = new BuildingManager(this);
     this.colonistActionManager = new ColonistActionManager(this);
     this.colonistNavigationManager = new ColonistNavigationManager(this);
+    this.treeGrowingManager = new TreeGrowingManager();
     
     // Initialize camera system
     this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
@@ -752,6 +755,15 @@ export class Game {
 
     this.itemManager.createStockpileZone(rect.x, rect.y, rect.width, rect.height, 'Stockpile');
     this.msg('Stockpile created', 'good');
+    return true;
+  }
+
+  private finalizeTreeGrowingZoneDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
+    const rect = this.computeStockpileRect(start, end, allowTapShortcut);
+    if (!rect) { return false; }
+
+    this.treeGrowingManager.createZone(rect.x, rect.y, rect.width, rect.height, 'Tree Grove');
+    this.msg('Tree growing zone created', 'good');
     return true;
   }
 
@@ -1158,8 +1170,8 @@ export class Game {
           return;
         }
 
-        // If stockpile or mining zone designator selected, start a zone drag
-        if (this.selectedBuild === 'stock' || this.selectedBuild === 'mine') {
+        // If stockpile, mining, or tree growing zone designator selected, start a zone drag
+        if (this.selectedBuild === 'stock' || this.selectedBuild === 'mine' || this.selectedBuild === 'tree_growing') {
           this.uiManager.zoneDragStart = { x: this.mouse.wx, y: this.mouse.wy };
         } else {
           this.eraseDragStart = { x: this.mouse.wx, y: this.mouse.wy };
@@ -1177,11 +1189,13 @@ export class Game {
         this.pendingDragging = false;
       }
       if ((e as MouseEvent).button === 2) {
-        if (this.uiManager.zoneDragStart && (this.selectedBuild === 'stock' || this.selectedBuild === 'mine')) {
+        if (this.uiManager.zoneDragStart && (this.selectedBuild === 'stock' || this.selectedBuild === 'mine' || this.selectedBuild === 'tree_growing')) {
           if (this.selectedBuild === 'stock') {
             this.finalizeStockpileDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
           } else if (this.selectedBuild === 'mine') {
             this.finalizeMiningZoneDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
+          } else if (this.selectedBuild === 'tree_growing') {
+            this.finalizeTreeGrowingZoneDrag(this.uiManager.zoneDragStart, { x: this.mouse.wx, y: this.mouse.wy });
           }
         } else if (this.eraseDragStart) {
           const x0 = Math.min(this.eraseDragStart.x, this.mouse.wx);
@@ -1470,6 +1484,8 @@ export class Game {
           created = this.finalizeStockpileDrag(this.uiManager.zoneDragStart, endWorld, true);
         } else if (this.selectedBuild === 'mine') {
           created = this.finalizeMiningZoneDrag(this.uiManager.zoneDragStart, endWorld, true);
+        } else if (this.selectedBuild === 'tree_growing') {
+          created = this.finalizeTreeGrowingZoneDrag(this.uiManager.zoneDragStart, endWorld, true);
         }
         this.touchZoneDragActive = false;
         this.touchZoneLastPos = null;
@@ -2635,6 +2651,11 @@ export class Game {
     
     // Update floor item/stockpile systems
     if (this.itemManager) this.itemManager.update();
+
+    // Update tree growing zones (growth progression)
+    if (this.treeGrowingManager) {
+      this.treeGrowingManager.updateGrowth(this.tDay * 24 * 3600); // Convert game days to seconds
+    }
 
     // Process queued navmesh rebuilds at END of frame (deferred rebuild system)
     this.deferredRebuildSystem.processQueue();

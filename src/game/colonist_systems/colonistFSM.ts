@@ -11,7 +11,7 @@ import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
-import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateCoolingState } from "./states";
+import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState } from "./states";
 
 
 // Helper function to check if a position would collide with buildings or mountains
@@ -533,13 +533,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'cooking': return 42; // Cooking is productive work
         case 'stonecutting': return 42; // Stonecutting is productive work
         case 'smelting': return 42; // Smelting is productive work
+        case 'smithing': return 43; // Smithing weapons is high priority productive work
         case 'cooling': return 42; // Cooling is productive work
+        case 'equipment': return 45; // Equipment upgrades are high priority for combat readiness
         case 'research': return 41; // Research is productive work
         case 'haulFloorItem': return 40; // Hauling items via floor system
         case 'build':
         case 'chop':
         case 'mine':
-        case 'harvest': return 40;
+        case 'harvest':
+        case 'plantTree':
+        case 'harvestPlantedTree': return 40;
         case 'resting': return 35;
         case 'move': return 25;
         case 'idle': return 15;
@@ -1250,8 +1254,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'cookWheat': changeState('cooking', 'assigned cooking task'); break;
         case 'stonecutting': changeState('stonecutting', 'assigned stonecutting task'); break;
         case 'smelting': changeState('smelting', 'assigned smelting task'); break;
+        case 'smithing': changeState('smithing', 'assigned smithing task'); break;
         case 'cooling': changeState('cooling', 'assigned cooling task'); break;
+        case 'equipment': changeState('equipment', 'assigned equipment pickup task'); break;
         case 'research': changeState('research', 'assigned research task'); break;
+        case 'plantTree': changeState('plantTree', 'assigned tree planting task'); break;
+        case 'harvestPlantedTree': changeState('harvestPlantedTree', 'assigned tree harvest task'); break;
         case 'goto':
         case 'rest':
         case 'medical':
@@ -1737,6 +1745,84 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       break;
     }
+    case 'plantTree': {
+      const plantingSpot = c.target as { x: number; y: number; zoneId: string };
+      if (!plantingSpot) {
+        if (c.stateSince >= 0.5) {
+          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'no planting spot');
+        }
+        break;
+      }
+
+      const pt = { x: plantingSpot.x, y: plantingSpot.y };
+      if (game.moveAlongPath(c, dt, pt, 16)) {
+        // Plants skill influences planting speed
+        const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
+        const skillMult = skillWorkSpeedMultiplier(plantsLvl);
+        
+        // Planting takes about 3 seconds base time
+        const plantingTime = 3.0 / skillMult;
+        
+        if (c.stateSince >= plantingTime) {
+          // Plant the tree using the tree growing manager
+          if (game.treeGrowingManager && game.treeGrowingManager.plantTreeAt(plantingSpot.x, plantingSpot.y, plantingSpot.zoneId)) {
+            game.msg('Tree planted', 'good');
+            if (c.skills) grantSkillXP(c, 'Plants', 25, c.t || 0);
+          }
+          
+          if (c.stateSince >= 0.5) {
+            c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'tree planted');
+          }
+        }
+      }
+
+      // Timeout after 20 seconds
+      if (c.stateSince && c.stateSince > 20) {
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'plant timeout');
+      }
+      break;
+    }
+    case 'harvestPlantedTree': {
+      const treeSpot = c.target as { x: number; y: number; zoneId: string };
+      if (!treeSpot) {
+        if (c.stateSince >= 0.5) {
+          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'no tree to harvest');
+        }
+        break;
+      }
+
+      const pt = { x: treeSpot.x, y: treeSpot.y };
+      if (game.moveAlongPath(c, dt, pt, 16)) {
+        // Plants skill influences harvest speed and yield
+        const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
+        const skillMult = skillWorkSpeedMultiplier(plantsLvl);
+        const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02);
+        
+        // Harvesting takes about 2 seconds base time
+        const harvestTime = 2.0 / skillMult;
+        
+        if (c.stateSince >= harvestTime) {
+          // Harvest the tree using the tree growing manager
+          if (game.treeGrowingManager && game.treeGrowingManager.harvestTreeAt(treeSpot.x, treeSpot.y, treeSpot.zoneId)) {
+            const woodAmount = Math.round(8 * yieldMult); // Planted trees give more wood than wild trees
+            const dropAt = { x: treeSpot.x, y: treeSpot.y };
+            game.itemManager.dropItems('wood', woodAmount, dropAt);
+            game.msg(`Harvested tree (dropped ${woodAmount} wood)`, 'good');
+            if (c.skills) grantSkillXP(c, 'Plants', 30, c.t || 0);
+          }
+          
+          if (c.stateSince >= 0.5) {
+            c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'tree harvested');
+          }
+        }
+      }
+
+      // Timeout after 20 seconds
+      if (c.stateSince && c.stateSince > 20) {
+        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'harvest timeout');
+      }
+      break;
+    }
     case 'mine': {
       const r = c.target as any; 
       if (!r || (r.hp !== undefined && r.hp <= 0)) {
@@ -2006,6 +2092,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'smelting': {
       // Delegate to modular smelting state handler
       updateSmeltingState(c, game, dt, changeState);
+      break;
+    }
+    
+    case 'smithing': {
+      // Delegate to modular smithing state handler
+      updateSmithingState(c, game, dt, changeState);
+      break;
+    }
+    
+    case 'equipment': {
+      // Delegate to modular equipment state handler
+      updateEquipmentState(c, game, dt, changeState);
       break;
     }
     

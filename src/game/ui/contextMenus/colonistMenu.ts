@@ -3,6 +3,28 @@ import type { Game } from '../../Game';
 import type { ContextMenuDescriptor, ContextMenuItem } from './types';
 import { openContextMenu } from '../contextMenu';
 
+// Helper function to find nearby weapons on the floor
+function findNearbyWeapons(game: Game, colonist: Colonist): any[] {
+  const rim = (game as any).itemManager;
+  if (!rim) return [];
+  
+  const allFloorItems = rim.floorItems.getAllItems();
+  const weaponItems = allFloorItems.filter((item: any) => 
+    ['gladius', 'mace', 'knife'].includes(item.type) && 
+    item.quantity > 0 &&
+    Math.hypot(colonist.x - item.position.x, colonist.y - item.position.y) < 200 // Within reasonable distance
+  );
+  
+  // Limit to 5 closest weapons to avoid menu bloat
+  return weaponItems
+    .sort((a: any, b: any) => {
+      const distA = Math.hypot(colonist.x - a.position.x, colonist.y - a.position.y);
+      const distB = Math.hypot(colonist.x - b.position.x, colonist.y - b.position.y);
+      return distA - distB;
+    })
+    .slice(0, 5);
+}
+
 export function showColonistContextMenu(game: Game, colonist: Colonist, screenX: number, screenY: number) {
   const descriptor = buildColonistContextMenuDescriptor(game, colonist, screenX, screenY);
   openContextMenu(game, descriptor);
@@ -108,7 +130,26 @@ export function buildColonistContextMenuDescriptor(game: Game, colonist: Colonis
     });
   }
   
-  // 5. GO TO ACTIONS - Send colonist to locations
+  // 5. EQUIPMENT ACTIONS - Weapon and gear management
+  const nearbyWeapons = findNearbyWeapons(game, colonist);
+  if (nearbyWeapons.length > 0) {
+    const equipSubmenu = nearbyWeapons.map(weapon => ({
+      id: `equip_${weapon.id}`,
+      label: `Equip ${weapon.type}`,
+      icon: '⚔️',
+      enabled: true
+    }));
+    
+    items.push({
+      id: 'equip',
+      label: 'Equip Weapon...',
+      icon: '⚔️',
+      enabled: true,
+      submenu: equipSubmenu
+    });
+  }
+  
+  // 6. GO TO ACTIONS - Send colonist to locations
   items.push({
     id: 'goto',
     label: 'Send To...',

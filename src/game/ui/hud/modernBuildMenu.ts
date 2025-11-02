@@ -155,7 +155,7 @@ export function drawModernBuildMenu(
   const toPx = (desktop: number, touchOverride?: number) => getScaled(game, desktop, touchOverride);
 
   // Group buildings by category
-  const groups = groupByCategory(BUILD_TYPES);
+  const groups = groupByCategory(BUILD_TYPES, game);
   const categories = Object.keys(groups);
 
   // Draw main menu background

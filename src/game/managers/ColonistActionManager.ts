@@ -94,6 +94,13 @@ export class ColonistActionManager {
       case 'follow':
         this.handleFollow(colonist);
         break;
+        
+      // Equipment actions
+      default:
+        if (actionId.startsWith('equip_')) {
+          this.handleEquipWeapon(actionId, colonist);
+        }
+        break;
     }
     
     hideContextMenu(this.game);
@@ -288,5 +295,31 @@ export class ColonistActionManager {
    */
   private findNearestBuildTarget(colonist: Colonist): Building | { x: number; y: number } {
     return this.findNearestWorkTarget(colonist);
+  }
+  
+  /**
+   * Handle equipping a specific weapon
+   */
+  private handleEquipWeapon(actionId: string, colonist: Colonist): void {
+    const weaponId = actionId.replace('equip_', '');
+    
+    // Find the weapon item
+    const rim = (this.game as any).itemManager;
+    if (!rim) return;
+    
+    const allFloorItems = rim.floorItems.getAllItems();
+    const weaponItem = allFloorItems.find((item: any) => item.id === weaponId);
+    
+    if (!weaponItem) {
+      this.game.msg('Weapon not found!', 'bad');
+      return;
+    }
+    
+    // Assign equipment pickup task to colonist
+    colonist.task = 'equipment';
+    colonist.target = weaponItem;
+    colonist.state = 'equipment';
+    
+    this.game.msg(`${colonist.profile?.name || 'Colonist'} ordered to equip ${weaponItem.type}`, 'info');
   }
 }

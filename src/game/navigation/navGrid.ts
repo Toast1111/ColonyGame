@@ -25,7 +25,11 @@ export function rebuildNavGridPartial(game: Game, worldX: number, worldY: number
   // NOTE: clearGridArea now calls syncTerrainToGridPartial internally, so we don't need to call it here
   
   // Re-mark buildings that intersect with this area
+  // CRITICAL OPTIMIZATION: Only process completed buildings
   for (const b of game.buildings) {
+    // Skip buildings under construction - they shouldn't affect pathfinding until complete
+    if (!b.done) continue;
+    
     const bMinGx = Math.floor(b.x / T);
     const bMaxGx = Math.floor((b.x + b.w - 1) / T);
     const bMinGy = Math.floor(b.y / T);
@@ -43,10 +47,10 @@ export function rebuildNavGridPartial(game: Game, worldX: number, worldY: number
     if (b.kind === 'path') {
       markRoadPath(game.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
     }
-    if (b.kind === 'door' && b.done) {
+    if (b.kind === 'door') {
       markRoadPath(game.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
     }
-    if (b.kind === 'house' && b.done) {
+    if (b.kind === 'house') {
       const doorX = b.x + b.w / 2 - T / 2;
       const doorY = b.y + b.h;
       markRoadPath(game.grid, doorX, doorY, T, T, 'FAST_ROAD');
@@ -84,8 +88,12 @@ export function rebuildNavGrid(game: Game) {
     syncTerrainToGrid(game.grid);
   }
   
-  // Buildings
+  // Buildings - CRITICAL OPTIMIZATION: Only process completed buildings
+  // Under-construction buildings should not block pathfinding
   for (const b of game.buildings) {
+    // Skip buildings under construction - they shouldn't affect pathfinding until complete
+    if (!b.done) continue;
+    
     // Doors are treated as passable by pathfinding (colonists will open them)
     // but blocking doors will slow movement temporarily
     if (b.kind !== 'hq' && b.kind !== 'path' && b.kind !== 'house' && b.kind !== 'farm' && b.kind !== 'bed' && b.kind !== 'door') {
@@ -94,11 +102,11 @@ export function rebuildNavGrid(game: Game) {
     if (b.kind === 'path') {
       markRoadPath(game.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
     }
-    if (b.kind === 'door' && b.done) {
+    if (b.kind === 'door') {
       // Doors are walkable tiles (colonists can path through them)
       markRoadPath(game.grid, b.x, b.y, b.w, b.h, 'BASIC_PATH');
     }
-    if (b.kind === 'house' && b.done) {
+    if (b.kind === 'house') {
       const doorX = b.x + b.w / 2 - T / 2;
       const doorY = b.y + b.h;
       markRoadPath(game.grid, doorX, doorY, T, T, 'FAST_ROAD');

@@ -22,7 +22,7 @@ export function drawBuildMenu(game: any) {
   ctx.font = game.getScaledFont(isTouch ? 22 : 18, '600'); 
   ctx.fillText('Build Menu (B to close)', X + game.scale(14), Y + game.scale(24));
 
-  const groups = groupByCategory(BUILD_TYPES);
+  const groups = groupByCategory(BUILD_TYPES, game);
   const cats = Object.keys(groups);
   const padding = game.scale(isTouch ? 36 : 28);
   const colW = Math.floor((W - padding) / Math.max(1, cats.length));

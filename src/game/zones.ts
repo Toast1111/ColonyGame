@@ -12,6 +12,8 @@ export interface ZoneDef {
   color: string;
   /** If true, this is a drag-to-create zone, not a building */
   isZone: true;
+  /** Research required to unlock this zone */
+  requiresResearch?: string;
 }
 
 export const ZONE_TYPES: Record<string, ZoneDef> = {
@@ -31,7 +33,16 @@ export const ZONE_TYPES: Record<string, ZoneDef> = {
     color: '#f59e0b', // Orange/amber color
     isZone: true
   },
-  // Future zones can be added here (growing zones, dumping zones, etc.)
+  tree_growing: {
+    category: 'Zones',
+    name: 'Tree Growing Zone',
+    description: 'Drag to designate an area for planting trees. Colonists will plant and tend trees within this zone.',
+    key: '7',
+    color: '#22c55e', // Green color for growing trees
+    isZone: true,
+    requiresResearch: 'tree_sowing'
+  },
+  // Future zones can be added here (dumping zones, etc.)
 };
 
 /**
