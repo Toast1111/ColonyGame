@@ -387,11 +387,14 @@ export class ColonistNavigationManager {
         }
       }
     }
-    // Prevent overshoot that causes ping-pong around node: snap to node if close or step would overshoot
+    // STRICT TILE-CENTER MOVEMENT: Always snap to exact tile centers
     const step = speed * dt;
-    if (L <= Math.max(arriveNode, step)) {
-      // Snap to node and advance - PATHINDEX RE-ENABLED
-      c.x = node.x; c.y = node.y;
+    const tileThreshold = 4; // Much smaller threshold for precise tile-center movement
+    
+    if (L <= Math.max(tileThreshold, step)) {
+      // FORCE exact tile center positioning - no approximation
+      c.x = node.x; 
+      c.y = node.y;
       c.pathIndex++;
       // Don't shift the array, just use pathIndex to track position
       c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
@@ -433,13 +436,31 @@ export class ColonistNavigationManager {
       if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false; // RE-ENABLED
     }
 
-    // Simple movement toward the waypoint - let A* handle the smart routing
+    // TILE-CENTER MOVEMENT: Move in straight lines between exact tile centers
     // Update direction for sprite facing (only if moving significantly)
     if (L > 1) {
       c.direction = Math.atan2(dy, dx);
     }
-    c.x = Math.max(0, Math.min(c.x + (dx / (L || 1)) * step, WORLD.w));
-    c.y = Math.max(0, Math.min(c.y + (dy / (L || 1)) * step, WORLD.h));
+    
+    // Move directly toward the tile center with no deviation
+    const moveX = (dx / (L || 1)) * step;
+    const moveY = (dy / (L || 1)) * step;
+    
+    // Check for overshoot to prevent going past the tile center
+    if (Math.hypot(moveX, moveY) >= L) {
+      // Would overshoot - snap directly to tile center
+      c.x = node.x;
+      c.y = node.y;
+      c.pathIndex++;
+      if (c.pathIndex >= c.path.length) { 
+        c.path = undefined; 
+        c.pathIndex = undefined; 
+      }
+    } else {
+      // Normal movement toward tile center
+      c.x = Math.max(0, Math.min(c.x + moveX, WORLD.w));
+      c.y = Math.max(0, Math.min(c.y + moveY, WORLD.h));
+    }
 
     // Handle passing through door logic
     handleColonistPassingThroughDoor(c);
@@ -459,5 +480,18 @@ export class ColonistNavigationManager {
    */
   private getMoveSpeedMultiplier(c: Colonist): number {
     return this.game.inventoryManager.getMoveSpeedMultiplier(c);
+  }
+
+  // Debug console methods (required by debugConsole.ts)
+  enableNewPathfinding(): void {
+    console.log('Tile-center pathfinding is now always enabled');
+  }
+
+  disableNewPathfinding(): void {
+    console.log('Cannot disable tile-center pathfinding - it is the default behavior');
+  }
+
+  isUsingNewPathfinding(): boolean {
+    return true; // Always using tile-center pathfinding
   }
 }

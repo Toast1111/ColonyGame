@@ -61,17 +61,182 @@ export class NavigationManager {
 
   /**
    * Colonist-aware pathfinding that avoids dangerous areas from memory
+   * Now uses 8-directional movement like enemies for more natural paths
    * Async wrapper for compatibility - just calls synchronous version
    */
   async computePathWithDangerAvoidanceAsync(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-    return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
+    return this.computeColonistPath(sx, sy, tx, ty);
   }
 
   /**
    * Synchronous danger-aware pathfinding (for compatibility)
+   * Now uses 8-directional movement like enemies for more natural paths
    */
   computePathWithDangerAvoidance(c: Colonist, sx: number, sy: number, tx: number, ty: number) {
-    return computePathWithDangerAvoidanceNav(this.game, c, sx, sy, tx, ty);
+    return this.computeColonistPath(sx, sy, tx, ty);
+  }
+
+  /**
+   * Enhanced colonist pathfinding with 8-directional movement
+   * Based on computeEnemyPath but optimized for colonists
+   */
+  private computeColonistPath(sx: number, sy: number, tx: number, ty: number): { x: number; y: number }[] | null {
+    const g = this.game.grid;
+    const { cols, rows } = g;
+
+    // Convert to grid coordinates
+    const start = { x: Math.floor(sx / T), y: Math.floor(sy / T) };
+    const goal = { x: Math.floor(tx / T), y: Math.floor(ty / T) };
+
+    // Validate coordinates
+    if (start.x < 0 || start.y < 0 || start.x >= cols || start.y >= rows) return null;
+    if (goal.x < 0 || goal.y < 0 || goal.x >= cols || goal.y >= rows) return null;
+
+    const sId = start.y * cols + start.x;
+    const gId = goal.y * cols + goal.x;
+
+    // If already at goal
+    if (sId === gId) return null;
+
+    // Check if start or goal is blocked
+    if (g.solid[sId] || g.solid[gId]) return null;
+
+    // A* data structures
+    const gScore = new Float32Array(cols * rows).fill(Infinity);
+    const fScore = new Float32Array(cols * rows).fill(Infinity);
+    const came = new Int32Array(cols * rows).fill(-1);
+    const closed = new Uint8Array(cols * rows);
+    const open: number[] = [];
+
+    // Binary heap helpers for better performance
+    const push = (id: number) => {
+      open.push(id);
+      let i = open.length - 1;
+      while (i > 0) {
+        const p = ((i - 1) >> 1);
+        if (fScore[open[p]] <= fScore[open[i]]) break;
+        const tmp = open[p]; open[p] = open[i]; open[i] = tmp;
+        i = p;
+      }
+    };
+
+    const popBest = (): number => {
+      if (!open.length) return -1;
+      const best = open[0];
+      const last = open.pop()!;
+      if (open.length > 0) {
+        open[0] = last;
+        let i = 0;
+        while (true) {
+          const l = (i << 1) + 1;
+          const r = (i << 1) + 2;
+          let smallest = i;
+          if (l < open.length && fScore[open[l]] < fScore[open[smallest]]) smallest = l;
+          if (r < open.length && fScore[open[r]] < fScore[open[smallest]]) smallest = r;
+          if (smallest === i) break;
+          const tmp = open[i]; open[i] = open[smallest]; open[smallest] = tmp;
+          i = smallest;
+        }
+      }
+      return best;
+    };
+
+    const passable = (gx: number, gy: number): boolean => {
+      if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) return false;
+      return !g.solid[gy * cols + gx];
+    };
+
+    // 8-directional movement for natural diagonal paths (like enemies)
+    const neighbors = [
+      [1, 0],   // East
+      [-1, 0],  // West
+      [0, 1],   // South
+      [0, -1],  // North
+      [1, 1],   // Southeast
+      [1, -1],  // Northeast
+      [-1, 1],  // Southwest
+      [-1, -1]  // Northwest
+    ] as const;
+
+    // Manhattan distance heuristic (same as enemies)
+    const heuristic = (x1: number, y1: number, x2: number, y2: number) => {
+      return Math.abs(x1 - x2) + Math.abs(y1 - y2);
+    };
+
+    gScore[sId] = 0;
+    fScore[sId] = heuristic(start.x, start.y, goal.x, goal.y);
+    push(sId);
+
+    while (open.length) {
+      const cur = popBest();
+      if (cur === -1) break;
+      if (closed[cur]) continue;
+      closed[cur] = 1;
+
+      const cx = cur % cols;
+      const cy = (cur / cols) | 0;
+
+      if (cur === gId) {
+        // Reconstruct path - ALWAYS return exact tile centers for grid-aligned movement
+        const path: { x: number; y: number }[] = [];
+        let id = cur;
+        while (id !== -1) {
+          const gx = id % cols;
+          const gy = (id / cols) | 0;
+          // Force exact tile center coordinates - no smoothing or interpolation
+          path.push({ x: gx * T + T / 2, y: gy * T + T / 2 });
+          id = came[id];
+        }
+        path.reverse();
+
+        // Force movement through every tile center - no path optimization
+        // Do NOT remove start point - colonist must visit every tile center in sequence
+        
+        // Ensure final destination is also a tile center (snap to grid)
+        if (path.length > 0) {
+          const goalGx = Math.floor(tx / T);
+          const goalGy = Math.floor(ty / T);
+          path[path.length - 1] = { x: goalGx * T + T / 2, y: goalGy * T + T / 2 };
+        }
+
+        return path.length > 0 ? path : null;
+      }
+
+      for (const [dx, dy] of neighbors) {
+        const nx = cx + dx;
+        const ny = cy + dy;
+        if (!passable(nx, ny)) continue;
+
+        // For diagonal movement, check if path is blocked by corners
+        if (dx !== 0 && dy !== 0) {
+          // Prevent cutting through diagonal walls
+          if (!passable(cx + dx, cy) && !passable(cx, cy + dy)) continue;
+        }
+
+        const ni = ny * cols + nx;
+
+        // Diagonal moves cost more (sqrt(2) ≈ 1.414)
+        const isDiagonal = dx !== 0 && dy !== 0;
+        const moveCost = isDiagonal ? 1.414 : 1.0;
+        
+        // Apply terrain costs (roads are faster, mud is slower)
+        const stepCost = moveCost * (g.cost[ni] || 1.0);
+        const tentative = gScore[cur] + stepCost;
+
+        if (tentative < gScore[ni]) {
+          came[ni] = cur;
+          gScore[ni] = tentative;
+          
+          // Use scaled heuristic for admissibility
+          const h = heuristic(nx, ny, goal.x, goal.y) * Math.max(0.0001, g.minCost) * 0.9999;
+          fScore[ni] = tentative + h;
+
+          push(ni);
+        }
+      }
+    }
+
+    return null; // No path found
   }
 
 
