@@ -425,32 +425,8 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     
     ctx.restore();
     
-    // Build progress bar - only show if construction has actually started
-    if (!b.done && b.buildLeft < b.build) {
-      const pct = 1 - (b.buildLeft / b.build);
-      
-      // Position progress bar below the building to avoid overlapping with adjacent buildings
-      const barY = b.y + b.h + 2;
-      const barHeight = 4;
-      
-      // Background
-      ctx.fillStyle = '#0b1220'; 
-      ctx.fillRect(b.x, barY, b.w, barHeight);
-      
-      // Progress fill
-      ctx.fillStyle = '#6ee7ff'; 
-      ctx.fillRect(b.x, barY, pct * b.w, barHeight);
-    }
-    
-    // HP bar if damaged
-    if (b.done && b.hp < 100) {
-      const maxHp = 100; // You may want to store this
-      const hpPct = b.hp / maxHp;
-      ctx.fillStyle = '#0b1220'; 
-      ctx.fillRect(b.x, b.y + b.h + 2, b.w, 3);
-      ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.25 ? '#fbbf24' : '#ef4444';
-      ctx.fillRect(b.x, b.y + b.h + 2, b.w * hpPct, 3);
-    }
+    // Note: Progress bars and HP bars are now drawn separately in drawBuildingProgressBars()
+    // to ensure proper z-ordering where bars appear above all buildings
     
     return;
   }
@@ -680,5 +656,40 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
     ctx.moveTo(b.x, b.y); 
     ctx.lineTo(b.tx, b.ty); 
     ctx.stroke();
+  }
+}
+
+/**
+ * Draw building progress bars and HP bars separately from buildings
+ * This ensures proper z-ordering where progress bars appear above all buildings
+ */
+export function drawBuildingProgressBars(ctx: CanvasRenderingContext2D, buildings: Building[]) {
+  for (const b of buildings) {
+    // Build progress bar - only show if construction has actually started
+    if (!b.done && b.buildLeft < b.build) {
+      const pct = 1 - (b.buildLeft / b.build);
+      
+      // Position progress bar below the building to avoid overlapping with adjacent buildings
+      const barY = b.y + b.h + 2;
+      const barHeight = 4;
+      
+      // Background
+      ctx.fillStyle = '#0b1220'; 
+      ctx.fillRect(b.x, barY, b.w, barHeight);
+      
+      // Progress fill
+      ctx.fillStyle = '#6ee7ff'; 
+      ctx.fillRect(b.x, barY, pct * b.w, barHeight);
+    }
+    
+    // HP bar if damaged
+    if (b.done && b.hp < 100) {
+      const maxHp = 100; // You may want to store this
+      const hpPct = b.hp / maxHp;
+      ctx.fillStyle = '#0b1220'; 
+      ctx.fillRect(b.x, b.y + b.h + 2, b.w, 3);
+      ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.25 ? '#fbbf24' : '#ef4444';
+      ctx.fillRect(b.x, b.y + b.h + 2, b.w * hpPct, 3);
+    }
   }
 }

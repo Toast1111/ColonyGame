@@ -333,6 +333,10 @@ export const AUDIO_MANIFEST = {
 
   'music.gameover.sad': variants('music/game_over', [
     { name: 'New Horizons', loop: true, volume: 0.4 }
+  ]),
+
+  'music.raid.combat': variants('music/raid', [
+    { name: 'Dust and Echoes', loop: true, volume: 0.6 }
   ])
 } as const satisfies Record<string, readonly AudioVariant[]>;
 
@@ -390,5 +394,23 @@ export function listAudioKeys(prefix: string): AudioKey[] {
 }
 
 export function resolveAudioSrc(relativeFile: string): string {
-  return new URL(`./${relativeFile}`, import.meta.url).href;
+  // FIXED: Better URL resolution for Vite dev server
+  // During development, check if we're running on localhost (dev server)
+  const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
+  
+  let resolvedUrl: string;
+  if (isDev) {
+    // In development, serve directly from /src/assets/audio/
+    resolvedUrl = `/src/assets/audio/${relativeFile}`;
+  } else {
+    // In production, use import.meta.url resolution
+    resolvedUrl = new URL(`./${relativeFile}`, import.meta.url).href;
+  }
+  
+  // Debug logging (can be removed later)
+  if (isDev && relativeFile.includes('StoneBlock_Drop')) {
+    console.log(`[AudioManager] Resolving audio: ${relativeFile} -> ${resolvedUrl}`);
+  }
+  
+  return resolvedUrl;
 }

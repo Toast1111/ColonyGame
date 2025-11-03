@@ -1911,6 +1911,43 @@ export class Game {
     this.audioManager.stop(key);
   }
 
+  // RAID MUSIC SYSTEM: Manages "Dust and Echoes" music during HQ attacks
+  private raidMusicActive = false;
+  
+  updateRaidMusic() {
+    const hasEnemies = this.enemies.length > 0;
+    const hqExists = this.buildings.some(b => b.kind === 'hq' && b.done);
+    
+    // Conditions for raid music:
+    // 1. Enemies are present
+    // 2. HQ still exists (if HQ is destroyed, game over music will play instead)
+    // 3. Game is not paused
+    const shouldPlayRaidMusic = hasEnemies && hqExists && !this.paused && !this.gameOverScreen.isActive();
+    
+    if (shouldPlayRaidMusic && !this.raidMusicActive) {
+      // Start raid music
+      this.audioManager.play('music.raid.combat', { 
+        volume: 0.6, 
+        loop: true,
+        replaceExisting: true 
+      }).catch((err) => {
+        console.warn('[Game] Failed to start raid music:', err);
+      });
+      this.raidMusicActive = true;
+      console.log('[Game] Started raid music - enemies attacking HQ');
+    } else if (!shouldPlayRaidMusic && this.raidMusicActive) {
+      // Stop raid music
+      this.audioManager.stop('music.raid.combat');
+      this.raidMusicActive = false;
+      
+      if (hasEnemies) {
+        console.log('[Game] Stopped raid music - HQ destroyed or game paused');
+      } else {
+        console.log('[Game] Stopped raid music - all enemies defeated');
+      }
+    }
+  }
+
   // World setup
   scatter() {
     // Beta feedback: Resources spawn closer to HQ for more convenient early game (120px = ~4 tiles)
@@ -2571,6 +2608,9 @@ export class Game {
     }
   }
   
+  // RAID MUSIC SYSTEM: Play "Dust and Echoes" during HQ attacks
+  this.updateRaidMusic();
+  
   this.performanceMetrics.endTiming('colonist & enemy AI');
   
     for (const b of this.buildings) {
@@ -2803,6 +2843,13 @@ export class Game {
   lose() { 
     this.paused = true; 
     this.msg('HQ destroyed. Colony fell.', 'bad'); 
+    
+    // Stop raid music before game over sequence starts
+    if (this.raidMusicActive) {
+      this.audioManager.stop('music.raid.combat');
+      this.raidMusicActive = false;
+    }
+    
     // Start dramatic game over sequence instead of alert
     this.gameOverScreen.start();
   }
