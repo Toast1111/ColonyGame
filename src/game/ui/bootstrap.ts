@@ -108,6 +108,11 @@ export function initializeUI(game: Game | null = null): UIComponents {
       if (gameRef.current) {
         gameRef.current.camera.zoom = Math.max(0.6, gameRef.current.camera.zoom / 1.1);
       }
+    },
+    onSkipTutorial: () => {
+      if (gameRef.current && gameRef.current.tutorialSystem) {
+        gameRef.current.tutorialSystem.skip();
+      }
     }
   };
   

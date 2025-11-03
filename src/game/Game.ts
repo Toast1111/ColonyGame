@@ -668,6 +668,13 @@ export class Game {
     mc.setEraseState(this.eraseMode);
   }
 
+  /**
+   * Get mobile controls instance (public accessor for tutorial system)
+   */
+  getMobileControls() {
+    return this.getMobileControlsInstance();
+  }
+
   private applyTouchUIState(): void {
     const enabled = this.touchUIEnabledInternal;
     if (typeof document !== 'undefined' && document.body) {

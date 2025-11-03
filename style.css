@@ -73,8 +73,12 @@ button:focus{outline:none}
 #mobileControls button:active{transform:scale(0.95)}
 #mobileControls button:focus{outline:none}
 #mobileControls button.active{background:#1a2332;border-color:#2b3d59;color:var(--accent)}
+#mobileControls #mc-skip-tutorial{background:#ff5252;border-color:#ff7777;color:#ffffff;animation:skipButtonPulse 2s infinite}
+#mobileControls #mc-skip-tutorial:hover{background:#ff3333;border-color:#ff5555}
 #mobileControls .zoom{display:flex;gap:8px;justify-content:flex-end}
 #mobileControls .zoom button{min-width:44px}
+
+@keyframes skipButtonPulse{0%,100%{box-shadow:0 4px 12px #0006}50%{box-shadow:0 4px 16px #ff525255,0 0 8px #ff525233}}
 
 body:not(.touch-ui) #mobileControls{display:none!important}
 body.touch-ui #mobileControls{display:flex;right:max(10px,calc(env(safe-area-inset-right,0px) + 10px));bottom:max(88px,calc(env(safe-area-inset-bottom,0px) + 68px))}

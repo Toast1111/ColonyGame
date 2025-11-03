@@ -11,6 +11,7 @@ export interface MobileControlsCallbacks {
   onFastForward: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
+  onSkipTutorial: () => void;
 }
 
 export class MobileControls {
@@ -21,6 +22,7 @@ export class MobileControls {
     fastForward: HTMLButtonElement;
     zoomIn: HTMLButtonElement;
     zoomOut: HTMLButtonElement;
+    skipTutorial: HTMLButtonElement;
   };
 
   constructor(callbacks: MobileControlsCallbacks) {
@@ -40,6 +42,9 @@ export class MobileControls {
     zoomContainer.appendChild(this.buttons.zoomIn);
     zoomContainer.appendChild(this.buttons.zoomOut);
     this.container.appendChild(zoomContainer);
+    
+    // Skip tutorial button is added/removed dynamically
+    // It's not added by default
     
     document.body.appendChild(this.container);
   }
@@ -79,6 +84,7 @@ export class MobileControls {
       fastForward: this.createButton('mc-ff', '⏩', 'Fast Forward', callbacks.onFastForward),
       zoomIn: this.createButton('mc-zoom-in', '＋', 'Zoom In', callbacks.onZoomIn),
       zoomOut: this.createButton('mc-zoom-out', '－', 'Zoom Out', callbacks.onZoomOut),
+      skipTutorial: this.createButton('mc-skip-tutorial', '⏭️', 'Skip Tutorial', callbacks.onSkipTutorial),
     };
   }
 
@@ -122,9 +128,28 @@ export class MobileControls {
   }
   
   /**
-   * Update erase button appearance for toggle state
+   * Update erase button appearance
    */
   setEraseState(active: boolean): void {
     this.buttons.erase.classList.toggle('active', active);
+  }
+
+  /**
+   * Show the skip tutorial button (mobile-friendly tutorial skip)
+   */
+  showSkipTutorialButton(): void {
+    if (!this.container.contains(this.buttons.skipTutorial)) {
+      // Insert at the top of the button list for prominence
+      this.container.insertBefore(this.buttons.skipTutorial, this.container.firstChild);
+    }
+  }
+
+  /**
+   * Hide the skip tutorial button
+   */
+  hideSkipTutorialButton(): void {
+    if (this.container.contains(this.buttons.skipTutorial)) {
+      this.container.removeChild(this.buttons.skipTutorial);
+    }
   }
 }
