@@ -333,6 +333,10 @@ export const AUDIO_MANIFEST = {
 
   'music.gameover.sad': variants('music/game_over', [
     { name: 'New Horizons', loop: true, volume: 0.4 }
+  ]),
+
+  'music.raid.combat': variants('music/raid', [
+    { name: 'Dust and Echoes', loop: true, volume: 0.6 }
   ])
 } as const satisfies Record<string, readonly AudioVariant[]>;
 

@@ -28,7 +28,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, items, kill, heal, godmode, farm, building, stove, time, tree, research";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, items, kill, heal, godmode, farm, building, stove, time, tree, research, music";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -1008,6 +1008,47 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: research complete|reset|start <id> — manipulate research";
   }, "research complete|reset|start <id> — complete all, reset, or start specific research");
+
+  reg("music", (g, args) => {
+    const action = (args[0] || "").toLowerCase();
+    
+    if (action === "raid" || action === "combat") {
+      // Test raid music
+      g.audioManager.play('music.raid.combat', { 
+        volume: 0.6, 
+        loop: true,
+        replaceExisting: true 
+      }).catch((err: any) => {
+        console.warn('[Debug] Failed to start raid music:', err);
+      });
+      (g as any).raidMusicActive = true;
+      return "started raid music (Dust and Echoes)";
+    } else if (action === "stop" || action === "off") {
+      // Stop all music
+      g.audioManager.stop('music.raid.combat');
+      g.audioManager.stop('music.gameover.sad');
+      (g as any).raidMusicActive = false;
+      return "stopped all music";
+    } else if (action === "gameover" || action === "sad") {
+      // Test game over music
+      g.audioManager.play('music.gameover.sad', { 
+        volume: 0.4, 
+        loop: true,
+        replaceExisting: true 
+      }).catch((err: any) => {
+        console.warn('[Debug] Failed to start game over music:', err);
+      });
+      return "started game over music (New Horizons)";
+    } else if (action === "status") {
+      // Show current music status
+      const raidActive = (g as any).raidMusicActive || false;
+      const hasEnemies = g.enemies.length > 0;
+      const hqExists = g.buildings.some((b: any) => b.kind === 'hq' && b.done);
+      return `raid music: ${raidActive ? 'active' : 'inactive'}, enemies: ${hasEnemies}, HQ exists: ${hqExists}`;
+    }
+    
+    return "usage: music raid|stop|gameover|status — test raid/game over music or check status";
+  }, "music raid|stop|gameover|status — test 'Dust and Echoes' raid music, stop all music, test game over music, or check status");
 
   reg("changelog", (g, args) => {
     const action = (args[0] || "").toLowerCase();
