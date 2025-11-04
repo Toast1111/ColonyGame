@@ -1022,12 +1022,25 @@ Co-authored-by: Another User <another@example.com>
         console.warn('[Debug] Failed to start raid music:', err);
       });
       (g as any).raidMusicActive = true;
-      return "started raid music (Dust and Echoes)";
+      return "started raid music (Raid Siren)";
+    } else if (action === "day" || action === "ambient") {
+      // Test day music
+      g.audioManager.play('music.day.ambient', { 
+        volume: 0.4, 
+        loop: true,
+        replaceExisting: true 
+      }).catch((err: any) => {
+        console.warn('[Debug] Failed to start day music:', err);
+      });
+      (g as any).dayMusicActive = true;
+      return "started day music (Dust and Echoes)";
     } else if (action === "stop" || action === "off") {
       // Stop all music
       g.audioManager.stop('music.raid.combat');
+      g.audioManager.stop('music.day.ambient');
       g.audioManager.stop('music.gameover.sad');
       (g as any).raidMusicActive = false;
+      (g as any).dayMusicActive = false;
       return "stopped all music";
     } else if (action === "gameover" || action === "sad") {
       // Test game over music
@@ -1047,8 +1060,8 @@ Co-authored-by: Another User <another@example.com>
       return `raid music: ${raidActive ? 'active' : 'inactive'}, enemies: ${hasEnemies}, HQ exists: ${hqExists}`;
     }
     
-    return "usage: music raid|stop|gameover|status — test raid/game over music or check status";
-  }, "music raid|stop|gameover|status — test 'Dust and Echoes' raid music, stop all music, test game over music, or check status");
+    return "usage: music raid|day|stop|gameover|status — test raid/day/game over music or check status";
+  }, "music raid|day|stop|gameover|status — test raid music (Raid Siren), day music (Dust and Echoes), stop all music, test game over music, or check status");
 
   reg("changelog", (g, args) => {
     const action = (args[0] || "").toLowerCase();
@@ -1073,6 +1086,190 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: changelog test|sanitize — test changelog modal or content sanitization";
   }, "changelog test|sanitize — test changelog modal functionality");
+
+  reg("alignment", (g, args) => {
+    const action = (args[0] || "test").toLowerCase();
+    
+    if (action === "test") {
+      // Test tile alignment for trees, rocks, and floor items
+      const trees = g.trees || [];
+      const rocks = g.rocks || [];
+      const rim = (g as any).itemManager;
+      const floorItems = rim ? rim.floorItems.getAllItems() : [];
+      
+      const T = 32;
+      let misalignedCount = 0;
+      let results: string[] = [];
+      
+      // Check trees
+      for (const tree of trees.slice(0, 5)) {
+        const expectedX = Math.floor(tree.x / T) * T + T / 2;
+        const expectedY = Math.floor(tree.y / T) * T + T / 2;
+        const isAligned = Math.abs(tree.x - expectedX) < 1 && Math.abs(tree.y - expectedY) < 1;
+        if (!isAligned) {
+          misalignedCount++;
+          results.push(`Tree at (${tree.x.toFixed(1)}, ${tree.y.toFixed(1)}) should be (${expectedX}, ${expectedY})`);
+        }
+      }
+      
+      // Check rocks  
+      for (const rock of rocks.slice(0, 5)) {
+        const expectedX = Math.floor(rock.x / T) * T + T / 2;
+        const expectedY = Math.floor(rock.y / T) * T + T / 2;
+        const isAligned = Math.abs(rock.x - expectedX) < 1 && Math.abs(rock.y - expectedY) < 1;
+        if (!isAligned) {
+          misalignedCount++;
+          results.push(`Rock at (${rock.x.toFixed(1)}, ${rock.y.toFixed(1)}) should be (${expectedX}, ${expectedY})`);
+        }
+      }
+      
+      // Check floor items
+      for (const item of floorItems.slice(0, 5)) {
+        const expectedX = Math.floor(item.position.x / T) * T + T / 2;
+        const expectedY = Math.floor(item.position.y / T) * T + T / 2;
+        const isAligned = Math.abs(item.position.x - expectedX) < 1 && Math.abs(item.position.y - expectedY) < 1;
+        if (!isAligned) {
+          misalignedCount++;
+          results.push(`${item.type} at (${item.position.x.toFixed(1)}, ${item.position.y.toFixed(1)}) should be (${expectedX}, ${expectedY})`);
+        }
+      }
+      
+      if (misalignedCount === 0) {
+        return `✅ All tested objects are tile-aligned! (${trees.length} trees, ${rocks.length} rocks, ${floorItems.length} floor items)`;
+      } else {
+        return `❌ Found ${misalignedCount} misaligned objects:\n${results.join('\n')}`;
+      }
+    } else if (action === "spawn") {
+      // Spawn test items to verify new alignment works
+      const rim = (g as any).itemManager;
+      if (!rim) return "Floor item system not initialized";
+      
+      const vw = g.canvas.width / g.camera.zoom;
+      const vh = g.canvas.height / g.camera.zoom;
+      const centerX = g.camera.x + vw / 2;
+      const centerY = g.camera.y + vh / 2;
+      
+      // Drop at slightly off-center position to test alignment
+      const testX = centerX + 7; // Deliberately off-center
+      const testY = centerY + 13;
+      
+      rim.dropItems('wood', 5, { x: testX, y: testY });
+      return `Dropped wood at test position (${testX.toFixed(1)}, ${testY.toFixed(1)}) - should be auto-aligned to tile center`;
+    }
+    
+    return "usage: alignment test|spawn — test tile alignment of objects or spawn test item";
+  }, "alignment test|spawn — test tile alignment of trees, rocks, and floor items");
+
+  reg("mining", (g, args) => {
+    const action = (args[0] || "status").toLowerCase();
+    
+    if (action === "status") {
+      const miningZones = (g as any).miningZones || [];
+      const assignedTiles = (g as any).assignedTiles || new Set();
+      const miners = g.colonists.filter((c: any) => c.task === 'mine');
+      
+      let info = `Mining Status:\n`;
+      info += `• Zones: ${miningZones.length}\n`;
+      info += `• Assigned tiles: ${assignedTiles.size}\n`;
+      info += `• Active miners: ${miners.length}\n`;
+      
+      if (miners.length > 0) {
+        info += `\nActive Miners:\n`;
+        for (const miner of miners) {
+          const target = miner.target;
+          const state = miner.state || 'unknown';
+          const stateDuration = (miner.stateSince || 0).toFixed(1);
+          if (target && target.gx !== undefined) {
+            info += `• ${miner.profile?.name || 'Colonist'}: mining mountain (${target.gx},${target.gy}) - ${state} for ${stateDuration}s\n`;
+          } else if (target && target.x !== undefined) {
+            info += `• ${miner.profile?.name || 'Colonist'}: mining rock at (${target.x.toFixed(0)},${target.y.toFixed(0)}) - ${state} for ${stateDuration}s\n`;
+          }
+        }
+      }
+      
+      return info;
+    } else if (action === "clear") {
+      // Clear all mining assignments to help with stuck colonists
+      const assignedTiles = (g as any).assignedTiles || new Set();
+      const clearedCount = assignedTiles.size;
+      assignedTiles.clear();
+      
+      // Also clear mining tasks from stuck colonists
+      let freedColonists = 0;
+      for (const c of g.colonists) {
+        if (c.task === 'mine' && (c.stateSince || 0) > 10) {
+          c.task = null;
+          c.target = null;
+          g.clearPath(c);
+          freedColonists++;
+        }
+      }
+      
+      return `Cleared ${clearedCount} assigned mountain tiles and freed ${freedColonists} stuck miners`;
+    } else if (action === "zones") {
+      const miningZones = (g as any).miningZones || [];
+      if (miningZones.length === 0) return "No mining zones created";
+      
+      let info = `Mining Zones (${miningZones.length}):\n`;
+      for (let i = 0; i < miningZones.length; i++) {
+        const zone = miningZones[i];
+        const tiles = Math.ceil(zone.w / 32) * Math.ceil(zone.h / 32);
+        info += `• Zone ${i + 1}: (${zone.x.toFixed(0)},${zone.y.toFixed(0)}) ${zone.w}×${zone.h} (${tiles} tiles)\n`;
+      }
+      return info;
+    }
+    
+    return "usage: mining status|clear|zones — check mining status, clear stuck assignments, or list zones";
+  }, "mining status|clear|zones — debug mining system and stuck colonists");
+
+  reg("render", (g, args) => {
+    const action = (args[0] || "status").toLowerCase();
+    
+    if (action === "status") {
+      const dirtyTracker = g.dirtyRectTracker;
+      if (!dirtyTracker) return "No dirty rect tracker found";
+      
+      const stats = dirtyTracker.getStats ? dirtyTracker.getStats() : null;
+      const renderManager = g.renderManager;
+      
+      let info = `Rendering Status:\n`;
+      if (stats) {
+        info += `• Dirty rects: ${stats.dirtyRectCount || 0}\n`;
+        info += `• Full redraw: ${stats.fullRedraw ? 'yes' : 'no'}\n`;
+        info += `• Dirty area: ${stats.dirtyAreaPercent.toFixed(1)}%\n`;
+      }
+      
+      if (renderManager) {
+        info += `• World cache: ${renderManager.useWorldCache ? 'enabled' : 'disabled'}\n`;
+        info += `• Colonist cache: ${renderManager.useColonistCache ? 'enabled' : 'disabled'}\n`;
+      }
+      
+      return info;
+    } else if (action === "force") {
+      // Force full redraw to fix dirty frame issues
+      const dirtyTracker = g.dirtyRectTracker;
+      if (dirtyTracker) {
+        dirtyTracker.markFullRedraw();
+      }
+      
+      const renderManager = g.renderManager;
+      if (renderManager && renderManager.invalidateWorldCache) {
+        renderManager.invalidateWorldCache();
+      }
+      
+      return "Forced full redraw and cache invalidation";
+    } else if (action === "toggle") {
+      // Toggle dirty rect tracking by toggling full redraw mode
+      const dirtyTracker = g.dirtyRectTracker;
+      if (dirtyTracker) {
+        dirtyTracker.markFullRedraw();
+        return "Switched to full redraw mode (dirty rects disabled for next frame)";
+      }
+      return "No dirty rect tracker found";
+    }
+    
+    return "usage: render status|force|toggle — check render status, force redraw, or toggle dirty rects";
+  }, "render status|force|toggle — debug rendering system and dirty frame issues");
 }
 
 export function toggleDebugConsole(game: Game) {

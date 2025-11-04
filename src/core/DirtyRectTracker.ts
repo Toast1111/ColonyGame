@@ -167,10 +167,9 @@ export class DirtyRectTracker {
       return;
     }
 
-    // Clear only dirty rects
+    // Clear only dirty rects - use fillRect only, clearRect can cause artifacts
     ctx.fillStyle = clearColor;
     for (const rect of this.dirtyRects) {
-      ctx.clearRect(rect.x, rect.y, rect.width, rect.height);
       ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
     }
   }

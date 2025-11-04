@@ -48,6 +48,7 @@ import { CombatManager } from "./combat/combatManager";
 import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES, getWorkTypeForTask } from './systems/workPriority';
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
+import { snapToTileCenter } from './utils/tileAlignment';
 import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen, isMouseOverWorkPanel } from './ui/panels/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/panels/buildingInventoryPanel';
 // import { getInventoryItemCount } from './systems/buildingInventory';
@@ -1918,21 +1919,28 @@ export class Game {
     this.audioManager.stop(key);
   }
 
-  // RAID MUSIC SYSTEM: Manages "Dust and Echoes" music during HQ attacks
+  // MUSIC SYSTEM: Manages day music and raid music
   private raidMusicActive = false;
+  private dayMusicActive = false;
   
-  updateRaidMusic() {
+  updateMusic() {
     const hasEnemies = this.enemies.length > 0;
     const hqExists = this.buildings.some(b => b.kind === 'hq' && b.done);
+    const isDay = !this.timeSystem.isNight();
+    const isGameActive = !this.paused && !this.gameOverScreen.isActive();
     
-    // Conditions for raid music:
-    // 1. Enemies are present
-    // 2. HQ still exists (if HQ is destroyed, game over music will play instead)
-    // 3. Game is not paused
-    const shouldPlayRaidMusic = hasEnemies && hqExists && !this.paused && !this.gameOverScreen.isActive();
+    // Priority order: Raid music > Day music > No music
+    
+    // RAID MUSIC: Takes priority during combat
+    const shouldPlayRaidMusic = hasEnemies && hqExists && isGameActive;
     
     if (shouldPlayRaidMusic && !this.raidMusicActive) {
-      // Start raid music
+      // Stop day music and start raid music
+      if (this.dayMusicActive) {
+        this.audioManager.stop('music.day.ambient');
+        this.dayMusicActive = false;
+      }
+      
       this.audioManager.play('music.raid.combat', { 
         volume: 0.6, 
         loop: true,
@@ -1942,6 +1950,7 @@ export class Game {
       });
       this.raidMusicActive = true;
       console.log('[Game] Started raid music - enemies attacking HQ');
+      
     } else if (!shouldPlayRaidMusic && this.raidMusicActive) {
       // Stop raid music
       this.audioManager.stop('music.raid.combat');
@@ -1951,6 +1960,35 @@ export class Game {
         console.log('[Game] Stopped raid music - HQ destroyed or game paused');
       } else {
         console.log('[Game] Stopped raid music - all enemies defeated');
+      }
+    }
+    
+    // DAY MUSIC: Plays during daytime when no enemies are present
+    const shouldPlayDayMusic = isDay && !hasEnemies && hqExists && isGameActive && !this.raidMusicActive;
+    
+    if (shouldPlayDayMusic && !this.dayMusicActive) {
+      // Start day music
+      this.audioManager.play('music.day.ambient', { 
+        volume: 0.4, 
+        loop: true,
+        replaceExisting: true 
+      }).catch((err) => {
+        console.warn('[Game] Failed to start day music:', err);
+      });
+      this.dayMusicActive = true;
+      console.log('[Game] Started day music - peaceful daytime');
+      
+    } else if (!shouldPlayDayMusic && this.dayMusicActive) {
+      // Stop day music
+      this.audioManager.stop('music.day.ambient');
+      this.dayMusicActive = false;
+      
+      if (!isDay) {
+        console.log('[Game] Stopped day music - night has fallen');
+      } else if (hasEnemies) {
+        console.log('[Game] Stopped day music - enemies detected');
+      } else {
+        console.log('[Game] Stopped day music - game paused or ended');
       }
     }
   }
@@ -1970,13 +2008,19 @@ export class Game {
       const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
       if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
       if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
-      this.trees.push({ x: p.x, y: p.y, r: 12, hp: 40, type: 'tree' }); 
+      
+      // Snap tree to tile center for pathfinding alignment
+      const alignedPos = snapToTileCenter(p.x, p.y);
+      this.trees.push({ x: alignedPos.x, y: alignedPos.y, r: 12, hp: 40, type: 'tree' }); 
     }
     for (let i = 0; i < 140; i++) { 
       const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
       if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
       if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
-      this.rocks.push({ x: p.x, y: p.y, r: 12, hp: 50, type: 'rock' }); 
+      
+      // Snap rock to tile center for pathfinding alignment
+      const alignedPos = snapToTileCenter(p.x, p.y);
+      this.rocks.push({ x: alignedPos.x, y: alignedPos.y, r: 12, hp: 50, type: 'rock' }); 
     }
     // Rebuild navigation grid after scattering resources
     this.rebuildNavGridImmediate(); // Use immediate rebuild during game init
@@ -2003,9 +2047,12 @@ export class Game {
           const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
           if (getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN) continue;
           
-          if (kind==='tree') this.trees.push({ x:p.x, y:p.y, r:12, hp:40, type:'tree' }); else this.rocks.push({ x:p.x, y:p.y, r:12, hp:50, type:'rock' });
+          // Snap to tile center for pathfinding alignment
+          const alignedPos = snapToTileCenter(p.x, p.y);
+          if (kind==='tree') this.trees.push({ x:alignedPos.x, y:alignedPos.y, r:12, hp:40, type:'tree' }); 
+          else this.rocks.push({ x:alignedPos.x, y:alignedPos.y, r:12, hp:50, type:'rock' });
           // Use partial rebuild for new resource (only affects small area around spawn point)
-          this.navigationManager.rebuildNavGridPartial(p.x, p.y, 12 + 32);
+          this.navigationManager.rebuildNavGridPartial(alignedPos.x, alignedPos.y, 12 + 32);
           break;
         }
       };
@@ -2615,8 +2662,8 @@ export class Game {
     }
   }
   
-  // RAID MUSIC SYSTEM: Play "Dust and Echoes" during HQ attacks
-  this.updateRaidMusic();
+  // MUSIC SYSTEM: Play day music and raid music based on game state
+  this.updateMusic();
   
   this.performanceMetrics.endTiming('colonist & enemy AI');
   

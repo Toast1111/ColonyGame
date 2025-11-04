@@ -1,6 +1,7 @@
 import type { WorkGiver, WorkGiverContext, WorkCandidate } from './types';
 import { isMountainTile, getVisibleOreAt } from '../terrain';
 import { T } from '../constants';
+import { snapToTileCenter } from '../utils/tileAlignment';
 
 export const MiningWorkGiver: WorkGiver = {
   getCandidates(ctx: WorkGiverContext): WorkCandidate[] {
@@ -36,29 +37,51 @@ export const MiningWorkGiver: WorkGiver = {
             const tileKey = `${gx},${gy}`;
             if ((game as any).assignedTiles?.has(tileKey)) continue;
 
-            // Calculate distance
-            const tileX = gx * T + T / 2;
-            const tileY = gy * T + T / 2;
-            const dist = Math.hypot(colonist.x - tileX, colonist.y - tileY);
+            // Calculate distance using tile-aligned position
+            const tileCenter = snapToTileCenter(gx * T, gy * T);
+            const dist = Math.hypot(colonist.x - tileCenter.x, colonist.y - tileCenter.y);
 
             if (dist < nearestDist) {
               nearestDist = dist;
-              nearestMountainTile = { gx, gy, x: tileX, y: tileY };
+              nearestMountainTile = { 
+                gx, 
+                gy, 
+                x: tileCenter.x, 
+                y: tileCenter.y 
+              };
             }
           }
         }
       }
 
-      // If we found a mountain tile, prioritize it
+      // If we found a mountain tile, validate pathfinding before assigning
       if (nearestMountainTile) {
-        out.push({
-          workType: 'Mining',
-          task: 'mine',
-          target: nearestMountainTile,
-          distance: nearestDist,
-          priority
-        });
-        return out; // Return immediately - mountain mining takes precedence
+        // Quick pathfinding validation to prevent stuck colonists
+        try {
+          const path = game.navigationManager?.computePathWithDangerAvoidance(
+            colonist, colonist.x, colonist.y, nearestMountainTile.x, nearestMountainTile.y
+          );
+          
+          if (path && path.length > 0) {
+            out.push({
+              workType: 'Mining',
+              task: 'mine',
+              target: nearestMountainTile,
+              distance: nearestDist,
+              priority
+            });
+            return out; // Return immediately - mountain mining takes precedence
+          } else {
+            // Mountain tile is unreachable - mark as assigned to prevent retrying
+            const tileKey = `${nearestMountainTile.gx},${nearestMountainTile.gy}`;
+            if ((game as any).assignedTiles) {
+              (game as any).assignedTiles.add(tileKey);
+            }
+            console.log(`[Mining] Mountain tile at (${nearestMountainTile.gx},${nearestMountainTile.gy}) is unreachable, skipping`);
+          }
+        } catch (error) {
+          console.warn('[Mining] Pathfinding validation failed:', error);
+        }
       }
     }
 

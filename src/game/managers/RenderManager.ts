@@ -98,8 +98,18 @@ export class RenderManager {
     const { game } = this;
     const { ctx, canvas } = game;
 
-    // Clear and set up world transform
-    clear(ctx, canvas, game.dirtyRectTracker);
+    // Clear and set up world transform - with error handling for dirty frame issues
+    try {
+      clear(ctx, canvas, game.dirtyRectTracker);
+    } catch (error) {
+      console.warn('[RenderManager] Dirty rect clearing failed, using fallback:', error);
+      // Fallback to full clear on error
+      ctx.fillStyle = '#0a0e14'; // COLORS.sky
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Force full redraw next frame
+      game.dirtyRectTracker.markFullRedraw();
+    }
+    
     (game as any).clampCameraToWorld(); // Private method access
     ctx.save();
     applyWorldTransform(ctx, game.camera);

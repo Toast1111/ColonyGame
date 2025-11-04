@@ -335,8 +335,12 @@ export const AUDIO_MANIFEST = {
     { name: 'New Horizons', loop: true, volume: 0.4 }
   ]),
 
+  'music.day.ambient': variants('music/day', [
+    { name: 'Dust and Echoes', loop: true, volume: 0.4 }
+  ]),
+
   'music.raid.combat': variants('music/raid', [
-    { name: 'Dust and Echoes', loop: true, volume: 0.6 }
+    { name: 'Raid Siren', loop: true, volume: 0.6 }
   ])
 } as const satisfies Record<string, readonly AudioVariant[]>;
 

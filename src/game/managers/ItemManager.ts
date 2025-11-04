@@ -5,6 +5,7 @@ import { ItemRenderer } from "../rendering/itemRenderer";
 import type { ItemType, FloorItem } from "../types/items";
 import type { StockpileZone } from "../types/stockpiles";
 import type { Vec2 } from "../../core/utils";
+import { snapToTileCenter } from "../utils/tileAlignment";
 
 export interface ItemManagerConfig {
   canvas: HTMLCanvasElement;
@@ -38,20 +39,26 @@ export class ItemManager {
   /**
    * Drop items on the floor at a specific position
    * If position is in a stockpile zone, will use tile-based positioning
+   * Otherwise, snaps to tile center for pathfinding compatibility
    */
   dropItems(itemType: ItemType, quantity: number, position: Vec2, metadata?: { [key: string]: any }): FloorItem {
     // Check if we're dropping in a stockpile zone
     const zone = this.stockpiles.getZoneAtPosition(position);
     
-    // If in a zone that accepts this item, find the proper tile-based position
     let finalPosition = position;
+    
     if (zone && (zone.settings.allowAll || zone.allowedItems.has(itemType))) {
+      // If in a zone that accepts this item, find the proper tile-based position
       // Get all existing items for tile occupancy check
       const allItems = this.floorItems.getAllItems();
       const betterPosition = this.stockpiles.findStoragePositionInZone(zone, itemType, allItems);
       if (betterPosition) {
         finalPosition = betterPosition;
       }
+    } else {
+      // Not in a stockpile zone - snap to tile center for pathfinding alignment
+      // This ensures colonists can reach dropped items that spawn outside stockpiles
+      finalPosition = snapToTileCenter(position.x, position.y);
     }
     
     const item = this.floorItems.createItem(itemType, quantity, finalPosition, metadata);
