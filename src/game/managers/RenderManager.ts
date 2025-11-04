@@ -749,37 +749,85 @@ export class RenderManager {
     for (const c of game.colonists) {
       if (!c.alive || !c.path || c.path.length === 0) continue;
       if (!inViewport(c.x, c.y)) continue; // Cull paths for colonists outside viewport
+      
+      // Draw the path from colonist's current position
       ctx.strokeStyle = '#00ffff';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
+      
+      // Start from colonist position
       ctx.moveTo(c.x, c.y);
-      for (const node of c.path) {
-        ctx.lineTo(node.x, node.y);
+      
+      // Only draw remaining path from current pathIndex onward to avoid confusing visuals
+      const startIndex = Math.max(0, c.pathIndex || 0);
+      if (startIndex < c.path.length) {
+        // Draw to current path target first
+        ctx.lineTo(c.path[startIndex].x, c.path[startIndex].y);
+        
+        // Then draw the rest of the path
+        for (let i = startIndex + 1; i < c.path.length; i++) {
+          ctx.lineTo(c.path[i].x, c.path[i].y);
+        }
       }
+      
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Current target
+      // Highlight current path target with a larger marker
       if (c.pathIndex !== undefined && c.path[c.pathIndex]) {
         const node = c.path[c.pathIndex];
         ctx.fillStyle = '#00ffff';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(node.x, node.y, 4, 0, Math.PI * 2);
+        ctx.arc(node.x, node.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      // Draw only remaining path nodes as small dots (skip past nodes to avoid visual clutter)
+      for (let i = startIndex; i < c.path.length; i++) {
+        const node = c.path[i];
+        const isCurrent = i === (c.pathIndex || 0);
+        
+        // Skip the current node since it's already highlighted with the larger marker above
+        if (isCurrent) continue;
+        
+        ctx.fillStyle = '#00ffff80';
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
         ctx.fill();
       }
 
-      // Line to task target
+      // Final task target (different from path target) - only if different from path goal
       if (c.target && (c.target as any).x != null) {
         const target = c.target as any;
-        ctx.strokeStyle = '#ffff00';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        ctx.beginPath();
-        ctx.moveTo(c.x, c.y);
-        ctx.lineTo(target.x, target.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
+        const pathGoal = c.pathGoal;
+        
+        // Only draw target line if it's different from the path goal
+        const isTargetDifferentFromPath = !pathGoal || 
+          Math.hypot(target.x - pathGoal.x, target.y - pathGoal.y) > 32;
+          
+        if (isTargetDifferentFromPath) {
+          ctx.strokeStyle = '#ffff00';
+          ctx.lineWidth = 1;
+          ctx.setLineDash([2, 2]);
+          ctx.beginPath();
+          ctx.moveTo(c.x, c.y);
+          ctx.lineTo(target.x, target.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          
+          // Mark the final target
+          ctx.fillStyle = '#ffff00';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(target.x, target.y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
       }
     }
 

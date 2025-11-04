@@ -1270,6 +1270,60 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: render status|force|toggle — check render status, force redraw, or toggle dirty rects";
   }, "render status|force|toggle — debug rendering system and dirty frame issues");
+
+  reg("pathfind", (g, args) => {
+    const action = (args[0] || "info").toLowerCase();
+    
+    if (action === "info") {
+      const selectedColonist = g.selColonist;
+      if (!selectedColonist) return "No colonist selected";
+      
+      const c = selectedColonist;
+      let info = `Pathfinding Info for ${c.profile?.name || 'Colonist'}:\n`;
+      info += `• Position: (${Math.round(c.x)}, ${Math.round(c.y)})\n`;
+      info += `• State: ${(c as any).state || 'unknown'}\n`;
+      info += `• Task: ${c.task || 'none'}\n`;
+      
+      if (c.path) {
+        info += `• Path length: ${c.path.length} nodes\n`;
+        info += `• Path index: ${c.pathIndex || 0}/${c.path.length}\n`;
+        
+        if (c.pathGoal) {
+          info += `• Path goal: (${Math.round(c.pathGoal.x)}, ${Math.round(c.pathGoal.y)})\n`;
+        }
+        
+        // Current path target
+        if (c.pathIndex !== undefined && c.path[c.pathIndex]) {
+          const target = c.path[c.pathIndex];
+          const distance = Math.hypot(c.x - target.x, c.y - target.y);
+          info += `• Current target: (${Math.round(target.x)}, ${Math.round(target.y)}) - ${distance.toFixed(1)}px away\n`;
+        }
+      } else {
+        info += `• Path: none\n`;
+      }
+      
+      if (c.target) {
+        const target = c.target as any;
+        if (target.x !== undefined) {
+          const distance = Math.hypot(c.x - target.x, c.y - target.y);
+          info += `• Task target: (${Math.round(target.x)}, ${Math.round(target.y)}) - ${distance.toFixed(1)}px away\n`;
+        }
+      }
+      
+      return info;
+    } else if (action === "clear") {
+      const selectedColonist = g.selColonist;
+      if (!selectedColonist) return "No colonist selected";
+      
+      g.clearPath(selectedColonist);
+      return `Cleared path for ${selectedColonist.profile?.name || 'Colonist'}`;
+    } else if (action === "debug") {
+      g.debug.nav = !g.debug.nav;
+      return `Path debug visualization: ${g.debug.nav ? 'enabled' : 'disabled'}`;
+    }
+    
+    return "usage: pathfind info|clear|debug — show path info for selected colonist, clear their path, or toggle debug vis";
+  }, "pathfind info|clear|debug — debug pathfinding for selected colonist");
 }
 
 export function toggleDebugConsole(game: Game) {

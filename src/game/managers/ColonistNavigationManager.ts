@@ -438,7 +438,9 @@ export class ColonistNavigationManager {
 
     // TILE-CENTER MOVEMENT: Move in straight lines between exact tile centers
     // Update direction for sprite facing (only if moving significantly)
-    if (L > 1) {
+    // Wait until colonist is actually moving before updating direction to prevent sprite "snapping"
+    const moveDistance = step;
+    if (L > moveDistance + 5) { // Only update direction if we're far enough from target to actually move
       c.direction = Math.atan2(dy, dx);
     }
     
