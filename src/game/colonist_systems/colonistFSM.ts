@@ -12,6 +12,7 @@ import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/bui
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
 import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState } from "./states";
+import { canInterruptColonist, forceInterruptIntent, shouldEnterDecisionPhase, getColonistIntent, setColonistIntent, updateColonistIntent, hasIntent, createWorkIntent } from "../systems/colonistIntent";
 
 
 // Helper function to check if a position would collide with buildings or mountains
@@ -429,6 +430,18 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (reason && Math.random() < 0.1) {
         console.log(`Colonist state change: ${prev} → ${newState} (${reason})`);
       }
+    }
+  }
+
+  // Intent system - handle interruptions and player control
+  // Functions imported at top of file
+  
+  // Check for drafting interruption - highest priority
+  if (c.isDrafted && c.state !== 'drafted') {
+    if (canInterruptColonist(c)) {
+      forceInterruptIntent(c, 'drafted by player');
+      changeState('drafted', 'player drafted colonist');
+      return; // Exit early to prevent state conflicts
     }
   }
 
@@ -1674,75 +1687,97 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'chop': {
       const t = c.target as any; 
       if (!t || t.hp <= 0) {
-        // Only switch to seekTask if we've been in this state for at least a short duration
-        if (c.stateSince >= 0.5) {
-          if (t && game.assignedTargets.has(t)) game.assignedTargets.delete(t); 
-          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'tree gone');
-        }
+        // Clean up and exit
+        if (t && game.assignedTargets.has(t)) game.assignedTargets.delete(t); 
+        c.task = null; c.target = null; game.clearPath(c);
+        (c as any).intentContext = undefined; // Clear intent
+        changeState('seekTask', 'tree gone');
         break; 
       }
       
-      // Simplified approach: move directly toward the tree
       const dx = t.x - c.x;
       const dy = t.y - c.y;
       const distance = Math.hypot(dx, dy);
       const interact = (t.r || 12) + c.r + 4;
       const slack = 2.5;
+      const interactionRange = interact + slack;
       
-      if (distance <= interact + slack + 0.1) {
-        // Close enough to chop
-        const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Woodcutting') : 1;
-        const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0; // use Plants for woodcutting
-        const skillMult = skillWorkSpeedMultiplier(plantsLvl);
-        const workMult = equipMult * skillMult;
-        t.hp -= 18 * dt * workMult;
-        if (c.skills) grantSkillXP(c, 'Plants', 4 * dt, c.t || 0); // trickle while chopping
-        if (t.hp <= 0) {
-          const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02);
-          const amount = Math.round(6 * yieldMult);
-          // Drop wood on the ground at the tree position
-          const dropAt = { x: t.x, y: t.y };
-          (game as any).itemManager?.dropItems('wood', amount, dropAt);
-          (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
-          if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
-          game.msg(`Dropped ${amount} wood`, 'good');
-          // OPTIMIZATION: No nav grid rebuild needed - trees don't block pathfinding anymore!
-          // This eliminates stuttering from region rebuilds when harvesting
-          
-          // Only switch to seekTask if we've been in this state for at least a short duration
-          if (c.stateSince >= 0.5) {
-            c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'chopped tree');
+      // Intent system functions imported at top of file
+      
+      // Update intent context
+      updateColonistIntent(c, dt);
+      const intent = getColonistIntent(c);
+      
+      // PHASE 1: Moving to tree
+      if (!intent || intent.intent === 'moving') {
+        if (shouldEnterDecisionPhase(c, t, interactionRange)) {
+          // Arrived at tree - enter decision phase
+          setColonistIntent(c, 'deciding', { 
+            target: t, 
+            interactionRange,
+            decisionTime: 0.5, // Half second to "size up" the tree
+            canCancel: true 
+          });
+        } else {
+          // Keep moving toward tree
+          if (!intent) {
+            setColonistIntent(c, 'moving', { target: t, canCancel: true });
           }
+          game.moveAlongPath(c, dt, t, interactionRange);
         }
-        break;
-      } else {
-        // Move toward the tree using pathfinding
-        game.moveAlongPath(c, dt, t, interact + slack);
-        
-        // Track progress to detect if we're making movement towards the tree - TEMPORARILY DISABLED
-        if (!c.lastDistToNode) c.lastDistToNode = distance;
-        
-        // If we've been trying for more than 5 seconds and not getting closer, try clearing path - TEMPORARILY DISABLED
-        /*
-        if (c.stateSince > 5.0 && Math.abs(distance - c.lastDistToNode) < 2) {
-          c.jitterScore = (c.jitterScore || 0) + 1;
-          if (c.jitterScore > 120) { // 2 seconds of no progress (at 60fps)
-            console.log(`Chop task stuck, clearing path and retrying`);
-            game.clearPath(c);
-            c.jitterScore = 0;
+      }
+      
+      // PHASE 2: Deciding whether to chop
+      else if (intent.intent === 'deciding') {
+        // Stand still and "consider" the tree
+        if (intent.decisionTime && intent.decisionTime <= 0) {
+          // Decision made - start chopping
+          setColonistIntent(c, 'working', createWorkIntent(t, interactionRange, true));
+        }
+        // Don't move while deciding - colonist is stationary
+      }
+      
+      // PHASE 3: Actually chopping (stationary)
+      else if (intent.intent === 'working') {
+        // Must be stationary and in range to work
+        if (distance <= interactionRange) {
+          // Perform the actual chopping work
+          const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Woodcutting') : 1;
+          const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
+          const skillMult = skillWorkSpeedMultiplier(plantsLvl);
+          const workMult = equipMult * skillMult;
+          
+          t.hp -= 18 * dt * workMult;
+          if (c.skills) grantSkillXP(c, 'Plants', 4 * dt, c.t || 0);
+          
+          if (t.hp <= 0) {
+            // Tree chopped down
+            const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02);
+            const amount = Math.round(6 * yieldMult);
+            const dropAt = { x: t.x, y: t.y };
+            (game as any).itemManager?.dropItems('wood', amount, dropAt);
+            (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
+            if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
+            game.msg(`Dropped ${amount} wood`, 'good');
+            
+            // Clean up and finish
+            c.task = null; c.target = null; game.clearPath(c);
+            (c as any).intentContext = undefined;
+            changeState('seekTask', 'chopped tree');
           }
         } else {
-          c.jitterScore = 0;
+          // Lost range - go back to moving
+          setColonistIntent(c, 'moving', { target: t, canCancel: true });
         }
-        */
-        c.lastDistToNode = distance;
       }
 
-      // If stuck too long, abandon (increased from 10 to 20 seconds)
+      // Timeout safety check
       if (c.stateSince && c.stateSince > 20) {
         console.log(`Chop task timeout after ${c.stateSince.toFixed(1)}s, abandoning tree`);
         if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
-        c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'chop timeout');
+        c.task = null; c.target = null; game.clearPath(c); 
+        (c as any).intentContext = undefined;
+        changeState('seekTask', 'chop timeout');
       }
       break;
     }
