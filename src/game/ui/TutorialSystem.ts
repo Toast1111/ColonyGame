@@ -328,6 +328,9 @@ export class TutorialSystem {
     // Pause the game
     this.game.paused = true;
     
+    // Show mobile skip button if on touch device
+    this.showMobileSkipButton();
+    
     // Play ambient intro music (optional)
     // this.game.audioManager.play('music.intro', { volume: 0.3, loop: false });
   }
@@ -341,6 +344,9 @@ export class TutorialSystem {
     this.game.paused = false;
     this.markCompleted();
     this.game.toast('Tutorial skipped');
+    
+    // Hide mobile skip button
+    this.hideMobileSkipButton();
     
     // Play a confirmation sound
     void this.game.audioManager.play('ui.panel.close').catch(() => {});
@@ -479,7 +485,11 @@ export class TutorialSystem {
     
     this.active = false;
     this.game.paused = false;
+    this.markCompleted();
     this.game.toast('Good luck, Commander!');
+    
+    // Hide mobile skip button
+    this.hideMobileSkipButton();
     
     // Play success sound
     void this.game.audioManager.play('ui.panel.open').catch(() => {});
@@ -673,7 +683,11 @@ export class TutorialSystem {
     
     const skipBlink = Math.sin(elapsed * 2) > -0.5;
     if (skipBlink) {
-      ctx.fillText('[ESC] Skip Tutorial', boxX + boxWidth / 2, boxY + boxHeight - boxPadding + 5);
+      // Show mobile-friendly skip instructions
+      const skipText = this.game.touchUIEnabled ? 
+        'Skip Tutorial: [ESC] or ⏭️ button' : 
+        '[ESC] Skip Tutorial';
+      ctx.fillText(skipText, boxX + boxWidth / 2, boxY + boxHeight - boxPadding + 5);
     }
     
     // Add Continue button for steps that allow SPACE
@@ -1031,5 +1045,25 @@ export class TutorialSystem {
     }
     
     return true; // Block all other clicks
+  }
+
+  /**
+   * Show mobile skip button for touch devices
+   */
+  private showMobileSkipButton(): void {
+    const mc = this.game.getMobileControls();
+    if (mc && this.game.touchUIEnabled) {
+      mc.showSkipTutorialButton();
+    }
+  }
+
+  /**
+   * Hide mobile skip button
+   */
+  private hideMobileSkipButton(): void {
+    const mc = this.game.getMobileControls();
+    if (mc) {
+      mc.hideSkipTutorialButton();
+    }
   }
 }
