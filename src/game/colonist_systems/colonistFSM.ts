@@ -505,21 +505,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     if (!c.inside && !danger && (c.hp || 0) < 35) set('heal', 85 - Math.max(0, c.hp) * 0.1, 'low health');
     
-    // Sleep based on fatigue level - colonists are MORE LIKELY to sleep when tired, but NEVER forced
-    // Priority scales gradually based on fatigue, competing with work priority
-    // At night, they get a bonus to encourage natural sleep patterns
-    // This creates natural behavior where tired colonists prefer rest over work
-    if (!c.inside && !danger && (c.fatigue || 0) >= fatigueEnterThreshold) {
-      const isNight = game.isNight();
-      // Scale fatigue factor more gradually: 60% = 0, 80% = 15, 100% = 30
-      const fatigueFactor = Math.min(30, ((c.fatigue || 0) - fatigueEnterThreshold) * 0.75);
-      const nightBonus = isNight ? 15 : 0; // Bonus at night for natural circadian rhythm
-      const basePriority = 45 + fatigueFactor + nightBonus; // Max ~90 at 100% fatigue + night
-      
-      // Sleep competes with work (priority ~40-50) naturally
-      // More tired = more likely to choose sleep over work
-      set('goToSleep', basePriority, isNight ? 'tired + night preference' : 'high fatigue');
-    }
+    // Sleep is now purely intent-based - colonists choose beds via spatial interactions
+    // No more automatic fatigue-based forcing - full player and colonist agency
     
     if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0)
       set('eat', 60 + Math.min(25, (c.hunger || 0) - 75), 'hunger');
@@ -528,9 +515,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     return best;
   }
 
-  // If inside any building and not resting, immediately switch to resting
-  if (c.inside && c.state !== 'resting') { changeState('resting', 'entered building'); }
-  else {
+  // Colonists now control their own bed entry/exit via spatial interactions
+  // No more automatic forcing into resting when inside buildings
+  {
     const statePriority = (s: ColonistState | undefined): number => {
       switch (s) {
         case 'flee': return 100;
@@ -599,18 +586,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Rest recovers fatigue quickly and heals slowly
       c.hp = Math.min(100, c.hp + 1.2 * dt);
       
-      // Simple hysteresis: only leave when fatigue drops to 20 or below (entered at 80+)
-      // This creates a 60-point gap to prevent oscillation
-      const minRestTime = 1.0; // Minimum 1 second of rest
-      const canLeaveFromFatigue = (c.fatigue || 0) <= fatigueExitThreshold && c.stateSince >= minRestTime;
-      
-      const leave = (!game.isNight()) && (!danger && (c.hurt || 0) <= 0 && (c.hideTimer || 0) <= 0 && canLeaveFromFatigue);
-      if (leave) { 
-        game.leaveBuilding(c); 
-        c.safeTarget = null; 
-        c.safeTimer = 0; 
-        changeState('seekTask', 'finished resting');
-      }
+      // Colonists now stay in bed until they actively choose to leave via spatial interaction
+      // No more automatic exit based on fatigue - full player and colonist control
       break;
     }
     case 'heal': {
@@ -973,268 +950,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'sleep': {
-      const needsMedicalBed = game.colonistNeedsMedicalBed(c);
-      // Persist target house briefly to avoid oscillation between similar choices
-      const selectSleepTarget = (options: Building[]): Building | null => {
-        if (!options.length) return null;
-        const now = c.t || 0;
-
-        // If we already have a reservation that's still valid, stick with it
-        if (c.reservedSleepFor && options.includes(c.reservedSleepFor)) {
-          (c as any).sleepTarget = c.reservedSleepFor;
-          (c as any).sleepTargetLockUntil = now + 5.0;
-          return c.reservedSleepFor;
-        }
-
-        let remembered: Building | undefined = (c as any).sleepTarget;
-        const lockUntil: number = (c as any).sleepTargetLockUntil || 0;
-
-        if (remembered && !options.includes(remembered)) {
-          if (c.reservedSleepFor === remembered) {
-            game.releaseSleepReservation(c);
-          }
-          remembered = undefined;
-          (c as any).sleepTarget = undefined;
-          (c as any).sleepTargetLockUntil = 0;
-        }
-
-        if (remembered && now < lockUntil) {
-          if (game.reserveSleepSpot(c, remembered)) {
-            return remembered;
-          }
-          if (c.reservedSleepFor === remembered) {
-            game.releaseSleepReservation(c);
-          }
-          remembered = undefined;
-          (c as any).sleepTarget = undefined;
-          (c as any).sleepTargetLockUntil = 0;
-        }
-
-        const scored = options
-          .map(house => {
-            const distance = Math.sqrt(dist2(c as any, game.centerOf(house) as any));
-            const capacity = game.buildingCapacity(house);
-            const current = game.reservationManager.getInsideCount(house);
-            const spaceAvailable = Math.max(0, capacity - current);
-            const score = spaceAvailable * 100 - distance;
-            return { house, score };
-          })
-          .sort((a, b) => b.score - a.score);
-
-        for (const { house } of scored) {
-          if (game.reserveSleepSpot(c, house)) {
-            (c as any).sleepTarget = house;
-            (c as any).sleepTargetLockUntil = now + 5.0;
-            return house;
-          }
-        }
-
-        return null;
-      };
-      const protectedHouses = (game.buildings as Building[]).filter(b => 
-        (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent') && 
-        b.done && 
-        !(b.kind === 'bed' && b.isMedicalBed && !needsMedicalBed) &&
-        game.isProtectedByTurret(b) && 
-        game.buildingHasSpace(b, c)
-      );
-      
-      // If no protected houses available, try any house or HQ, or sleep in place near HQ
-      if (protectedHouses.length === 0) {
-        const anyHouse = (game.buildings as Building[]).filter(b => 
-          (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq') && 
-          b.done && 
-          !(b.kind === 'bed' && b.isMedicalBed && !needsMedicalBed) &&
-          game.buildingHasSpace(b, c)
-        );
-        
-        if (anyHouse.length > 0) {
-          // Try any available house/HQ (with brief target lock to prevent flipping)
-          const house = selectSleepTarget(anyHouse);
-          if (!house) { changeState('seekTask', 'no bed available'); break; }
-          const hc = game.centerOf(house);
-          const distance = Math.hypot(hc.x - c.x, hc.y - c.y);
-          
-          if (distance <= 20) {
-            if (game.tryEnterBuilding(c, house)) {
-              c.hideTimer = 0;
-              // Clear remembered target after success
-              (c as any).sleepTarget = undefined;
-              (c as any).sleepTargetLockUntil = 0;
-              changeState('resting', 'sleeping in unprotected shelter');
-            } else {
-              // Entry failed (maybe filled meanwhile) - allow immediate re-pick
-              (c as any).sleepTarget = undefined;
-              (c as any).sleepTargetLockUntil = 0;
-              game.releaseSleepReservation(c);
-              // If can't enter, sleep nearby
-              changeState('resting', 'sleeping outside shelter');
-            }
-          } else {
-            game.moveAlongPath(c, dt, hc, 20);
-          }
-        } else {
-          // No buildings available - sleep in place or move to HQ area for safety
-          const hq = (game.buildings as Building[]).find(b => b.kind === 'hq');
-          if (hq) {
-            const hqCenter = game.centerOf(hq);
-            const distToHQ = Math.hypot(hqCenter.x - c.x, hqCenter.y - c.y);
-            if (distToHQ > 50) {
-              // Move closer to HQ for safety
-              game.moveAlongPath(c, dt, hqCenter, 40);
-            } else {
-              // Sleep in place near HQ
-              changeState('resting', 'sleeping near HQ');
-            }
-          } else {
-            // No HQ - just sleep in place
-            changeState('resting', 'sleeping in place');
-          }
-        }
-        
-        // Timeout to prevent getting stuck
-        if (c.stateSince > 15) {
-          changeState('resting', 'sleep timeout - resting in place');
-        }
-        break;
-      }
-      
-      // Removed forced daybreak wakeup - colonists can sleep during day if tired
-      // They'll naturally wake up when fatigue is low enough (via evaluateIntent)
-      
-    // Improve house selection - prefer houses with more space and closer distance, but lock briefly once chosen
-    let best = selectSleepTarget(protectedHouses);
-    if (!best) { changeState('seekTask', 'no bed available'); break; }
-    let hc = game.centerOf(best);
-      
-      // Use direct movement instead of pathfinding
-      const dx = hc.x - c.x;
-      const dy = hc.y - c.y;
-      const distance = Math.hypot(dx, dy);
-      const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
-      
-      if (distance <= 20 || nearRect) {
-        if (game.tryEnterBuilding(c, best)) { 
-          c.hideTimer = 0; 
-      // Clear remembered target after success
-      (c as any).sleepTarget = undefined;
-      (c as any).sleepTargetLockUntil = 0;
-          changeState('resting', 'fell asleep'); 
-        } else {
-          // Try another house with space, or HQ if available
-      // Allow immediate re-pick if entry failed
-      (c as any).sleepTarget = undefined;
-      (c as any).sleepTargetLockUntil = 0;
-          game.releaseSleepReservation(c);
-          const alternatives = (game.buildings as Building[])
-            .filter((b: Building) => b.done && game.buildingHasSpace(b, c) && (b.kind === 'house' || b.kind === 'bed' || b.kind === 'tent' || b.kind === 'hq') && !(b.kind === 'bed' && b.isMedicalBed && !needsMedicalBed));
-          const next = selectSleepTarget(alternatives);
-          if (next) { 
-            best = next; 
-            hc = game.centerOf(next); 
-            /* retarget without clearing path */ 
-          } else { 
-            changeState('seekTask', 'no bed available'); 
-          }
-        }
-      } else {
-        // Move toward the house using pathfinding
-        game.moveAlongPath(c, dt, hc, 20);
-        
-        // Add timeout for stuck colonists - if they've been trying to sleep for too long, give up
-        if (c.stateSince > 15) { // 15 seconds timeout
-          changeState('seekTask', 'sleep timeout');
-        }
-      }
+      // Sleep is now purely intent-based via spatial interactions
+      // Just rest in place if no bed is available
+      changeState('resting', 'sleeping without bed');
       break;
     }
     case 'goToSleep': {
-      const needsMedicalBed = game.colonistNeedsMedicalBed(c);
-      // Seek houses or infirmaries for daytime rest when very tired
-      const restBuildings = (game.buildings as Building[]).filter(b => 
-        (b.kind === 'house' || b.kind === 'bed' || b.kind === 'infirmary' || b.kind === 'tent' || b.kind === 'hq') && 
-        b.done && 
-        !(b.kind === 'bed' && b.isMedicalBed && !needsMedicalBed) &&
-        game.buildingHasSpace(b, c)
-      );
-      
-      // Simple threshold: only give up if fatigue drops to exit threshold (20) or below
-      const minTryTime = 2.0; // Try for at least 2 seconds
-      const shouldGiveUp = (c.fatigue || 0) <= fatigueExitThreshold && c.stateSince >= minTryTime;
-      
-      if (restBuildings.length === 0) {
-        game.releaseSleepReservation(c);
-        // No rest buildings available, rest in place if very tired
-        if (c.stateSince > 3.0) {
-          if (shouldGiveUp) {
-            changeState('seekTask', 'no rest buildings, fatigue recovered');
-          } else {
-            // Rest in place - reduce fatigue slowly
-            c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 2);
-          }
-        }
-        break;
-      }
-      
-      const chooseRestBuilding = (): Building | null => {
-        if (c.reservedSleepFor && restBuildings.includes(c.reservedSleepFor)) {
-          (c as any).sleepTarget = c.reservedSleepFor;
-          (c as any).sleepTargetLockUntil = (c.t || 0) + 5.0;
-          return c.reservedSleepFor;
-        }
-        const sorted = restBuildings
-          .map(b => ({
-            b,
-            d: dist2(c as any, game.centerOf(b) as any),
-            priority: (needsMedicalBed && b.kind === 'bed' && b.isMedicalBed) ? 0 : (b.kind === 'bed' ? 1 : 2)
-          }))
-          .sort((a, b) => (a.priority - b.priority) || (a.d - b.d));
-        for (const { b } of sorted) {
-          if (game.reserveSleepSpot(c, b)) {
-            (c as any).sleepTarget = b;
-            (c as any).sleepTargetLockUntil = (c.t || 0) + 5.0;
-            return b;
-          }
-        }
-        return null;
-      };
-
-      const best = chooseRestBuilding();
-      if (!best) {
-        if (shouldGiveUp) {
-          changeState('seekTask', 'no available rest buildings, fatigue recovered');
-        }
-        break;
-      }
-
-      const bc = game.centerOf(best);
-      const distance = Math.hypot(bc.x - c.x, bc.y - c.y);
-      const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
-      
-      if (distance <= 20 || nearRect) {
-        if (game.tryEnterBuilding(c, best)) { 
-          c.hideTimer = 0; 
-          changeState('resting', 'entered rest building');
-        } else {
-          game.releaseSleepReservation(c);
-          const next = chooseRestBuilding();
-          if (!next) {
-            if (shouldGiveUp) {
-              changeState('seekTask', 'no available rest buildings, fatigue recovered');
-            }
-          } else if (next !== best) {
-            game.clearPath(c);
-          }
-        }
-      } else {
-        // Move toward the rest building using pathfinding
-        game.moveAlongPath(c, dt, bc, 20);
-        
-        // If fatigue has recovered enough, give up the search
-        if (shouldGiveUp) {
-          changeState('seekTask', 'fatigue recovered while searching for rest');
-        }
-      }
+      // GoToSleep is now purely intent-based via spatial interactions
+      // Just rest in place if no bed is available  
+      changeState('resting', 'resting without bed');
       break;
     }
     case 'seekTask': {
@@ -1295,13 +1019,69 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'idle': {
-      // Removed forced night sleep - idle colonists will naturally prefer sleep when tired
-      // If they're not tired, they can stay awake and idle (realistic behavior)
+      // Idle colonists can choose to interact with nearby objects like beds
+      
+      // Check for nearby spatial interactions when colonist is idle
+      if (!c.target && c.stateSince > 1.0) {  // Wait 1 second before checking interactions
+        const nearbyBuildings = (game.buildings as Building[]).filter(b => {
+          if (!b.done || b.kind !== 'bed') return false;
+          const distance = Math.hypot(c.x - (b.x + b.w/2), c.y - (b.y + b.h/2));
+          return distance <= 40; // Check beds within 40 pixels
+        });
+        
+        if (nearbyBuildings.length > 0) {
+          // If colonist is tired and there's a bed nearby, consider using it
+          if ((c.fatigue || 0) > 50 && !c.inside) {
+            const bed = nearbyBuildings[0];
+            const bedCenter = { x: bed.x + bed.w/2, y: bed.y + bed.h/2 };
+            const distance = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+            
+            if (distance <= 20) {
+              // Close enough to interact - get in bed
+              c.inside = bed;
+              c.x = bedCenter.x;
+              c.y = bedCenter.y;
+              (c as any).sleepFacing = Math.PI / 2;
+              
+              // Update reservation system
+              if (game.reservationManager) {
+                game.reservationManager.insideCounts.set(bed, (game.reservationManager.insideCounts.get(bed) || 0) + 1);
+              }
+              
+              changeState('resting', 'chose to use bed');
+              break;
+            } else {
+              // Move toward bed
+              c.target = bedCenter;
+            }
+          } else if (c.inside && (c.fatigue || 0) < 30) {
+            // In bed but not tired - consider getting out
+            const bed = c.inside;
+            if (bed && bed.kind === 'bed') {
+              // Get out of bed
+              c.inside = null;
+              c.x = bed.x + bed.w/2 + 20;
+              c.y = bed.y + bed.h/2;
+              (c as any).sleepFacing = undefined;
+              
+              // Update reservation system
+              if (game.reservationManager) {
+                const cur = (game.reservationManager.insideCounts.get(bed) || 1) - 1;
+                if (cur <= 0) game.reservationManager.insideCounts.delete(bed);
+                else game.reservationManager.insideCounts.set(bed, cur);
+              }
+              
+              changeState('seekTask', 'got out of bed');
+              break;
+            }
+          }
+        }
+      }
       
       const dst = c.target;
       if (!dst) {
-        game.clearPath(c);
-        changeState('seekTask', 'no target');
+        // Create a random idle target if none exists
+        c.target = { x: c.x + (Math.random() - 0.5) * 160, y: c.y + (Math.random() - 0.5) * 160 };
         break;
       }
       

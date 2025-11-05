@@ -135,26 +135,56 @@ export function createBuildingInteractionZones(building: Building): InteractionZ
       break;
       
     case 'bed':
-      // Sleep zone - on the bed
+      // Simple bed interaction - one click to get in, one click to get out
       zones.push({
-        id: `${building.kind}_sleep_${building.x}_${building.y}`,
+        id: `${building.kind}_interact_${building.x}_${building.y}`,
         target: building,
         center: { x: centerX, y: centerY },
-        radius: Math.max(building.w, building.h) / 2 + 8,
-        priority: 15,
+        radius: Math.max(building.w, building.h) / 2 + 12,
+        priority: 10,
         actions: [
           {
-            id: 'sleep',
-            name: 'Sleep',
-            taskTypes: ['sleep', 'rest', 'goToSleep'],
-            canExecute: (c: Colonist) => (c.fatigue || 0) > 40,
+            id: 'enter_bed',
+            name: 'Get in Bed',
+            taskTypes: ['rest', 'sleep', 'goToSleep', 'idle'],  // Allow any colonist to choose to use bed
+            canExecute: (c: Colonist) => !c.inside,  // Can only get in if not already inside
             execute: (c: Colonist, dt: number) => {
-              // Sleep logic here
-              c.fatigue = Math.max(0, (c.fatigue || 0) - 20 * dt);
-              return { 
-                completed: (c.fatigue || 0) <= 20, 
-                shouldContinue: (c.fatigue || 0) > 20 
-              };
+              // Simple bed entry - just set inside and position, and enter resting state
+              c.inside = building;
+              c.x = centerX;
+              c.y = centerY;
+              (c as any).sleepFacing = Math.PI / 2; // Horizontal sleeping pose
+              
+              // Update the reservation system
+              const game = (window as any).game;
+              if (game && game.reservationManager) {
+                game.reservationManager.insideCounts.set(building, (game.reservationManager.insideCounts.get(building) || 0) + 1);
+              }
+              
+              return { completed: true, shouldContinue: false };
+            }
+          },
+          {
+            id: 'exit_bed',
+            name: 'Get out of Bed',
+            taskTypes: ['exit', 'leave', 'getup', 'idle'],  // Allow any colonist to choose to leave bed
+            canExecute: (c: Colonist) => !!(c.inside && c.inside === building),  // Can only get out if inside this bed
+            execute: (c: Colonist, dt: number) => {
+              // Simple bed exit - clear inside status and move slightly away
+              c.inside = null;
+              c.x = centerX + 20; // Move colonist out of bed
+              c.y = centerY;
+              (c as any).sleepFacing = undefined;
+              
+              // Update the reservation system  
+              const game = (window as any).game;
+              if (game && game.reservationManager) {
+                const cur = (game.reservationManager.insideCounts.get(building) || 1) - 1;
+                if (cur <= 0) game.reservationManager.insideCounts.delete(building);
+                else game.reservationManager.insideCounts.set(building, cur);
+              }
+              
+              return { completed: true, shouldContinue: false };
             }
           }
         ]
