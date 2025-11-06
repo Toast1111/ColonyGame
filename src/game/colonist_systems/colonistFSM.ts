@@ -1288,13 +1288,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const audioInterval = 1.5 + Math.random() * 0.5; // 1.5-2.0 seconds
           
           if (!c.lastConstructionAudioTime || (currentTime - c.lastConstructionAudioTime) >= audioInterval) {
+            // Stop any previous looping construction audio before starting new one
+            if (c.activeConstructionAudio && (game as any).audioManager) {
+              (game as any).audioManager.stop(c.activeConstructionAudio);
+            }
+            
             // Play construction sound with per-clip volume control
             (game as any).playAudio?.(audioClip.key, { 
               category: 'buildings',
               volume: audioClip.volume ?? 0.75,
               rng: Math.random, // Pass the function, not the result
               position: { x: b.x + b.w / 2, y: b.y + b.h / 2 },
-              listenerPosition: (game as any).audioManager?.getListenerPosition()
+              listenerPosition: (game as any).audioManager?.getListenerPosition(),
+              replaceExisting: true // Ensure only one instance of construction audio per colonist
             });
             c.lastConstructionAudioTime = currentTime;
             c.activeConstructionAudio = audioClip.key;

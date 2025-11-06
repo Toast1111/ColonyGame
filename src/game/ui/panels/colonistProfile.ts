@@ -1,4 +1,5 @@
 import { drawColonistAvatar } from "../../render/index";
+import { drawHealthTab as drawHealthTabNew } from "./healthTab";
 
 export function drawColonistProfile(game: any, c: any) {
   const ctx = game.ctx as CanvasRenderingContext2D;
@@ -101,7 +102,7 @@ export function drawColonistProfile(game: any, c: any) {
       break;
     case 'health':
       game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
-      drawHealthTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
+      drawHealthTabNew(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
       break;
     case 'gear':
       game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
@@ -244,192 +245,7 @@ function drawBioTab(game: any, c: any, x: number, y: number, w: number, h: numbe
   }
 }
 
-function drawHealthTab(game: any, c: any, x: number, y: number, w: number, h: number) {
-  const ctx = game.ctx as CanvasRenderingContext2D;
-  let textY = y + game.scale(8);
-  
-  // Responsive font scaling based on panel width
-  const baseFontScale = Math.max(0.7, Math.min(1.0, w / 400));
-  const headerSize = Math.round(16 * baseFontScale);
-  const textSize = Math.round(12 * baseFontScale);
-  const smallSize = Math.round(10 * baseFontScale);
-  
-  // Basic health stats
-  const hp = Math.max(0, Math.min(100, c.hp | 0));
-  const tired = Math.max(0, Math.min(100, (c.fatigue || 0) | 0));
-  const hunger = Math.max(0, Math.min(100, (c.hunger || 0) | 0));
-  const mood = (game as any).getColonistMood ? (game as any).getColonistMood(c) : 'OK';
-  
-  ctx.fillStyle = '#f1f5f9'; 
-  ctx.font = game.getScaledFont(headerSize, '600'); 
-  ctx.textAlign = 'left';
-  ctx.fillText('Overall Condition', x, textY); 
-  textY += game.scale(Math.round(24 * baseFontScale));
-  
-  // Increased spacing between overall condition bars for improved readability (was 22 * baseFontScale)
-  const barSpacing = game.scale(Math.round(22 * baseFontScale));
-  game.barRow(x, textY, 'Health', hp, '#22c55e'); 
-  textY += barSpacing;
-  game.barRow(x, textY, 'Energy', 100 - tired, '#eab308'); 
-  textY += barSpacing;
-  game.barRow(x, textY, 'Fullness', 100 - hunger, '#f87171'); 
-  textY += barSpacing;
-  
-  // Enhanced health system display
-  if (c.health) {
-    textY += game.scale(Math.round(16 * baseFontScale));
-    ctx.fillStyle = '#f1f5f9'; 
-    ctx.font = game.getScaledFont(headerSize, '600');
-    ctx.fillText('Detailed Health', x, textY); 
-    textY += game.scale(Math.round(20 * baseFontScale));
-    
-    // Overall health status with better mobile layout
-    const totalPain = Math.round((c.health.totalPain || 0) * 100);
-    const consciousness = Math.round((c.health.consciousness || 1) * 100);
-    const mobility = Math.round((c.health.mobility || 1) * 100);
-    const manipulation = Math.round((c.health.manipulation || 1) * 100);
-    
-    ctx.fillStyle = '#94a3b8'; 
-    ctx.font = game.getScaledFont(textSize, '500');
-    ctx.fillText(`Pain Level: ${totalPain}%`, x, textY);
-    ctx.fillStyle = totalPain > 30 ? '#ef4444' : totalPain > 15 ? '#f59e0b' : '#22c55e';
-    const painLabel = totalPain > 50 ? ' (Severe)' : totalPain > 30 ? ' (Moderate)' : totalPain > 15 ? ' (Mild)' : ' (None)';
-    const painLabelX = Math.min(x + game.scale(Math.round(80 * baseFontScale)), x + w - game.scale(60));
-    ctx.fillText(painLabel, painLabelX, textY);
-    textY += game.scale(Math.round(16 * baseFontScale));
-    
-    game.barRow(x, textY, 'Consciousness', consciousness, consciousness > 80 ? '#22c55e' : consciousness > 60 ? '#f59e0b' : '#ef4444'); 
-    textY += barSpacing;
-    game.barRow(x, textY, 'Mobility', mobility, mobility > 80 ? '#22c55e' : mobility > 60 ? '#f59e0b' : '#ef4444'); 
-    textY += barSpacing;
-    game.barRow(x, textY, 'Manipulation', manipulation, manipulation > 80 ? '#22c55e' : manipulation > 60 ? '#f59e0b' : '#ef4444'); 
-    textY += barSpacing;
-    
-    // Body parts and injuries with responsive layout
-    if (c.health.bodyParts && c.health.bodyParts.length > 0) {
-      textY += game.scale(Math.round(16 * baseFontScale));
-      ctx.fillStyle = '#f1f5f9'; 
-      ctx.font = game.getScaledFont(Math.round(14 * baseFontScale), '600');
-      ctx.fillText('Body Parts', x, textY); 
-      textY += game.scale(Math.round(18 * baseFontScale));
-      
-      for (const bodyPart of c.health.bodyParts) {
-        const partHealth = Math.round((bodyPart.currentHp / bodyPart.maxHp) * 100);
-        const efficiency = Math.round(bodyPart.efficiency * 100);
-        
-        ctx.fillStyle = '#cbd5e1'; 
-        ctx.font = game.getScaledFont(Math.round(11 * baseFontScale), '500');
-        ctx.fillText(bodyPart.label, x, textY);
-        
-        // Health bar for body part - responsive sizing
-        const barWidth = Math.min(game.scale(80), w * 0.3);
-        const barHeight = game.scale(8);
-        const barX = x + Math.min(game.scale(80), w * 0.25);
-        
-        ctx.fillStyle = '#374151';
-        ctx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
-        
-        const healthColor = partHealth > 80 ? '#22c55e' : partHealth > 50 ? '#f59e0b' : '#ef4444';
-        ctx.fillStyle = healthColor;
-        ctx.fillRect(barX, textY - game.scale(6), barWidth * (partHealth / 100), barHeight);
-        
-        ctx.fillStyle = '#9ca3af'; 
-        ctx.font = game.getScaledFont(smallSize, '400');
-        ctx.fillText(`${partHealth}%`, barX + barWidth + game.scale(8), textY);
-        
-        if (efficiency < 100 && w > 300) { // Only show efficiency on wider screens
-          ctx.fillStyle = '#f59e0b'; 
-          const efficiencyX = Math.min(barX + barWidth + game.scale(40), x + w - game.scale(60));
-          ctx.fillText(`(${efficiency}%)`, efficiencyX, textY);
-        }
-        
-        textY += game.scale(Math.round(14 * baseFontScale));
-      }
-    }
-    
-    // Active injuries with responsive layout
-    if (c.health.injuries && c.health.injuries.length > 0) {
-      textY += game.scale(Math.round(12 * baseFontScale));
-      ctx.fillStyle = '#f1f5f9'; 
-      ctx.font = game.getScaledFont(Math.round(14 * baseFontScale), '600');
-      ctx.fillText('Active Injuries', x, textY); 
-      textY += game.scale(Math.round(18 * baseFontScale));
-      
-      const maxInjuries = w < 350 ? 4 : 6; // Show fewer injuries on small screens
-      for (const injury of c.health.injuries.slice(0, maxInjuries)) {
-        const severity = Math.round(injury.severity * 100);
-        const pain = Math.round(injury.pain * 100);
-        
-        // Injury type icon
-        const typeIcons = {
-          'cut': '🔪',
-          'bruise': '🟣', 
-          'burn': '🔥',
-          'bite': '🦷',
-          'gunshot': '🔫',
-          'fracture': '🦴'
-        };
-        
-        const icon = typeIcons[injury.type as keyof typeof typeIcons] || '⚕️';
-        ctx.fillStyle = '#f87171'; 
-        ctx.font = game.getScaledFont(textSize, '500');
-        
-        // Truncate injury description on small screens
-        const description = w < 350 ? injury.description.substring(0, 25) + '...' : injury.description;
-        ctx.fillText(`${icon} ${description}`, x, textY);
-        
-        ctx.fillStyle = '#94a3b8'; 
-        ctx.font = game.getScaledFont(smallSize, '400');
-        const statusText = `Severity: ${severity}%, Pain: ${pain}%`;
-        ctx.fillText(statusText, x + game.scale(8), textY + game.scale(12));
-        
-        if (injury.bleeding > 0 && w > 300) {
-          ctx.fillStyle = '#dc2626'; 
-          const bleedingX = Math.min(x + game.scale(150), x + w - game.scale(80));
-          ctx.fillText(`Bleeding: ${Math.round(injury.bleeding * 100)}%`, bleedingX, textY + game.scale(12));
-        }
-        
-        if (injury.infected && w > 250) {
-          ctx.fillStyle = '#7c2d12'; 
-          const infectedX = Math.min(x + game.scale(220), x + w - game.scale(60));
-          ctx.fillText('INFECTED', infectedX, textY + game.scale(12));
-        }
-        
-        textY += game.scale(Math.round(26 * baseFontScale));
-        
-        // Stop if we're running out of space
-        if (textY > y + h - game.scale(40)) break;
-      }
-      
-      if (c.health.injuries.length > 6) {
-        ctx.fillStyle = '#6b7280'; 
-        ctx.font = game.getScaledFont(10, '400');
-        ctx.fillText(`...and ${c.health.injuries.length - 6} more injuries`, x, textY);
-      }
-    } else if (c.health.bodyParts) {
-      // Show "no injuries" if health system is active but no injuries
-      textY += game.scale(12);
-      ctx.fillStyle = '#22c55e'; 
-      ctx.font = game.getScaledFont(12, '500');
-      ctx.fillText('✓ No active injuries', x, textY);
-    }
-  } else {
-    // Show that enhanced health system is not initialized
-    textY += game.scale(16);
-    ctx.fillStyle = '#6b7280'; 
-    ctx.font = game.getScaledFont(12, '400');
-    ctx.fillText('Enhanced health system not initialized', x, textY);
-  }
-  
-  textY += game.scale(16);
-  ctx.fillStyle = '#f1f5f9'; 
-  ctx.font = game.getScaledFont(14, '600');
-  ctx.fillText('Mental State', x, textY); 
-  textY += game.scale(18);
-  ctx.fillStyle = '#9fb3c8'; 
-  ctx.font = game.getScaledFont(12, '400');
-  ctx.fillText(`Current Mood: ${mood}`, x + game.scale(8), textY);
-}
+// Old drawHealthTab function removed - now using healthTab.ts module
 
 function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;

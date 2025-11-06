@@ -309,6 +309,18 @@ export class Game {
   get colonistTabRects() { return this.uiManager.colonistTabRects; }
   set colonistTabRects(value) { this.uiManager.colonistTabRects = value; }
   
+  get colonistHealthSubTab() { return this.uiManager.colonistHealthSubTab; }
+  set colonistHealthSubTab(value) { this.uiManager.colonistHealthSubTab = value; }
+  
+  get colonistHealthSubTabRects() { return this.uiManager.colonistHealthSubTabRects; }
+  set colonistHealthSubTabRects(value) { this.uiManager.colonistHealthSubTabRects = value; }
+  
+  get colonistHealthToggles() { return this.uiManager.colonistHealthToggles; }
+  set colonistHealthToggles(value) { this.uiManager.colonistHealthToggles = value; }
+  
+  get colonistHealthOperationButtons() { return this.uiManager.colonistHealthOperationButtons; }
+  set colonistHealthOperationButtons(value) { this.uiManager.colonistHealthOperationButtons = value; }
+  
   get contextMenu() { return this.uiManager.contextMenu; }
   set contextMenu(value) { this.uiManager.contextMenu = value; }
   
@@ -1004,6 +1016,56 @@ export class Game {
               }
             }
           }
+          
+          // Check for health sub-tab clicks
+          if (this.colonistProfileTab === 'health' && this.colonistHealthSubTabRects && Array.isArray(this.colonistHealthSubTabRects)) {
+            for (const subTabRect of this.colonistHealthSubTabRects) {
+              if (subTabRect && typeof subTabRect.x === 'number' && typeof subTabRect.y === 'number' &&
+                  typeof subTabRect.w === 'number' && typeof subTabRect.h === 'number') {
+                if (mx0 >= subTabRect.x && mx0 <= subTabRect.x + subTabRect.w && my0 >= subTabRect.y && my0 <= subTabRect.y + subTabRect.h) {
+                  this.colonistHealthSubTab = subTabRect.tab as any;
+                  return;
+                }
+              }
+            }
+          }
+          
+          // Check for health toggle clicks (e.g., self-tend)
+          if (this.colonistProfileTab === 'health' && this.colonistHealthToggles && Array.isArray(this.colonistHealthToggles)) {
+            for (const toggle of this.colonistHealthToggles) {
+              if (toggle && typeof toggle.x === 'number' && typeof toggle.y === 'number' &&
+                  typeof toggle.w === 'number' && typeof toggle.h === 'number') {
+                if (mx0 >= toggle.x && mx0 <= toggle.x + toggle.w && my0 >= toggle.y && my0 <= toggle.y + toggle.h) {
+                  if (toggle.type === 'selfTend' && this.selColonist) {
+                    (this.selColonist as any).selfTend = !(this.selColonist as any).selfTend;
+                    this.msg(`Self-tend ${(this.selColonist as any).selfTend ? 'enabled' : 'disabled'}`, 'info');
+                  }
+                  return;
+                }
+              }
+            }
+          }
+          
+          // Check for health operation button clicks (add/cancel operations)
+          if (this.colonistProfileTab === 'health' && this.colonistHealthSubTab === 'operations' && 
+              this.colonistHealthOperationButtons && Array.isArray(this.colonistHealthOperationButtons)) {
+            for (const button of this.colonistHealthOperationButtons) {
+              if (button && typeof button.x === 'number' && typeof button.y === 'number' &&
+                  typeof button.w === 'number' && typeof button.h === 'number') {
+                if (mx0 >= button.x && mx0 <= button.x + button.w && my0 >= button.y && my0 <= button.y + button.h) {
+                  if (button.type === 'add' && this.selColonist && button.operation) {
+                    this.queueOperation(this.selColonist, button.operation);
+                    this.audioManager.play('ui.click.primary');
+                  } else if (button.type === 'cancel' && this.selColonist && button.operationId) {
+                    this.cancelOperation(this.selColonist, button.operationId);
+                    this.audioManager.play('ui.click.secondary');
+                  }
+                  return;
+                }
+              }
+            }
+          }
+          
           if (this.colonistPanelRect) {
             const r = this.colonistPanelRect;
             const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
@@ -1883,6 +1945,78 @@ export class Game {
   msg(text: string, kind: Message["kind"] = 'info') { 
     this.messages.push({ text, t: 4, kind }); 
     this.toast(text, 1600); 
+  }
+  
+  /**
+   * Queue a surgical operation for a colonist
+   */
+  queueOperation(colonist: any, operationDef: any) {
+    if (!colonist.health) {
+      initializeColonistHealth(colonist);
+    }
+    if (!colonist.health.queuedOperations) {
+      colonist.health.queuedOperations = [];
+    }
+    
+    const operation: any = {
+      id: `op_${Date.now()}_${Math.random()}`,
+      type: operationDef.type,
+      label: operationDef.label,
+      description: operationDef.description,
+      targetBodyPart: operationDef.targetBodyPart,
+      implantType: operationDef.implantType,
+      prostheticType: operationDef.prostheticType,
+      requiresMedicine: operationDef.requiresMedicine,
+      priority: 5, // Default priority
+      addedTime: Date.now(),
+      successChance: this.calculateOperationSuccessChance(colonist, operationDef)
+    };
+    
+    colonist.health.queuedOperations.push(operation);
+    this.msg(`Operation queued: ${operation.label}`, 'info');
+  }
+  
+  /**
+   * Cancel a queued operation
+   */
+  cancelOperation(colonist: any, operationId: string) {
+    if (!colonist.health || !colonist.health.queuedOperations) return;
+    
+    const index = colonist.health.queuedOperations.findIndex((op: any) => op.id === operationId);
+    if (index >= 0) {
+      const op = colonist.health.queuedOperations[index];
+      colonist.health.queuedOperations.splice(index, 1);
+      this.msg(`Operation cancelled: ${op.label}`, 'info');
+    }
+  }
+  
+  /**
+   * Calculate operation success chance based on doctor skill and conditions
+   */
+  calculateOperationSuccessChance(colonist: any, operationDef: any): number {
+    // Base success rate
+    let chance = 0.7;
+    
+    // Find best doctor
+    const doctors = this.state.colonists.filter((c: any) => 
+      c.alive && c.skills?.byName?.Medicine
+    );
+    
+    if (doctors.length > 0) {
+      // Use best doctor's skill level
+      const bestDoctor = doctors.reduce((best: any, current: any) => {
+        const bestSkill = best.skills?.byName?.Medicine?.level || 0;
+        const currentSkill = current.skills?.byName?.Medicine?.level || 0;
+        return currentSkill > bestSkill ? current : best;
+      });
+      
+      const medicineSkill = bestDoctor.skills?.byName?.Medicine?.level || 0;
+      chance += medicineSkill * 0.02; // +2% per medicine skill level
+    }
+    
+    // TODO: Factor in room cleanliness, hospital bed quality, etc.
+    
+    return Math.min(0.99, Math.max(0.1, chance));
   }
   
   toast(msg: string, ms = 1400) {

@@ -100,6 +100,32 @@ export class UIManager {
     h: number 
   }> = [];
   
+  // Health tab sub-tabs and interactive elements
+  colonistHealthSubTab: 'overview' | 'operations' | 'injuries' = 'overview';
+  colonistHealthSubTabRects: Array<{
+    tab: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }> = [];
+  colonistHealthToggles: Array<{
+    type: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }> = [];
+  colonistHealthOperationButtons: Array<{
+    type: 'add' | 'cancel';
+    operation?: any;
+    operationId?: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  }> = [];
+  
   // Context menu state
   contextMenu: (ContextMenuDescriptor<any> & { 
     visible: boolean; 

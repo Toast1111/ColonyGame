@@ -145,7 +145,9 @@ export interface ColonistInventory {
 }
 
 // Health and injury system types
-export type BodyPartType = 'head' | 'torso' | 'left_arm' | 'right_arm' | 'left_leg' | 'right_leg';
+export type BodyPartType = 'head' | 'torso' | 'left_arm' | 'right_arm' | 'left_leg' | 'right_leg' 
+  | 'left_eye' | 'right_eye' | 'left_ear' | 'right_ear' | 'jaw' | 'neck'
+  | 'heart' | 'lungs' | 'liver' | 'kidneys' | 'stomach';
 
 export interface BodyPart {
   type: BodyPartType;
@@ -155,9 +157,13 @@ export interface BodyPart {
   coverage: number; // 0-1, chance of being hit
   vital: boolean; // death if destroyed
   efficiency: number; // 0-1, how well it functions
+  missing?: boolean; // Part has been amputated/destroyed
+  replaced?: boolean; // Part has been replaced (peg leg, bionic, etc.)
+  frostbite?: number; // 0-1, frostbite severity (can cause part loss)
 }
 
-export type InjuryType = 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' | 'infection';
+export type InjuryType = 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' | 'infection' 
+  | 'hypothermia' | 'heatstroke' | 'frostbite' | 'scar';
 
 export interface Injury {
   id: string;
@@ -166,7 +172,7 @@ export interface Injury {
   severity: number; // 0-1, higher = worse
   pain: number; // 0-1, pain caused
   bleeding: number; // 0-1, blood loss rate
-  healRate: number; // HP recovered per day
+  healRate: number; // HP recovered per day (base 8 damage/day)
   permanent: boolean; // leaves scar/disability
   timeCreated: number; // game time when injury occurred
   description: string;
@@ -177,6 +183,9 @@ export interface Injury {
   bandaged?: boolean; // bandaging reduces bleeding multiplier
   infectionProgress?: number; // 0-1 progression toward severe infection
   treatmentQuality?: number; // 0-1, quality of medical treatment received
+  // Temperature-related
+  temperatureRelated?: boolean; // Hypothermia, heatstroke, frostbite, burns
+  ignitionRisk?: number; // 0-1, for heatstroke (can set pawn on fire)
 }
 
 export interface ColonistHealth {
@@ -188,22 +197,75 @@ export interface ColonistHealth {
   mobility: number; // 0-1, movement speed multiplier
   manipulation: number; // 0-1, work speed multiplier
   immunity: number; // 0-1, resistance to infections
+  temperature: number; // Body temperature (affects hypothermia/heatstroke)
   // Internal timers for bleeding/infection cadence
   lastBleedCalcTime?: number;
   lastInfectionTick?: number;
-  // Implants for medical system
+  lastTemperatureTick?: number;
+  // Implants and prosthetics
   implants?: HealthImplant[];
+  prosthetics?: HealthProsthetic[];
   // Organ health (0-1, affects immunity and healing)
   kidneyHealth?: number; // 0-1, affects immunity
   liverHealth?: number; // 0-1, affects immunity
+  heartHealth?: number; // 0-1, affects blood pumping
+  lungHealth?: number; // 0-1, affects breathing
+  stomachHealth?: number; // 0-1, affects digestion
+  // Queued operations
+  queuedOperations?: Operation[];
+  // Hospital bed assignment
+  assignedMedicalBed?: string; // Building ID of assigned medical bed
 }
 
-export type ImplantType = 'immunizer' | 'filtering_kidneys' | 'healer' | 'bionic_eye' | 'bionic_arm' | 'bionic_leg';
+// Operation types for surgery system
+export type OperationType = 
+  | 'install_implant' 
+  | 'install_prosthetic'
+  | 'remove_organ' 
+  | 'harvest_organ' 
+  | 'transplant_organ'
+  | 'amputate' 
+  | 'treat_infection'
+  | 'remove_scar';
+
+export type SurgeryFailureType = 'minor' | 'catastrophic' | 'ridiculous' | 'success';
+
+export interface Operation {
+  id: string;
+  type: OperationType;
+  targetBodyPart?: BodyPartType;
+  implantType?: ImplantType;
+  prostheticType?: ProstheticType;
+  priority: number; // 1-9, higher = more urgent
+  addedTime: number; // Game time when operation was queued
+  doctorId?: string; // Colonist performing surgery
+  progress?: number; // 0-1, surgical progress
+  requiresMedicine: boolean; // Needs medkit for anesthetic
+  successChance?: number; // Calculated based on doctor skill, cleanliness
+  label: string; // Display name
+  description: string; // Operation details
+}
+
+export type ImplantType = 'immunizer' | 'filtering_kidneys' | 'healer' | 'bionic_eye' 
+  | 'bionic_arm' | 'bionic_leg' | 'bionic_heart' | 'bionic_lung' | 'bionic_stomach';
 
 export interface HealthImplant {
   type: ImplantType;
   quality: number; // 0-1, affects effectiveness
   label: string;
+  bodyPart: BodyPartType; // Which part it's installed on
+  efficiencyBonus: number; // Bonus to part efficiency (e.g., 0.125 for bionic leg = +12.5%)
+}
+
+export type ProstheticType = 'peg_leg' | 'prosthetic_arm' | 'prosthetic_leg' 
+  | 'bionic_arm' | 'bionic_leg' | 'bionic_eye' | 'bionic_ear';
+
+export interface HealthProsthetic {
+  type: ProstheticType;
+  quality: number; // 0-1, affects effectiveness
+  label: string;
+  bodyPart: BodyPartType;
+  efficiencyModifier: number; // Can be negative (peg leg) or positive (bionic)
 }
 
 // Skill System
