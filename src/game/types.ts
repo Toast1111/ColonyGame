@@ -70,6 +70,7 @@ export type Building = BuildingDef & {
   doorQueue?: Array<{ id: string; type: 'colonist' | 'enemy' }>; // Entities waiting to pass
   // Furniture designations
   isMedicalBed?: boolean;
+  occupiedBy?: string; // Colonist ID currently using this bed/furniture
   // Cooking-specific properties (for stove)
   cookingProgress?: number; // 0-1, how far through cooking
   wheatStored?: number; // Amount of wheat in the stove
@@ -110,7 +111,7 @@ export interface BuildingInventory {
 
 export type ColonistCommandIntent = 'goto' | 'rest' | 'medical' | 'seekMedical' | 'guard';
 
-export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'downed' | 'waitingAtDoor' | 'cooking' | 'stonecutting' | 'smelting' | 'cooling' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted' | 'research' | 'plantTree' | 'harvestPlantedTree' | 'smithing' | 'equipment';
+export type ColonistState = 'seekTask' | 'idle' | 'move' | 'build' | 'harvest' | 'chop' | 'mine' | 'flee' | 'sleep' | 'resting' | 'eat' | 'heal' | 'goToSleep' | 'doctoring' | 'beingTreated' | 'awaitingSurgery' | 'performingSurgery' | 'recoveringFromSurgery' | 'feedingPatient' | 'downed' | 'waitingAtDoor' | 'cooking' | 'stonecutting' | 'smelting' | 'cooling' | 'storingBread' | 'haulBread' | 'haulFloorItem' | 'guard' | 'drafted' | 'research' | 'plantTree' | 'harvestPlantedTree' | 'smithing' | 'equipment';
 
 // Inventory and equipment types
 export interface InventoryItem {

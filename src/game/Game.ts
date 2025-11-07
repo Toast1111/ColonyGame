@@ -41,6 +41,7 @@ import { initializeColonistHealth } from "./health/healthSystem";
 import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
 import { medicalWorkGiver } from "./health/medicalWorkGiver";
 import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth } from './health/healthSystem';
+import { executeSurgery, getHospitalBedBonus } from './health/surgerySystem';
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
 import { updateColonistCombat } from "./combat/pawnCombat";

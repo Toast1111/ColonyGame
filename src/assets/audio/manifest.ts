@@ -398,16 +398,20 @@ export function listAudioKeys(prefix: string): AudioKey[] {
 }
 
 export function resolveAudioSrc(relativeFile: string): string {
-  // FIXED: Better URL resolution for Vite dev server
+  // FIXED: Better URL resolution for Vite dev server with proper URL encoding
   // During development, check if we're running on localhost (dev server)
   const isDev = typeof window !== 'undefined' && window.location.hostname === 'localhost';
   
   let resolvedUrl: string;
   if (isDev) {
     // In development, serve directly from /src/assets/audio/
-    resolvedUrl = `/src/assets/audio/${relativeFile}`;
+    // Split path, encode each component, then rejoin to handle spaces properly
+    const pathParts = relativeFile.split('/');
+    const encodedParts = pathParts.map(part => encodeURIComponent(part));
+    const encodedPath = encodedParts.join('/');
+    resolvedUrl = `/src/assets/audio/${encodedPath}`;
   } else {
-    // In production, use import.meta.url resolution
+    // In production, use import.meta.url resolution (URL constructor handles encoding)
     resolvedUrl = new URL(`./${relativeFile}`, import.meta.url).href;
   }
   

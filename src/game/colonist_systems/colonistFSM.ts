@@ -6,6 +6,7 @@ import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "../skills/sk
 import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
+import { executeSurgery, getHospitalBedBonus } from "../health/surgerySystem";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor, findBlockingDoor } from "../systems/doorSystem";
 import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
@@ -485,14 +486,28 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     // Medical work - ALL colonists can treat injuries (RimWorld style)
     // Use the new work giver system to scan for medical work
     if (!c.inside && !danger && c.health && c.health.totalPain < 0.6) {
-      const medicalJob = medicalWorkGiver.scanForMedicalWork(c, game.colonists, c.t);
+      const medicalJob = medicalWorkGiver.scanForMedicalWork(c, game.colonists, c.t, game.buildings);
       if (medicalJob && !medicalJob.reservedBy) {
         // Reserve the job and assign it to this doctor
         if (medicalWorkGiver.reserveJob(medicalJob, c)) {
           (c as any).medicalJob = medicalJob;
-          set('doctoring', 95, 'medical work available');
+          
+          // Different states for different job types
+          if (medicalJob.type === 'surgery') {
+            set('performingSurgery', 97, 'surgery work available');
+          } else if (medicalJob.type === 'feedPatient') {
+            set('feedingPatient', 96, 'bed-bound patient needs feeding');
+          } else {
+            set('doctoring', 95, 'medical work available');
+          }
         }
       }
+    }
+    
+    // Patient awaiting surgery - check if THIS colonist has queued operations
+    if (!c.inside && c.health && c.health.queuedOperations && c.health.queuedOperations.length > 0) {
+      // High priority - patient needs to get to medical bed
+      set('awaitingSurgery', 98, 'queued for surgery');
     }
     
     // Medical needs - check if THIS colonist needs treatment
@@ -523,6 +538,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'flee': return 100;
         case 'drafted': return 99; // Player control - overrides almost everything
         case 'waitingAtDoor': return 98; // High priority - must wait
+        case 'awaitingSurgery': return 98; // Patient needs to get to surgery
+        case 'performingSurgery': return 97; // Doctor performing surgery
+        case 'recoveringFromSurgery': return 96; // Patient recovering in bed
+        case 'feedingPatient': return 96; // Doctor feeding bed-bound patient
         case 'beingTreated': return 96; // Very high priority - patient needs care
         case 'doctoring': return 95; // High priority for active medical work
         case 'guard': return 94; // Hold position command from player
@@ -748,6 +767,295 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
       break;
     }
+    
+    case 'awaitingSurgery': {
+      // Patient state - colonist has queued surgery and needs to get to medical bed
+      if (!c.health || !c.health.queuedOperations || c.health.queuedOperations.length === 0) {
+        // No surgery queued anymore
+        changeState('seekTask', 'surgery queue empty');
+        break;
+      }
+
+      // Find medical bed
+      const medicalBeds = (game.buildings as Building[]).filter((b: Building) => 
+        b.kind === 'bed' && 
+        b.done && 
+        b.isMedicalBed &&
+        (!b.occupiedBy || b.occupiedBy === (c as any).id) // Either free or occupied by this colonist
+      );
+
+      if (!medicalBeds.length) {
+        // No medical beds available - wait in place
+        if (c.stateSince > 60) {
+          // Timeout after 60 seconds
+          if (game.msg) game.msg(`${c.profile?.name || 'Colonist'} cannot find medical bed for surgery`, 'warn');
+          changeState('seekTask', 'no medical bed available');
+        }
+        break;
+      }
+
+      // Find closest medical bed
+      let closestBed = medicalBeds[0];
+      let minDist = dist2(c as any, game.centerOf(closestBed) as any);
+      for (const bed of medicalBeds.slice(1)) {
+        const d = dist2(c as any, game.centerOf(bed) as any);
+        if (d < minDist) {
+          minDist = d;
+          closestBed = bed;
+        }
+      }
+
+      // Reserve the bed
+      if (!closestBed.occupiedBy) {
+        closestBed.occupiedBy = (c as any).id;
+      }
+
+      const bedCenter = game.centerOf(closestBed);
+      const distToBed = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+
+      if (distToBed <= 20) {
+        // At bed - lie down and wait for doctor
+        c.x = bedCenter.x;
+        c.y = bedCenter.y;
+        (c as any).assignedMedicalBed = closestBed;
+        // Stay in this state - doctor will find us here
+      } else {
+        // Move to bed
+        game.moveAlongPath && game.moveAlongPath(c, dt, bedCenter, 20);
+      }
+      break;
+    }
+    
+    case 'performingSurgery': {
+      // Doctor state - performing surgery on a patient
+      const job: MedicalJob | undefined = (c as any).medicalJob;
+      
+      if (!job || job.type !== 'surgery') {
+        // No surgery job assigned
+        changeState('seekTask', 'no surgery job assigned');
+        break;
+      }
+
+      const patient = job.patient;
+      const operation = job.operation;
+      
+      if (!patient || !patient.alive || !operation) {
+        // Patient died or operation canceled
+        medicalWorkGiver.releaseJob(job, c);
+        (c as any).medicalJob = null;
+        if (job.targetBed) {
+          job.targetBed.occupiedBy = undefined;
+        }
+        changeState('seekTask', 'surgery invalid');
+        break;
+      }
+
+      // Check if patient is at their bed
+      const patientBed = (patient as any).assignedMedicalBed;
+      if (!patientBed) {
+        // Patient hasn't reached bed yet - wait
+        if (c.stateSince > 120) {
+          // Timeout after 2 minutes
+          if (game.msg) game.msg(`Surgery canceled: ${patient.profile?.name || 'patient'} did not reach medical bed`, 'warn');
+          medicalWorkGiver.releaseJob(job, c);
+          (c as any).medicalJob = null;
+          changeState('seekTask', 'patient no-show timeout');
+        }
+        break;
+      }
+
+      // Move to patient's bedside
+      const bedCenter = game.centerOf(patientBed);
+      const distance = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+      const workRange = 45; // Need to be close to perform surgery
+      
+      if (distance > workRange) {
+        // Move closer to bedside
+        game.moveAlongPath(c, dt, bedCenter, workRange);
+      } else {
+        // At bedside - perform surgery
+        // Surgery duration based on operation complexity (30-120 seconds)
+        const surgeryDuration = operation.type === 'amputate' ? 30 :
+                               operation.type === 'install_prosthetic' ? 60 :
+                               operation.type === 'install_implant' ? 90 :
+                               operation.type === 'transplant_organ' ? 120 :
+                               operation.type === 'harvest_organ' ? 90 :
+                               45; // Default for other operations
+
+        if (c.stateSince >= surgeryDuration) {
+          // Surgery time complete - execute the operation
+          const result = executeSurgery(game, patient, c, operation);
+          
+          if (result.success) {
+            if (game.msg) game.msg(`${c.profile?.name || 'Doctor'} successfully performed ${operation.label} on ${patient.profile?.name || 'patient'}`, 'good');
+            
+            // Grant medical XP to doctor
+            if (c.skills) {
+              grantSkillXP(c, 'Medicine', 500, c.t); // Significant XP for surgery
+            }
+          } else {
+            if (game.msg) game.msg(`${result.message}`, 'bad');
+            
+            // Still grant some XP for attempting
+            if (c.skills) {
+              grantSkillXP(c, 'Medicine', 100, c.t);
+            }
+          }
+
+          // Remove operation from queue
+          if (patient.health && patient.health.queuedOperations) {
+            const opIndex = patient.health.queuedOperations.findIndex(op => op.id === operation.id);
+            if (opIndex !== -1) {
+              patient.health.queuedOperations.splice(opIndex, 1);
+            }
+          }
+
+          // Put patient into recovery
+          (patient as any).surgeryRecoveryUntil = c.t + (surgeryDuration * 2); // Recovery is 2x surgery time
+          patient.state = 'recoveringFromSurgery';
+          patient.stateSince = 0;
+
+          // Complete the job
+          medicalWorkGiver.completeJob(job.id);
+          (c as any).medicalJob = null;
+          
+          changeState('seekTask', 'surgery completed');
+        }
+        // else: still performing surgery, continue waiting
+      }
+      break;
+    }
+    
+    case 'recoveringFromSurgery': {
+      // Patient state - recovering in bed after surgery
+      const recoveryEnd = (c as any).surgeryRecoveryUntil || 0;
+      
+      if (c.t >= recoveryEnd) {
+        // Recovery complete
+        const assignedBed = (c as any).assignedMedicalBed;
+        if (assignedBed) {
+          assignedBed.occupiedBy = undefined;
+          (c as any).assignedMedicalBed = null;
+        }
+        (c as any).surgeryRecoveryUntil = null;
+        
+        if (game.msg) game.msg(`${c.profile?.name || 'Colonist'} has recovered from surgery`, 'good');
+        changeState('seekTask', 'surgery recovery complete');
+        break;
+      }
+
+      // Stay in bed during recovery
+      const assignedBed = (c as any).assignedMedicalBed;
+      if (assignedBed) {
+        const bedCenter = game.centerOf(assignedBed);
+        c.x = bedCenter.x;
+        c.y = bedCenter.y;
+      }
+
+      // Gradual health improvement during recovery
+      if (c.health) {
+        c.hp = Math.min(100, c.hp + 0.5 * dt);
+      }
+      break;
+    }
+    
+    case 'feedingPatient': {
+      // Doctor state - bringing food to bed-bound patient
+      const job: MedicalJob | undefined = (c as any).medicalJob;
+      
+      if (!job || job.type !== 'feedPatient') {
+        // No feeding job assigned
+        changeState('seekTask', 'no feeding job assigned');
+        break;
+      }
+
+      const patient = job.patient;
+      const targetBed = job.targetBed;
+      
+      if (!patient || !patient.alive || !targetBed) {
+        // Patient died or invalid job
+        medicalWorkGiver.releaseJob(job, c);
+        (c as any).medicalJob = null;
+        changeState('seekTask', 'feeding job invalid');
+        break;
+      }
+
+      // Check if patient is still hungry
+      const patientHunger = patient.hunger || 0;
+      if (patientHunger < 40) {
+        // Patient no longer hungry
+        medicalWorkGiver.completeJob(job.id);
+        (c as any).medicalJob = null;
+        if (game.msg) game.msg(`${patient.profile?.name || 'Patient'} is no longer hungry`, 'good');
+        changeState('seekTask', 'patient no longer hungry');
+        break;
+      }
+
+      // Check if doctor has food
+      const doctorHasFood = job.hasFoodInInventory || (c as any).carryingFood;
+      
+      if (!doctorHasFood) {
+        // Need to get food first
+        const hasColonyFood = (game.RES.bread || 0) > 0 || (game.RES.food || 0) > 0;
+        
+        if (!hasColonyFood) {
+          // No food available
+          medicalWorkGiver.releaseJob(job, c);
+          (c as any).medicalJob = null;
+          if (game.msg) game.msg(`Cannot feed ${patient.profile?.name || 'patient'}: no food available`, 'warn');
+          changeState('seekTask', 'no food for patient');
+          break;
+        }
+
+        // Get food from storage (instant for now, could be expanded with pantry pathfinding)
+        if (game.RES.bread && game.RES.bread > 0) {
+          game.RES.bread -= 1;
+          (c as any).carryingFood = 'bread';
+        } else if (game.RES.food && game.RES.food > 0) {
+          game.RES.food -= 1;
+          (c as any).carryingFood = 'food';
+        }
+        
+        // Update job to reflect doctor now has food
+        job.hasFoodInInventory = true;
+      }
+
+      // Move to patient's bedside
+      const bedCenter = game.centerOf(targetBed);
+      const distance = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+      const feedRange = 50;
+      
+      if (distance > feedRange) {
+        // Move closer to bedside
+        game.moveAlongPath(c, dt, bedCenter, feedRange);
+      } else {
+        // At bedside - feed the patient
+        const foodValue = (c as any).carryingFood === 'bread' ? 40 : 30;
+        
+        // Reduce patient's hunger
+        patient.hunger = Math.max(0, (patient.hunger || 0) - foodValue);
+        
+        // Mark as fed
+        (patient as any).lastFedTime = c.t;
+        if (!(c as any).id) {
+          (c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+        (patient as any).fedBy = (c as any).id;
+        
+        // Clear carrying food
+        (c as any).carryingFood = null;
+        
+        if (game.msg) game.msg(`${c.profile?.name || 'Doctor'} fed ${patient.profile?.name || 'patient'} in bed`, 'good');
+        
+        // Complete the job
+        medicalWorkGiver.completeJob(job.id);
+        (c as any).medicalJob = null;
+        
+        changeState('seekTask', 'patient fed successfully');
+      }
+      break;
+    }
+    
   case 'eat': {
       // Prioritize eating bread from pantry first, then fall back to regular food
       const hasBread = (game.RES.bread || 0) > 0;

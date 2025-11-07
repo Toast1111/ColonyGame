@@ -8,18 +8,21 @@
  * 4. Jobs are claimed/reserved to prevent multiple pawns from doing the same work
  */
 
-import type { Colonist, Injury, Building } from '../types';
+import type { Colonist, Injury, Building, Operation } from '../types';
 import { MEDICAL_TREATMENTS, type MedicalTreatment, MedicalPriority } from './medicalSystem';
 import { skillLevel } from '../skills/skills';
 
 export interface MedicalJob {
   id: string;
-  type: 'doctor' | 'patient';
+  type: 'doctor' | 'patient' | 'surgery' | 'feedPatient';
   patientId: string;
   patient: Colonist;
   treatment?: MedicalTreatment;
   targetInjury?: Injury;
   targetBed?: Building;
+  operation?: Operation; // Surgery operation to perform
+  hasFoodInInventory?: boolean; // Doctor already has food to deliver
+  foodAmount?: number; // Amount of food to deliver (hunger to restore)
   priority: number; // Lower = higher priority (1 = emergency, 10 = routine)
   playerForced: boolean; // Player manually assigned this job
   reservedBy?: string; // Colonist ID who claimed this job
@@ -37,7 +40,7 @@ export class MedicalWorkGiver {
    * Main entry point - finds medical work for a colonist
    * Called from colonist FSM during work scanning phase
    */
-  public scanForMedicalWork(doctor: Colonist, allColonists: Colonist[], currentTime: number): MedicalJob | null {
+  public scanForMedicalWork(doctor: Colonist, allColonists: Colonist[], currentTime: number, allBuildings?: Building[]): MedicalJob | null {
     // Throttle scanning to avoid performance issues
     if (currentTime - this.lastScanTime < this.scanInterval) {
       // Check if doctor already has a reserved job
@@ -54,19 +57,187 @@ export class MedicalWorkGiver {
       return forcedJob;
     }
 
-    // Scan for emergency medical work (bleeding out, downed, etc.)
+    // PRIORITY 1: Scan for queued surgeries (player-scheduled operations)
+    const surgeryJob = this.scanForSurgeryWork(doctor, allColonists, allBuildings);
+    if (surgeryJob) {
+      return surgeryJob;
+    }
+
+    // PRIORITY 2: Scan for bed-bound patients who need feeding
+    const feedingJob = this.scanForFeedingWork(doctor, allColonists, allBuildings);
+    if (feedingJob) {
+      return feedingJob;
+    }
+
+    // PRIORITY 3: Scan for emergency medical work (bleeding out, downed, etc.)
     const emergencyJob = this.scanEmergencyMedical(doctor, allColonists);
     if (emergencyJob) {
       return emergencyJob;
     }
 
-    // Scan for normal medical work (injuries, infections, etc.)
+    // PRIORITY 4: Scan for normal medical work (injuries, infections, etc.)
     const normalJob = this.scanNormalMedical(doctor, allColonists);
     if (normalJob) {
       return normalJob;
     }
 
     return null;
+  }
+
+  /**
+   * Scan for scheduled surgery operations
+   * Higher priority than regular medical work since player explicitly queued them
+   */
+  private scanForSurgeryWork(doctor: Colonist, allColonists: Colonist[], allBuildings?: Building[]): MedicalJob | null {
+    if (!allBuildings) return null;
+
+    const doctorId = this.getColonistId(doctor);
+    const doctorSkill = this.getDoctorSkill(doctor);
+
+    // Find colonists with queued operations
+    const patientsWithSurgery = allColonists.filter(c => {
+      if (!c.alive || c === doctor) return false;
+      if (!c.health || !c.health.queuedOperations || c.health.queuedOperations.length === 0) return false;
+      
+      // Don't assign if patient is already reserved
+      const patientId = this.getColonistId(c);
+      if (this.isPatientReserved(patientId)) return false;
+      
+      return true;
+    });
+
+    if (!patientsWithSurgery.length) return null;
+
+    // Sort by operation priority (lower number = more urgent)
+    patientsWithSurgery.sort((a, b) => {
+      const opA = a.health!.queuedOperations![0];
+      const opB = b.health!.queuedOperations![0];
+      return opA.priority - opB.priority;
+    });
+
+    // Find a medical bed for the surgery
+    const medicalBeds = allBuildings.filter((b: Building) =>
+      b.kind === 'bed' && 
+      b.done && 
+      b.isMedicalBed &&
+      !b.occupiedBy // Bed is not occupied
+    );
+
+    if (!medicalBeds.length) {
+      // No medical beds available - can't perform surgery
+      return null;
+    }
+
+    // Take the highest priority patient
+    for (const patient of patientsWithSurgery) {
+      const operation = patient.health!.queuedOperations![0];
+      
+      // Find closest available medical bed
+      let closestBed = medicalBeds[0];
+      let minDist = Math.hypot(patient.x - (closestBed.x + closestBed.w / 2), patient.y - (closestBed.y + closestBed.h / 2));
+      
+      for (let i = 1; i < medicalBeds.length; i++) {
+        const bed = medicalBeds[i];
+        const dist = Math.hypot(patient.x - (bed.x + bed.w / 2), patient.y - (bed.y + bed.h / 2));
+        if (dist < minDist) {
+          minDist = dist;
+          closestBed = bed;
+        }
+      }
+
+      // Create surgery job
+      const job: MedicalJob = {
+        id: `surgery_${this.jobCounter++}`,
+        type: 'surgery',
+        patientId: this.getColonistId(patient),
+        patient,
+        operation,
+        targetBed: closestBed,
+        priority: operation.priority,
+        playerForced: true, // Surgery is always player-initiated
+        createdAt: Date.now(),
+      };
+
+      this.jobs.set(job.id, job);
+      
+      // Reserve the bed
+      closestBed.occupiedBy = this.getColonistId(patient);
+      
+      return job;
+    }
+
+    return null;
+  }
+
+  /**
+   * Scan for bed-bound patients who need feeding
+   * Doctors will bring food to patients recovering in medical beds
+   */
+  private scanForFeedingWork(doctor: Colonist, allColonists: Colonist[], allBuildings?: Building[]): MedicalJob | null {
+    if (!allBuildings) return null;
+
+    const doctorId = this.getColonistId(doctor);
+
+    // Find patients in medical beds who are hungry
+    const hungryBedPatients = allColonists.filter(c => {
+      if (!c.alive || c === doctor) return false;
+      
+      // Check if patient is bed-bound (recovering from injuries or surgery)
+      const isBedBound = c.state === 'beingTreated' || 
+                         c.state === 'recoveringFromSurgery' || 
+                         c.state === 'resting';
+      
+      if (!isBedBound) return false;
+
+      // Check if they're in a medical bed
+      const assignedBed = (c as any).assignedMedicalBed;
+      if (!assignedBed || !assignedBed.isMedicalBed) return false;
+
+      // Check if patient is hungry (hunger > 60)
+      const hunger = c.hunger || 0;
+      if (hunger < 60) return false;
+
+      // Don't assign if patient is already being fed
+      const patientId = this.getColonistId(c);
+      const existingFeedJob = Array.from(this.jobs.values()).find(j => 
+        j.type === 'feedPatient' && j.patientId === patientId
+      );
+      if (existingFeedJob) return false;
+
+      return true;
+    });
+
+    if (!hungryBedPatients.length) return null;
+
+    // Sort by urgency (most hungry first)
+    hungryBedPatients.sort((a, b) => (b.hunger || 0) - (a.hunger || 0));
+
+    // Take the hungriest patient
+    const patient = hungryBedPatients[0];
+    const hungerAmount = patient.hunger || 0;
+    
+    // Calculate food needed (restore hunger by ~40 points)
+    const foodAmount = Math.min(40, hungerAmount);
+
+    // Check if doctor has food in inventory or if colony has food available
+    const doctorHasFood = (doctor as any).inventory?.food && (doctor as any).inventory.food > 0;
+
+    // Create feeding job
+    const job: MedicalJob = {
+      id: `feeding_${this.jobCounter++}`,
+      type: 'feedPatient',
+      patientId: this.getColonistId(patient),
+      patient,
+      targetBed: (patient as any).assignedMedicalBed,
+      hasFoodInInventory: doctorHasFood,
+      foodAmount,
+      priority: hungerAmount > 90 ? 2 : 5, // Higher priority if very hungry
+      playerForced: false,
+      createdAt: Date.now(),
+    };
+
+    this.jobs.set(job.id, job);
+    return job;
   }
 
   /**
