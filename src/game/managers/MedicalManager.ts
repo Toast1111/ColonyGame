@@ -281,15 +281,24 @@ export class MedicalManager {
       return;
     }
 
-    // Check if patient has gunshot wounds that need surgery
-    const gunshotWounds = patient.health.injuries.filter(inj => inj.type === 'gunshot');
+    // Check if patient has conditions that might need surgery
+    const hasSevereInjuries = patient.health.injuries.some(inj => inj.severity > 0.7);
+    const hasMissingParts = patient.health.bodyParts?.some(bp => bp.missing);
+    const hasInfection = patient.health.injuries.some(inj => inj.infected && inj.severity > 0.5);
     
-    if (gunshotWounds.length > 0) {
-      // Schedule bullet removal surgery
-      this.scheduleSurgery(patient, 'remove_bullet', gunshotWounds[0].bodyPart);
+    if (hasSevereInjuries) {
+      // For severe injuries, recommend medical treatment instead of surgery
+      this.game.msg('Severe injuries detected. Use "Treat All Injuries" for medical care.', 'info');
+      this.assignComprehensiveMedicalCare(patient);
+    } else if (hasMissingParts) {
+      // Missing parts could use prosthetics
+      this.game.msg('Missing body parts detected. Prosthetics can be installed when available.', 'info');
+    } else if (hasInfection) {
+      // Severe infection might need surgical treatment
+      this.scheduleSurgery(patient, 'treat_infection', patient.health.injuries.find(inj => inj.infected)?.bodyPart);
     } else {
-      // No immediate surgery needs - could show a menu for elective surgeries
-      this.game.msg('No urgent surgeries needed. Consider bandaging wounds first.', 'info');
+      // No immediate surgery needs
+      this.game.msg('No urgent surgeries needed.', 'info');
     }
   }
 
@@ -311,16 +320,16 @@ export class MedicalManager {
     let operation: any;
     
     switch (operationType) {
-      case 'remove_bullet':
+      case 'treat_infection':
         operation = {
           id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          type: 'remove_bullet' as any,
+          type: 'treat_infection' as any,
           targetBodyPart: targetBodyPart as any,
-          priority: 2, // Urgent but not emergency
+          priority: 2, // Urgent - infections can be life-threatening
           addedTime: (patient as any).t || Date.now(),
           requiresMedicine: true,
-          label: 'Remove Bullet',
-          description: `Remove embedded bullet from ${targetBodyPart}`
+          label: 'Surgical Infection Treatment',
+          description: `Surgically treat severe infection in ${targetBodyPart || 'body'}`
         };
         break;
       
@@ -333,7 +342,7 @@ export class MedicalManager {
           addedTime: (patient as any).t || Date.now(),
           requiresMedicine: true,
           label: 'Amputate',
-          description: `Amputate ${targetBodyPart}`
+          description: `Amputate ${targetBodyPart || 'limb'} to prevent infection spread`
         };
         break;
       
@@ -347,7 +356,21 @@ export class MedicalManager {
           addedTime: (patient as any).t || Date.now(),
           requiresMedicine: true,
           label: 'Install Prosthetic',
-          description: `Install prosthetic ${targetBodyPart}`
+          description: `Install prosthetic ${targetBodyPart || 'limb'}`
+        };
+        break;
+      
+      case 'install_implant':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'install_implant' as any,
+          targetBodyPart: targetBodyPart as any,
+          implantType: 'bionic_arm' as any, // Default, should be configurable
+          priority: 5, // Elective
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Install Bionic Implant',
+          description: `Install bionic implant for ${targetBodyPart || 'body part'}`
         };
         break;
       
