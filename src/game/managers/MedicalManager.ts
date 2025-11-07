@@ -5,7 +5,7 @@
  * This manager handles medical actions, doctor assignment, and treatment coordination.
  */
 
-import type { Colonist, Building } from '../types';
+import type { Colonist, Building, OperationType } from '../types';
 import type { Game } from '../Game';
 import { medicalWorkGiver } from '../health/medicalWorkGiver';
 import { basicFieldTreatment, calculateOverallHealth, getInjurySummary } from '../health/healthSystem';
@@ -322,8 +322,8 @@ export class MedicalManager {
     switch (operationType) {
       case 'treat_infection':
         operation = {
-          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          type: 'treat_infection' as any,
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'treat_infection' as OperationType,
           targetBodyPart: targetBodyPart as any,
           priority: 2, // Urgent - infections can be life-threatening
           addedTime: (patient as any).t || Date.now(),
@@ -335,8 +335,8 @@ export class MedicalManager {
       
       case 'amputate':
         operation = {
-          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          type: 'amputate' as any,
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'amputate' as OperationType,
           targetBodyPart: targetBodyPart as any,
           priority: 3,
           addedTime: (patient as any).t || Date.now(),
@@ -348,8 +348,8 @@ export class MedicalManager {
       
       case 'install_prosthetic':
         operation = {
-          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          type: 'install_prosthetic' as any,
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'install_prosthetic' as OperationType,
           targetBodyPart: targetBodyPart as any,
           prostheticType: 'prosthetic_leg' as any, // Default, should be configurable
           priority: 5, // Elective
@@ -362,8 +362,8 @@ export class MedicalManager {
       
       case 'install_implant':
         operation = {
-          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          type: 'install_implant' as any,
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'install_implant' as OperationType,
           targetBodyPart: targetBodyPart as any,
           implantType: 'bionic_arm' as any, // Default, should be configurable
           priority: 5, // Elective

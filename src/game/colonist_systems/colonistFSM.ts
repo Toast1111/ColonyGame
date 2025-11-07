@@ -1035,11 +1035,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (closestDist <= reachDist) {
           // At food building - pick up food
           const isPantry = closestBuilding.kind === 'pantry';
-          if (isPantry && (game.RES.bread || 0) > 0) {
+          if (isPantry && (closestBuilding.breadStored || 0) > 0 && (game.RES.bread || 0) > 0) {
+            // Pick up bread from pantry
             game.RES.bread = (game.RES.bread || 0) - 1;
             closestBuilding.breadStored = Math.max(0, (closestBuilding.breadStored || 0) - 1);
             (c as any).carryingFood = 'bread';
           } else if ((game.RES.food || 0) > 0) {
+            // Pick up regular food from storage
             game.RES.food = Math.max(0, game.RES.food - 1);
             (c as any).carryingFood = 'food';
           }

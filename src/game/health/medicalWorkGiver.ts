@@ -194,12 +194,12 @@ export class MedicalWorkGiver {
 
       // Find the bed the patient is in
       const bed = allBuildings.find((b: Building) => 
-        (b.kind === 'bed' || b.kind === 'house') && 
+        b.kind === 'bed' && // Only actual beds, not houses
         b.done && 
         c.inside === b
       );
       
-      // If no bed found or not a medical bed, skip
+      // If no bed found, skip (patient must be in a proper bed to be fed)
       if (!bed) return false;
       
       // Prefer medical beds, but also help patients in regular beds if they're bed-bound
