@@ -25,7 +25,8 @@ export class MedicalManager {
         this.assignMedicalTreatment(patient, 'treat_infection');
         break;
       case 'medical_surgery':
-        this.assignMedicalTreatment(patient, 'remove_bullet');
+        // Open surgery menu
+        this.showSurgeryMenu(patient);
         break;
       case 'medical_pain_relief':
         this.assignMedicalTreatment(patient, 'pain_management');
@@ -267,6 +268,114 @@ export class MedicalManager {
       }
     } else {
       this.game.msg('No rescuer available', 'warn');
+    }
+  }
+
+  /**
+   * Show surgery menu for patient
+   * This displays available surgery operations
+   */
+  showSurgeryMenu(patient: Colonist): void {
+    if (!patient.health) {
+      this.game.msg('Patient has no health data', 'warn');
+      return;
+    }
+
+    // Check if patient has gunshot wounds that need surgery
+    const gunshotWounds = patient.health.injuries.filter(inj => inj.type === 'gunshot');
+    
+    if (gunshotWounds.length > 0) {
+      // Schedule bullet removal surgery
+      this.scheduleSurgery(patient, 'remove_bullet', gunshotWounds[0].bodyPart);
+    } else {
+      // No immediate surgery needs - could show a menu for elective surgeries
+      this.game.msg('No urgent surgeries needed. Consider bandaging wounds first.', 'info');
+    }
+  }
+
+  /**
+   * Schedule a surgery for a patient
+   */
+  scheduleSurgery(patient: Colonist, operationType: string, targetBodyPart?: string): void {
+    if (!patient.health) {
+      this.game.msg('Cannot schedule surgery - no health data', 'warn');
+      return;
+    }
+
+    // Initialize queuedOperations if not present
+    if (!patient.health.queuedOperations) {
+      patient.health.queuedOperations = [];
+    }
+
+    // Create operation based on type
+    let operation: any;
+    
+    switch (operationType) {
+      case 'remove_bullet':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'remove_bullet' as any,
+          targetBodyPart: targetBodyPart as any,
+          priority: 2, // Urgent but not emergency
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Remove Bullet',
+          description: `Remove embedded bullet from ${targetBodyPart}`
+        };
+        break;
+      
+      case 'amputate':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'amputate' as any,
+          targetBodyPart: targetBodyPart as any,
+          priority: 3,
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Amputate',
+          description: `Amputate ${targetBodyPart}`
+        };
+        break;
+      
+      case 'install_prosthetic':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'install_prosthetic' as any,
+          targetBodyPart: targetBodyPart as any,
+          prostheticType: 'prosthetic_leg' as any, // Default, should be configurable
+          priority: 5, // Elective
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Install Prosthetic',
+          description: `Install prosthetic ${targetBodyPart}`
+        };
+        break;
+      
+      default:
+        this.game.msg(`Unknown surgery type: ${operationType}`, 'warn');
+        return;
+    }
+
+    // Add to queue
+    patient.health.queuedOperations.push(operation);
+    
+    this.game.msg(
+      `${operation.label} scheduled for ${patient.profile?.name || 'patient'}. A doctor will perform the surgery when available.`,
+      'info'
+    );
+  }
+
+  /**
+   * Cancel a queued surgery
+   */
+  cancelSurgery(patient: Colonist, operationId: string): void {
+    if (!patient.health?.queuedOperations) return;
+    
+    const index = patient.health.queuedOperations.findIndex(op => op.id === operationId);
+    if (index >= 0) {
+      const op = patient.health.queuedOperations[index];
+      patient.health.queuedOperations.splice(index, 1);
+      this.game.msg(`Cancelled ${op.label}`, 'info');
     }
   }
 }
