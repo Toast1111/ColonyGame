@@ -198,7 +198,7 @@ export interface ColonistHealth {
   mobility: number; // 0-1, movement speed multiplier
   manipulation: number; // 0-1, work speed multiplier
   immunity: number; // 0-1, resistance to infections
-  temperature: number; // Body temperature (affects hypothermia/heatstroke)
+  temperature?: number; // Body temperature (affects hypothermia/heatstroke)
   // Internal timers for bleeding/infection cadence
   lastBleedCalcTime?: number;
   lastInfectionTick?: number;
