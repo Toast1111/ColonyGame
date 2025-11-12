@@ -1305,6 +1305,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'research': changeState('research', 'assigned research task'); break;
         case 'plantTree': changeState('plantTree', 'assigned tree planting task'); break;
         case 'harvestPlantedTree': changeState('harvestPlantedTree', 'assigned tree harvest task'); break;
+        case 'beingTreated': changeState('beingTreated', 'assigned patient task'); break;
         case 'goto':
         case 'rest':
         case 'medical':
