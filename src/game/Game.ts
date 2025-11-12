@@ -2309,7 +2309,7 @@ export class Game {
       x: pos.x, y: pos.y, r: 8, hp: 100, 
       speed: 50 * profile.stats.workSpeed, // Apply work speed modifier
       task: null, target: null, carrying: null, 
-      hunger: 0, alive: true, color: profile.avatar.clothing, 
+      hunger: 0, fatigue: 0, alive: true, color: profile.avatar.clothing, 
       t: rand(0, 1),
       direction: 0, // Initialize facing direction (0 = facing right)
       profile: profile,
