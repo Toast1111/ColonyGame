@@ -323,6 +323,7 @@ export function getWorkTypeForTask(task: string | null): WorkType | null {
     case 'haul': return 'Hauling';
     case 'haulFloorItem': return 'Hauling';
     case 'research': return 'Research';
+    case 'beingTreated': return 'PatientBedRest'; // Or PatientEmergency based on severity
     default: return null;
   }
 }
