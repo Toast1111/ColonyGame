@@ -412,7 +412,10 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
     // If drafted with specific target, prefer that target
     if (c.isDrafted && c.draftedTarget) {
       const dTarget = c.draftedTarget as any;
-      if (dTarget.hp > 0 && dTarget.alive !== false) {
+      // Type guard: only attack if target is NOT a building (buildings have 'kind' property, enemies don't)
+      // This prevents accidentally attacking buildings (which have hp but shouldn't be targeted for combat)
+      const isBuilding = dTarget.kind !== undefined && typeof dTarget.kind === 'string';
+      if (!isBuilding && dTarget.hp > 0 && dTarget.alive !== false) {
         const d = Math.hypot(dTarget.x - c.x, dTarget.y - c.y);
         if (d <= reach) {
           target = dTarget;
@@ -573,7 +576,9 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
   // If drafted with specific target, use that
   if (c.isDrafted && c.draftedTarget) {
     const dTarget = c.draftedTarget as any;
-    if (dTarget.hp > 0 && dTarget.alive !== false) {
+    // Type guard: only attack if target is NOT a building
+    const isBuilding = dTarget.kind !== undefined && typeof dTarget.kind === 'string';
+    if (!isBuilding && dTarget.hp > 0 && dTarget.alive !== false) {
       target = dTarget;
       (c as any).combatTarget = target;
       // Start warmup if we acquired a new target
@@ -581,7 +586,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         (c as any).warmup = stats.warmup;
       }
     } else {
-      // Assigned target is dead, clear it
+      // Assigned target is dead or invalid, clear it
       c.draftedTarget = null;
       target = null;
     }
