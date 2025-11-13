@@ -659,16 +659,26 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (distance > treatmentRange) {
         // Move closer to patient
         game.moveAlongPath(c, dt, { x: patient.x, y: patient.y }, treatmentRange);
+        // Reset treatment timer when not in range
+        (c as any).treatmentProgress = 0;
       } else {
         // Close enough to perform treatment
-        const treatmentTime = (job.treatment?.duration || 30) / 1000; // Convert ms to seconds
+        // Treatment time is in seconds (not milliseconds)
+        const treatmentTime = job.treatment?.duration || 30; // Duration is already in seconds
         
-        if (c.stateSince >= treatmentTime) {
+        // Initialize and increment treatment progress
+        if (!(c as any).treatmentProgress) {
+          (c as any).treatmentProgress = 0;
+        }
+        (c as any).treatmentProgress += dt;
+        
+        if ((c as any).treatmentProgress >= treatmentTime) {
           // Perform the treatment
           if (!job.treatment || !job.targetInjury) {
             if (game.msg) game.msg(`${c.profile?.name || 'Doctor'} could not perform treatment - invalid job`, 'bad');
             medicalWorkGiver.completeJob(job.id);
             (c as any).medicalJob = null;
+            (c as any).treatmentProgress = 0;
             changeState('seekTask', 'invalid medical job');
             return;
           }
@@ -682,9 +692,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             if (game.msg) game.msg(`${c.profile?.name || 'Doctor'} failed to apply ${treatmentName} to ${patient.profile?.name || 'patient'}`, 'warn');
           }
           
-          // Complete the job
+          // Complete the job and reset treatment progress
           medicalWorkGiver.completeJob(job.id);
           (c as any).medicalJob = null;
+          (c as any).treatmentProgress = 0;
+          
+          // IMPORTANT: After treating one injury, check if patient has more untreated injuries
+          // Don't immediately return to seekTask - let the work giver assign another job for the same patient
           changeState('seekTask', 'treatment completed');
         }
         // else: still performing treatment, wait for timer

@@ -23,17 +23,15 @@ export const PatientWorkGiver: WorkGiver = {
     // Check if colonist is already being treated (avoid duplicate assignment)
     if ((colonist as any).isBeingTreated) return out;
 
-    // Determine if colonist needs medical treatment
-    const needsMedical = (colonist as any).needsMedical;
-    if (!needsMedical && !colonist.health.injuries.length) return out;
-
-    // Calculate injury severity
+    // Determine if colonist needs medical treatment based on injuries
     const hasInjuries = colonist.health.injuries.length > 0;
     const isBleeding = colonist.health.injuries.some((i: any) => i.bleeding > 0.2 && !i.bandaged);
     const hasCriticalInjury = colonist.health.injuries.some((i: any) => i.severity > 0.6);
+    const hasInfection = colonist.health.injuries.some((i: any) => i.infected);
     const lowBlood = colonist.health.bloodLevel < 0.5;
     const isDowned = colonist.state === 'downed';
     const hasQueuedSurgery = colonist.health.queuedOperations && colonist.health.queuedOperations.length > 0;
+    const hasUntreatedInjuries = colonist.health.injuries.some((i: any) => !i.treatedBy || i.severity > 0.3);
 
     // Emergency patient work - critical conditions
     const isEmergency = isDowned || 
@@ -61,14 +59,15 @@ export const PatientWorkGiver: WorkGiver = {
       });
     } 
     // Non-emergency patient work - benefits from bed rest
-    else if (hasInjuries && canDoWork('PatientBedRest')) {
+    // This should trigger for ANY injury, not just severe ones
+    else if (hasInjuries && hasUntreatedInjuries && canDoWork('PatientBedRest')) {
       // Calculate overall injury severity for priority
       const totalSeverity = colonist.health.injuries.reduce((sum: number, i: any) => sum + i.severity, 0);
       const avgSeverity = totalSeverity / colonist.health.injuries.length;
       
       // Adjust priority based on injury severity
       let priority = getWorkPriority('PatientBedRest');
-      if (avgSeverity > 0.4) {
+      if (avgSeverity > 0.4 || isBleeding || hasInfection) {
         priority = Math.max(1, priority - 1);
       }
       

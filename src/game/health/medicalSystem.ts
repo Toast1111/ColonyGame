@@ -1,6 +1,6 @@
 import type { Colonist, Injury, BodyPartType, InjuryType } from '../types';
 import { skillLevel, grantSkillXP } from '../skills/skills';
-import { damageBodyPart, createInjury, initializeColonistHealth } from './healthSystem';
+import { damageBodyPart, createInjury, initializeColonistHealth, updateHealthStats } from './healthSystem';
 import { itemDatabase } from '../../data/itemDatabase';
 import type { MedicalJob } from './medicalWorkGiver';
 
@@ -210,6 +210,9 @@ export class MedicalSystem {
     // Mark as treated
     injury.treatedBy = treatment.id;
     
+    // IMPORTANT: Update health stats immediately to reflect treatment effects
+    updateHealthStats(patient.health);
+    
     console.log(`Successfully treated ${injury.description} with ${treatment.name} (quality: ${(injury.treatmentQuality * 100).toFixed(0)}%)`);
   }
 
@@ -230,6 +233,9 @@ export class MedicalSystem {
     if (!injury.infected && injury.infectionChance > 0) {
       injury.infectionChance = Math.min(1, injury.infectionChance + 0.05);
     }
+    
+    // Update health stats to reflect increased pain
+    updateHealthStats(patient.health);
     
     console.log(`Failed to treat ${injury.description} with ${treatment.name}`);
   }

@@ -197,6 +197,73 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
   }
   textY += game.scale(22);
   
+  // Needs section (Hunger and Fatigue)
+  canvasCtx.fillStyle = '#f1f5f9';
+  canvasCtx.font = game.getScaledFont(14, '600');
+  canvasCtx.fillText('Needs', x, textY);
+  textY += game.scale(18);
+  
+  // Hunger bar
+  const hunger = colonist.hunger || 0;
+  const hungerPercent = Math.round(hunger);
+  const hungerColor = hunger > 80 ? '#dc2626' : hunger > 60 ? '#f59e0b' : '#22c55e';
+  
+  canvasCtx.fillStyle = '#cbd5e1';
+  canvasCtx.font = game.getScaledFont(11, '500');
+  canvasCtx.fillText('Hunger', x + game.scale(8), textY);
+  
+  const barWidth = Math.min(game.scale(100), w * 0.3);
+  const barHeight = game.scale(8);
+  const barX = x + game.scale(140);
+  
+  canvasCtx.fillStyle = '#374151';
+  canvasCtx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
+  
+  canvasCtx.fillStyle = hungerColor;
+  canvasCtx.fillRect(barX, textY - game.scale(6), barWidth * (hunger / 100), barHeight);
+  
+  canvasCtx.fillStyle = hunger > 60 ? '#fbbf24' : '#9ca3af';
+  canvasCtx.font = game.getScaledFont(9, '500');
+  canvasCtx.textAlign = 'right';
+  canvasCtx.fillText(`${hungerPercent}%`, barX + barWidth + game.scale(30), textY);
+  canvasCtx.textAlign = 'left';
+  
+  if (hunger > 90) {
+    canvasCtx.fillStyle = '#dc2626';
+    canvasCtx.font = game.getScaledFont(9, '700');
+    canvasCtx.fillText('STARVING', barX + barWidth + game.scale(35), textY);
+  }
+  textY += game.scale(16);
+  
+  // Fatigue bar (energy)
+  const fatigue = colonist.fatigue || 0;
+  const fatiguePercent = Math.round(fatigue);
+  const energyPercent = 100 - fatiguePercent; // Display as energy (inverse of fatigue)
+  const energyColor = fatigue > 80 ? '#dc2626' : fatigue > 60 ? '#f59e0b' : '#22c55e';
+  
+  canvasCtx.fillStyle = '#cbd5e1';
+  canvasCtx.font = game.getScaledFont(11, '500');
+  canvasCtx.fillText('Energy', x + game.scale(8), textY);
+  
+  canvasCtx.fillStyle = '#374151';
+  canvasCtx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
+  
+  canvasCtx.fillStyle = energyColor;
+  canvasCtx.fillRect(barX, textY - game.scale(6), barWidth * (energyPercent / 100), barHeight);
+  
+  canvasCtx.fillStyle = fatigue > 60 ? '#fbbf24' : '#9ca3af';
+  canvasCtx.font = game.getScaledFont(9, '500');
+  canvasCtx.textAlign = 'right';
+  canvasCtx.fillText(`${energyPercent}%`, barX + barWidth + game.scale(30), textY);
+  canvasCtx.textAlign = 'left';
+  
+  if (fatigue > 90) {
+    canvasCtx.fillStyle = '#dc2626';
+    canvasCtx.font = game.getScaledFont(9, '700');
+    canvasCtx.fillText('EXHAUSTED', barX + barWidth + game.scale(35), textY);
+  }
+  textY += game.scale(20);
+  
   // Bodily Systems section
   canvasCtx.fillStyle = '#f1f5f9';
   canvasCtx.font = game.getScaledFont(14, '600');
