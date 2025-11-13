@@ -338,6 +338,7 @@ export class MedicalWorkGiver {
 
   /**
    * Create a medical job for a patient
+   * Creates jobs for EACH untreated injury (one treatment per injury)
    */
   private createMedicalJobForPatient(
     doctor: Colonist,
@@ -349,18 +350,23 @@ export class MedicalWorkGiver {
 
     const patientId = this.getColonistId(patient);
     
-    // Check if patient already has a job
-    const existingJob = Array.from(this.jobs.values()).find(j => j.patientId === patientId && !j.reservedBy);
-    if (existingJob) {
-      return existingJob;
-    }
-
-    // Find the best treatment for this patient
+    // Check if patient already has an unreserved job for this specific injury type
+    // We want to create multiple jobs (one per injury), but not duplicate jobs for the same injury
+    const existingJobs = Array.from(this.jobs.values()).filter(j => j.patientId === patientId);
+    
+    // Find the best treatment for this patient's UNTREATED injuries
     const treatment = this.findBestTreatment(patient, doctorSkill);
     if (!treatment) return null;
 
-    const targetInjury = this.findTargetInjury(patient, treatment);
-    if (!targetInjury) return null;
+    // Find an untreated injury that doesn't already have a job
+    const targetInjury = this.findUntreatedInjury(patient, treatment, existingJobs);
+    if (!targetInjury) {
+      // All injuries of this type already have jobs or are treated
+      // Try to return an existing unreserved job instead
+      const unreservedJob = existingJobs.find(j => !j.reservedBy);
+      if (unreservedJob) return unreservedJob;
+      return null;
+    }
 
     // Create the job
     const job: MedicalJob = {
@@ -373,7 +379,7 @@ export class MedicalWorkGiver {
       priority: emergency ? 1 : this.calculateTreatmentPriority(targetInjury, treatment),
       playerForced: false,
       createdAt: Date.now(),
-      expiresAt: Date.now() + 30000, // 30 second expiry
+      expiresAt: Date.now() + 60000, // 60 second expiry (increased for multiple treatments)
     };
 
     this.jobs.set(job.id, job);
@@ -435,6 +441,33 @@ export class MedicalWorkGiver {
       treatment.canTreatInjuryTypes.includes(inj.type) &&
       treatment.canTreatBodyParts.includes(inj.bodyPart)
     ) || null;
+  }
+
+  /**
+   * Find an untreated injury that doesn't already have a job assigned
+   * This ensures each injury gets its own treatment job
+   */
+  private findUntreatedInjury(patient: Colonist, treatment: MedicalTreatment, existingJobs: MedicalJob[]): Injury | null {
+    if (!patient.health) return null;
+
+    // Get all injuries that match this treatment type
+    const matchingInjuries = patient.health.injuries.filter(inj =>
+      treatment.canTreatInjuryTypes.includes(inj.type) &&
+      treatment.canTreatBodyParts.includes(inj.bodyPart)
+    );
+
+    // Filter out injuries that already have jobs assigned
+    const existingInjuryIds = existingJobs.map(j => j.targetInjury?.id).filter(Boolean);
+    const untreatedInjuries = matchingInjuries.filter(inj => !existingInjuryIds.includes(inj.id));
+
+    // Prioritize by severity and bleeding
+    const sorted = untreatedInjuries.sort((a, b) => {
+      const scoreA = a.severity + (a.bleeding || 0) * 2 + (a.infected ? 0.5 : 0);
+      const scoreB = b.severity + (b.bleeding || 0) * 2 + (b.infected ? 0.5 : 0);
+      return scoreB - scoreA;
+    });
+
+    return sorted[0] || null;
   }
 
   /**
