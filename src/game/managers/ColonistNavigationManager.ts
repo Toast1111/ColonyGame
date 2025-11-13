@@ -18,6 +18,14 @@ export class ColonistNavigationManager {
    * Force a colonist to rest at the best available location
    */
   forceColonistToRest(colonist: Colonist, isPlayerCommand = false): void {
+    // Undraft colonist to prevent combat interference during rest
+    // This ensures colonists don't try to attack while going to bed
+    if (colonist.isDrafted) {
+      colonist.isDrafted = false;
+      colonist.draftedTarget = null;
+      colonist.draftedPosition = null;
+    }
+    
     // TODO: Replace with proper manager delegation once all managers are in Game class
     const needsMedical = (this.game as any).colonistNeedsMedicalBed?.(colonist) ?? false;
     const restBuilding = (this.game as any).findBestRestBuilding?.(colonist, { 
@@ -93,6 +101,13 @@ export class ColonistNavigationManager {
    * Send colonist to best available bed
    */
   sendColonistToBed(colonist: Colonist): void {
+    // Undraft colonist to prevent combat interference during rest
+    if (colonist.isDrafted) {
+      colonist.isDrafted = false;
+      colonist.draftedTarget = null;
+      colonist.draftedPosition = null;
+    }
+    
     const preferMedical = (this.game as any).colonistNeedsMedicalBed?.(colonist) ?? false;
     const bed = (this.game as any).findBestRestBuilding?.(colonist, { 
       preferMedical, 
