@@ -183,15 +183,30 @@ export class MedicalWorkGiver {
       if (!c.alive || c === doctor) return false;
       
       // Check if patient is bed-bound (recovering from injuries or surgery)
-      const isBedBound = c.state === 'beingTreated' || 
+      // Patient must be in one of these states AND inside a building
+      const isBedBound = (c.state === 'beingTreated' || 
                          c.state === 'recoveringFromSurgery' || 
-                         c.state === 'resting';
+                         c.state === 'resting' ||
+                         c.state === 'awaitingSurgery') && 
+                         c.inside; // Must actually be in a building (bed)
       
       if (!isBedBound) return false;
 
-      // Check if they're in a medical bed
-      const assignedBed = (c as any).assignedMedicalBed;
-      if (!assignedBed || !assignedBed.isMedicalBed) return false;
+      // Find the bed the patient is in
+      const bed = allBuildings.find((b: Building) => 
+        b.kind === 'bed' && // Only actual beds, not houses
+        b.done && 
+        c.inside === b
+      );
+      
+      // If no bed found, skip (patient must be in a proper bed to be fed)
+      if (!bed) return false;
+      
+      // Prefer medical beds, but also help patients in regular beds if they're bed-bound
+      const isMedicalBed = bed.kind === 'bed' && bed.isMedicalBed;
+      
+      // Store bed reference on patient for later use
+      (c as any).assignedMedicalBed = bed;
 
       // Check if patient is hungry (hunger > 60)
       const hunger = c.hunger || 0;

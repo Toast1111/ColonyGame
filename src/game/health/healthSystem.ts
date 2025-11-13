@@ -83,8 +83,10 @@ export function initializeColonistHealth(colonist: Colonist): void {
     mobility: 1.0,
     manipulation: 1.0,
     immunity: 1.0,
+    temperature: 37.0, // Normal body temperature in Celsius
     lastBleedCalcTime: 0,
     lastInfectionTick: 0,
+    lastTemperatureTick: 0,
     implants: [], // No implants by default
     kidneyHealth: 1.0, // Perfect kidney health
     liverHealth: 1.0 // Perfect liver health

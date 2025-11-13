@@ -992,13 +992,22 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
 
       // Check if doctor has food
-      const doctorHasFood = job.hasFoodInInventory || (c as any).carryingFood;
+      const doctorHasFood = (c as any).carryingFood;
       
       if (!doctorHasFood) {
-        // Need to get food first
+        // Need to get food first - find nearest pantry or food storage
+        const pantries = game.buildings.filter((b: any) => 
+          b.kind === 'pantry' && b.done && ((b.breadStored || 0) > 0 || (b.foodStored || 0) > 0)
+        );
+        
+        const foodBuildings = pantries.length > 0 ? pantries : game.buildings.filter((b: any) => 
+          (b.kind === 'hq' || b.kind === 'warehouse' || b.kind === 'stock') && b.done
+        );
+
+        // Check if there's food available
         const hasColonyFood = (game.RES.bread || 0) > 0 || (game.RES.food || 0) > 0;
         
-        if (!hasColonyFood) {
+        if (!hasColonyFood || foodBuildings.length === 0) {
           // No food available
           medicalWorkGiver.releaseJob(job, c);
           (c as any).medicalJob = null;
@@ -1007,20 +1016,46 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           break;
         }
 
-        // Get food from storage (instant for now, could be expanded with pantry pathfinding)
-        if (game.RES.bread && game.RES.bread > 0) {
-          game.RES.bread -= 1;
-          (c as any).carryingFood = 'bread';
-        } else if (game.RES.food && game.RES.food > 0) {
-          game.RES.food -= 1;
-          (c as any).carryingFood = 'food';
+        // Find closest food building
+        let closestBuilding = foodBuildings[0];
+        let closestDist = Infinity;
+        for (const b of foodBuildings) {
+          const center = game.centerOf(b);
+          const dist = Math.hypot(c.x - center.x, c.y - center.y);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestBuilding = b;
+          }
         }
+
+        // Move to food building
+        const foodCenter = game.centerOf(closestBuilding);
+        const reachDist = Math.max(closestBuilding.w, closestBuilding.h) / 2 + c.r + 15;
         
-        // Update job to reflect doctor now has food
-        job.hasFoodInInventory = true;
+        if (closestDist <= reachDist) {
+          // At food building - pick up food
+          const isPantry = closestBuilding.kind === 'pantry';
+          if (isPantry && (closestBuilding.breadStored || 0) > 0 && (game.RES.bread || 0) > 0) {
+            // Pick up bread from pantry
+            game.RES.bread = (game.RES.bread || 0) - 1;
+            closestBuilding.breadStored = Math.max(0, (closestBuilding.breadStored || 0) - 1);
+            (c as any).carryingFood = 'bread';
+          } else if ((game.RES.food || 0) > 0) {
+            // Pick up regular food from storage
+            game.RES.food = Math.max(0, game.RES.food - 1);
+            (c as any).carryingFood = 'food';
+          }
+          
+          // Update job to reflect doctor now has food
+          job.hasFoodInInventory = true;
+        } else {
+          // Move toward the food building
+          game.moveAlongPath(c, dt, foodCenter, reachDist);
+        }
+        break;
       }
 
-      // Move to patient's bedside
+      // Doctor has food - move to patient's bedside
       const bedCenter = game.centerOf(targetBed);
       const distance = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
       const feedRange = 50;

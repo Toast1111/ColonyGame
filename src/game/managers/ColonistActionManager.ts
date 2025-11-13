@@ -70,7 +70,7 @@ export class ColonistActionManager {
         this.sendToFood(colonist);
         break;
         
-      // Medical actions (will be delegated to MedicalManager once implemented)
+      // Medical actions - delegate to MedicalManager
       case 'medical_bandage':
       case 'medical_treat_infection':
       case 'medical_surgery':
@@ -83,8 +83,12 @@ export class ColonistActionManager {
       case 'prioritize_treat_patient':
       case 'clear_prioritize_treat':
       case 'medical_rescue':
-        // TODO: Delegate to MedicalManager once implemented
-        console.log(`Medical action ${actionId} not yet delegated to MedicalManager`);
+        // Delegate to MedicalManager
+        if (this.game.medicalManager) {
+          this.game.medicalManager.handleMedicalAction(actionId, colonist);
+        } else {
+          console.warn('MedicalManager not available');
+        }
         break;
         
       // Basic actions

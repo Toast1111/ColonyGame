@@ -5,7 +5,7 @@
  * This manager handles medical actions, doctor assignment, and treatment coordination.
  */
 
-import type { Colonist, Building } from '../types';
+import type { Colonist, Building, OperationType } from '../types';
 import type { Game } from '../Game';
 import { medicalWorkGiver } from '../health/medicalWorkGiver';
 import { basicFieldTreatment, calculateOverallHealth, getInjurySummary } from '../health/healthSystem';
@@ -25,7 +25,8 @@ export class MedicalManager {
         this.assignMedicalTreatment(patient, 'treat_infection');
         break;
       case 'medical_surgery':
-        this.assignMedicalTreatment(patient, 'remove_bullet');
+        // Open surgery menu
+        this.showSurgeryMenu(patient);
         break;
       case 'medical_pain_relief':
         this.assignMedicalTreatment(patient, 'pain_management');
@@ -267,6 +268,137 @@ export class MedicalManager {
       }
     } else {
       this.game.msg('No rescuer available', 'warn');
+    }
+  }
+
+  /**
+   * Show surgery menu for patient
+   * This displays available surgery operations
+   */
+  showSurgeryMenu(patient: Colonist): void {
+    if (!patient.health) {
+      this.game.msg('Patient has no health data', 'warn');
+      return;
+    }
+
+    // Check if patient has conditions that might need surgery
+    const hasSevereInjuries = patient.health.injuries.some(inj => inj.severity > 0.7);
+    const hasMissingParts = patient.health.bodyParts?.some(bp => bp.missing);
+    const hasInfection = patient.health.injuries.some(inj => inj.infected && inj.severity > 0.5);
+    
+    if (hasSevereInjuries) {
+      // For severe injuries, recommend medical treatment instead of surgery
+      this.game.msg('Severe injuries detected. Use "Treat All Injuries" for medical care.', 'info');
+      this.assignComprehensiveMedicalCare(patient);
+    } else if (hasMissingParts) {
+      // Missing parts could use prosthetics
+      this.game.msg('Missing body parts detected. Prosthetics can be installed when available.', 'info');
+    } else if (hasInfection) {
+      // Severe infection might need surgical treatment
+      this.scheduleSurgery(patient, 'treat_infection', patient.health.injuries.find(inj => inj.infected)?.bodyPart);
+    } else {
+      // No immediate surgery needs
+      this.game.msg('No urgent surgeries needed.', 'info');
+    }
+  }
+
+  /**
+   * Schedule a surgery for a patient
+   */
+  scheduleSurgery(patient: Colonist, operationType: string, targetBodyPart?: string): void {
+    if (!patient.health) {
+      this.game.msg('Cannot schedule surgery - no health data', 'warn');
+      return;
+    }
+
+    // Initialize queuedOperations if not present
+    if (!patient.health.queuedOperations) {
+      patient.health.queuedOperations = [];
+    }
+
+    // Create operation based on type
+    let operation: any;
+    
+    switch (operationType) {
+      case 'treat_infection':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'treat_infection' as OperationType,
+          targetBodyPart: targetBodyPart as any,
+          priority: 2, // Urgent - infections can be life-threatening
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Surgical Infection Treatment',
+          description: `Surgically treat severe infection in ${targetBodyPart || 'body'}`
+        };
+        break;
+      
+      case 'amputate':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'amputate' as OperationType,
+          targetBodyPart: targetBodyPart as any,
+          priority: 3,
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Amputate',
+          description: `Amputate ${targetBodyPart || 'limb'} to prevent infection spread`
+        };
+        break;
+      
+      case 'install_prosthetic':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'install_prosthetic' as OperationType,
+          targetBodyPart: targetBodyPart as any,
+          prostheticType: 'prosthetic_leg' as any, // Default, should be configurable
+          priority: 5, // Elective
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Install Prosthetic',
+          description: `Install prosthetic ${targetBodyPart || 'limb'}`
+        };
+        break;
+      
+      case 'install_implant':
+        operation = {
+          id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
+          type: 'install_implant' as OperationType,
+          targetBodyPart: targetBodyPart as any,
+          implantType: 'bionic_arm' as any, // Default, should be configurable
+          priority: 5, // Elective
+          addedTime: (patient as any).t || Date.now(),
+          requiresMedicine: true,
+          label: 'Install Bionic Implant',
+          description: `Install bionic implant for ${targetBodyPart || 'body part'}`
+        };
+        break;
+      
+      default:
+        this.game.msg(`Unknown surgery type: ${operationType}`, 'warn');
+        return;
+    }
+
+    // Add to queue
+    patient.health.queuedOperations.push(operation);
+    
+    this.game.msg(
+      `${operation.label} scheduled for ${patient.profile?.name || 'patient'}. A doctor will perform the surgery when available.`,
+      'info'
+    );
+  }
+
+  /**
+   * Cancel a queued surgery
+   */
+  cancelSurgery(patient: Colonist, operationId: string): void {
+    if (!patient.health?.queuedOperations) return;
+    
+    const index = patient.health.queuedOperations.findIndex(op => op.id === operationId);
+    if (index >= 0) {
+      const op = patient.health.queuedOperations[index];
+      patient.health.queuedOperations.splice(index, 1);
+      this.game.msg(`Cancelled ${op.label}`, 'info');
     }
   }
 }
