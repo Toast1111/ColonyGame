@@ -55,7 +55,7 @@ export class TutorialSystem {
         'Learn the essentials in this tutorial'
       ],
       blockAllClicks: true,
-      allowedKeys: [' ', 'escape']
+      allowedKeys: [' ', 'escape', 'q']
     },
     {
       id: 'camera-movement',
