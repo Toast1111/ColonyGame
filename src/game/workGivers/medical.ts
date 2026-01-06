@@ -17,7 +17,8 @@ export const MedicalWorkGiver: WorkGiver = {
     if (!colonist.alive) return out;
 
     // Use the medical work giver to find an available job for this colonist
-    const now = (colonist as any).t ?? game.t ?? Date.now() / 1000;
+    const now = (colonist as any).t ?? game.t;
+    if (now === undefined) return out;
     const job: MedicalJob | null = medicalWorkGiver.scanForMedicalWork(
       colonist,
       game.colonists,
