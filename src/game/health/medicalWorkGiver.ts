@@ -563,8 +563,16 @@ export class MedicalWorkGiver {
     job.reservedBy = doctorId;
     
     // Also mark patient as being treated
-    (job.patient as any).isBeingTreated = true;
-    (job.patient as any).doctorId = doctorId;
+    const patient = job.patient as any;
+    patient.isBeingTreated = true;
+    patient.doctorId = doctorId;
+    // Force the patient to hold still for treatment (unless downed)
+    if (patient.state !== 'downed') {
+      patient.task = null;
+      patient.target = null;
+      patient.state = 'beingTreated';
+      patient.stateSince = 0;
+    }
     
     return true;
   }

@@ -623,6 +623,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (!job) {
         // No job assigned - this shouldn't happen, but recover gracefully
         (c as any).taskData = null;
+        c.task = null;
         changeState('seekTask', 'no medical job assigned');
         break;
       }
@@ -634,6 +635,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         medicalWorkGiver.releaseJob(job, c);
         (c as any).medicalJob = null;
         (c as any).taskData = null;
+        c.task = null;
         changeState('seekTask', 'patient no longer needs treatment');
         break;
       }
@@ -665,6 +667,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             medicalWorkGiver.completeJob(job.id);
             (c as any).medicalJob = null;
             (c as any).treatmentProgress = 0;
+            c.task = null;
             changeState('seekTask', 'invalid medical job');
             return;
           }
@@ -683,6 +686,31 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           (c as any).medicalJob = null;
           (c as any).taskData = null;
           (c as any).treatmentProgress = 0;
+          
+          // If patient is downed, haul them to the best available medical bed
+          if (patient.state === 'downed' && game.buildingManager?.findBestRestBuilding) {
+            const bed = game.buildingManager.findBestRestBuilding(patient, { preferMedical: true, allowShelterFallback: true });
+            if (bed) {
+              const entered = game.buildingManager.tryEnterBuilding
+                ? game.buildingManager.tryEnterBuilding(patient, bed)
+                : (game.tryEnterBuilding ? game.tryEnterBuilding(patient, bed) : false);
+              if (!entered) {
+                const bedCenter = game.buildingManager.centerOf(bed);
+                patient.x = bedCenter.x;
+                patient.y = bedCenter.y;
+                (patient as any).inside = bed;
+                const pid = (patient as any).id || ((patient as any).id = `colonist_${Date.now()}_${Math.random().toString(36).slice(2,9)}`);
+                bed.occupiedBy = pid;
+              }
+              patient.state = 'resting';
+              patient.stateSince = 0;
+              patient.task = null;
+              patient.target = null;
+              (patient as any).needsMedical = false;
+            }
+          }
+          
+          c.task = null;
           
           // IMPORTANT: After treating one injury, check if patient has more untreated injuries
           // Don't immediately return to seekTask - let the work giver assign another job for the same patient
