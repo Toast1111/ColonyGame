@@ -483,27 +483,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     if (!c.inside && danger) set('flee', 100, 'danger detected');
     
-    // Medical work - ALL colonists can treat injuries (RimWorld style)
-    // Use the new work giver system to scan for medical work
-    if (!c.inside && !danger && c.health && c.health.totalPain < 0.6) {
-      const medicalJob = medicalWorkGiver.scanForMedicalWork(c, game.colonists, c.t, game.buildings);
-      if (medicalJob && !medicalJob.reservedBy) {
-        // Reserve the job and assign it to this doctor
-        if (medicalWorkGiver.reserveJob(medicalJob, c)) {
-          (c as any).medicalJob = medicalJob;
-          
-          // Different states for different job types
-          if (medicalJob.type === 'surgery') {
-            set('performingSurgery', 97, 'surgery work available');
-          } else if (medicalJob.type === 'feedPatient') {
-            set('feedingPatient', 96, 'bed-bound patient needs feeding');
-          } else {
-            set('doctoring', 95, 'medical work available');
-          }
-        }
-      }
-    }
-    
     // Patient awaiting surgery - check if THIS colonist has queued operations
     if (!c.inside && c.health && c.health.queuedOperations && c.health.queuedOperations.length > 0) {
       // High priority - patient needs to get to medical bed
@@ -634,10 +613,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     case 'doctoring': {
       // RimWorld-style medical work - doctor treating a patient
+      const pendingJob: MedicalJob | undefined = (c as any).medicalJob || (c as any).taskData?.medicalJob;
+      if (pendingJob && !(c as any).medicalJob) {
+        if (!pendingJob.reservedBy) medicalWorkGiver.reserveJob(pendingJob, c);
+        (c as any).medicalJob = pendingJob;
+      }
       const job: MedicalJob | undefined = (c as any).medicalJob;
       
       if (!job) {
         // No job assigned - this shouldn't happen, but recover gracefully
+        (c as any).taskData = null;
         changeState('seekTask', 'no medical job assigned');
         break;
       }
@@ -648,6 +633,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Patient healed, died, or no longer needs treatment
         medicalWorkGiver.releaseJob(job, c);
         (c as any).medicalJob = null;
+        (c as any).taskData = null;
         changeState('seekTask', 'patient no longer needs treatment');
         break;
       }
@@ -695,6 +681,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // Complete the job and reset treatment progress
           medicalWorkGiver.completeJob(job.id);
           (c as any).medicalJob = null;
+          (c as any).taskData = null;
           (c as any).treatmentProgress = 0;
           
           // IMPORTANT: After treating one injury, check if patient has more untreated injuries
@@ -842,10 +829,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     case 'performingSurgery': {
       // Doctor state - performing surgery on a patient
+      const pendingJob: MedicalJob | undefined = (c as any).medicalJob || (c as any).taskData?.medicalJob;
+      if (pendingJob && !(c as any).medicalJob) {
+        if (!pendingJob.reservedBy) medicalWorkGiver.reserveJob(pendingJob, c);
+        (c as any).medicalJob = pendingJob;
+      }
       const job: MedicalJob | undefined = (c as any).medicalJob;
       
       if (!job || job.type !== 'surgery') {
         // No surgery job assigned
+        (c as any).taskData = null;
         changeState('seekTask', 'no surgery job assigned');
         break;
       }
@@ -857,6 +850,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Patient died or operation canceled
         medicalWorkGiver.releaseJob(job, c);
         (c as any).medicalJob = null;
+        (c as any).taskData = null;
         if (job.targetBed) {
           job.targetBed.occupiedBy = undefined;
         }
@@ -932,6 +926,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // Complete the job
           medicalWorkGiver.completeJob(job.id);
           (c as any).medicalJob = null;
+          (c as any).taskData = null;
           
           changeState('seekTask', 'surgery completed');
         }
@@ -975,10 +970,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     case 'feedingPatient': {
       // Doctor state - bringing food to bed-bound patient
+      const pendingJob: MedicalJob | undefined = (c as any).medicalJob || (c as any).taskData?.medicalJob;
+      if (pendingJob && !(c as any).medicalJob) {
+        if (!pendingJob.reservedBy) medicalWorkGiver.reserveJob(pendingJob, c);
+        (c as any).medicalJob = pendingJob;
+      }
       const job: MedicalJob | undefined = (c as any).medicalJob;
       
       if (!job || job.type !== 'feedPatient') {
         // No feeding job assigned
+        (c as any).taskData = null;
         changeState('seekTask', 'no feeding job assigned');
         break;
       }
@@ -990,6 +991,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Patient died or invalid job
         medicalWorkGiver.releaseJob(job, c);
         (c as any).medicalJob = null;
+        (c as any).taskData = null;
         changeState('seekTask', 'feeding job invalid');
         break;
       }
@@ -1000,6 +1002,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Patient no longer hungry
         medicalWorkGiver.completeJob(job.id);
         (c as any).medicalJob = null;
+        (c as any).taskData = null;
         if (game.msg) game.msg(`${patient.profile?.name || 'Patient'} is no longer hungry`, 'good');
         changeState('seekTask', 'patient no longer hungry');
         break;
@@ -1025,6 +1028,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // No food available
           medicalWorkGiver.releaseJob(job, c);
           (c as any).medicalJob = null;
+          (c as any).taskData = null;
           if (game.msg) game.msg(`Cannot feed ${patient.profile?.name || 'patient'}: no food available`, 'warn');
           changeState('seekTask', 'no food for patient');
           break;
@@ -1099,6 +1103,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Complete the job
         medicalWorkGiver.completeJob(job.id);
         (c as any).medicalJob = null;
+        (c as any).taskData = null;
         
         changeState('seekTask', 'patient fed successfully');
       }
@@ -1352,6 +1357,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'cooling': changeState('cooling', 'assigned cooling task'); break;
         case 'equipment': changeState('equipment', 'assigned equipment pickup task'); break;
         case 'research': changeState('research', 'assigned research task'); break;
+        case 'doctoring': changeState('doctoring', 'assigned medical task'); break;
+        case 'feedingPatient': changeState('feedingPatient', 'assigned patient feeding'); break;
+        case 'performingSurgery': changeState('performingSurgery', 'assigned surgery task'); break;
         case 'plantTree': changeState('plantTree', 'assigned tree planting task'); break;
         case 'harvestPlantedTree': changeState('harvestPlantedTree', 'assigned tree harvest task'); break;
         case 'beingTreated': changeState('beingTreated', 'assigned patient task'); break;

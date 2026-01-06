@@ -15,11 +15,13 @@ import { TreePlantingWorkGiver } from './treePlanting';
 import { SmithingWorkGiver } from './smithing';
 import { EquipmentWorkGiver } from './equipment';
 import { PatientWorkGiver } from './patient';
+import { MedicalWorkGiver } from './medical';
 
 export const WORK_GIVERS: WorkGiver[] = [
   // Order can influence tie-breakers before distance sort
   // Patient work should be checked first for injured colonists
   PatientWorkGiver,
+  MedicalWorkGiver,
   ConstructionWorkGiver,
   GrowingWorkGiver,
   TreePlantingWorkGiver, // Tree planting and harvesting in designated zones
