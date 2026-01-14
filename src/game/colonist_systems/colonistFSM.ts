@@ -489,15 +489,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       set('awaitingSurgery', 98, 'queued for surgery');
     }
     
-    // Medical needs - check if THIS colonist needs treatment
-    // Patients should stay still or go to bed when injured
-    if (!c.inside && c.health && (c as any).needsMedical) {
-      const urgency = c.health.bloodLevel < 0.4 ? 98 : 
-                     c.health.injuries.some((i: any) => i.bleeding > 0.4) ? 95 : 90;
-      set('beingTreated', urgency, 'needs medical treatment');
+    // Medical bed rest intent: any injury or missing HP should push a colonist to bed rest
+    const injuries = c.health?.injuries?.length || 0;
+    const missingHp = Math.max(0, 100 - (c.hp || 100));
+    if ((injuries > 0 || missingHp > 0) && !c.isDrafted) {
+      // Higher urgency if blood is low or bleeding is active
+      const urgentBleed = c.health?.injuries?.some((i: any) => i.bleeding > 0.4) ? 4 : 0;
+      const lowBlood = c.health?.bloodLevel && c.health.bloodLevel < 0.4 ? 6 : 0;
+      const prioBoost = Math.min(8, urgentBleed + lowBlood + Math.floor(missingHp / 10));
+      set('beingTreated', 90 + prioBoost, 'needs medical bed rest');
     }
     
-    if (!c.inside && !danger && (c.hp || 0) < 35) set('heal', 85 - Math.max(0, c.hp) * 0.1, 'low health');
+    // Self-care intent for very low health (falls back to self-tend if enabled)
+    if (!danger && (c.hp || 0) < 35) set('heal', 86 - Math.max(0, c.hp) * 0.1, 'low health');
     
     // Sleep is now purely intent-based - colonists choose beds via spatial interactions
     // No more automatic fatigue-based forcing - full player and colonist agency
@@ -589,25 +593,55 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'heal': {
-      // Find nearest infirmary
-      const infirmaries = (game.buildings as Building[]).filter(b => b.kind === 'infirmary' && b.done);
-  if (!infirmaries.length) { changeState('seekTask', 'no infirmary'); break; }
-      let best = infirmaries[0]; let bestD = dist2(c as any, game.centerOf(best) as any);
-      for (let i = 1; i < infirmaries.length; i++) { const d = dist2(c as any, game.centerOf(infirmaries[i]) as any); if (d < bestD) { bestD = d; best = infirmaries[i]; } }
-      const ic = game.centerOf(best);
-      const range = (best as any).healRange || 140;
-      const nearRect = (c.x >= best.x - 8 && c.x <= best.x + best.w + 8 && c.y >= best.y - 8 && c.y <= best.y + best.h + 8);
-      const dist = Math.hypot(c.x - ic.x, c.y - ic.y);
-      // If close enough, try to enter (uses building capacity via popCap); else stand in heal radius
-      if (nearRect && game.tryEnterBuilding(c as any, best as any)) {
-        changeState('resting', 'entered infirmary'); break;
+      // Self-care state for low health: prefer bed rest, otherwise self-tend if enabled
+      let targetBed: Building | null = null;
+      if (game.buildingManager?.findBestRestBuilding) {
+        targetBed = game.buildingManager.findBestRestBuilding(c as any, { preferMedical: true, allowShelterFallback: true }) as any;
       }
-      if (dist <= range * 0.9) {
-        // Wait and heal in aura; leave when healthy enough
-        if (c.hp >= 80) { changeState('seekTask', 'healed enough'); }
-      } else {
-        // Move toward infirmary center using pathfinding
-        game.moveAlongPath(c, dt, ic, range * 0.9);
+      if (!targetBed) {
+        const beds = (game.buildings as Building[]).filter((b: Building) =>
+          (b.kind === 'bed' || b.kind === 'house') &&
+          b.done &&
+          game.buildingHasSpace && game.buildingHasSpace(b, c)
+        );
+        if (beds.length) {
+          beds.sort((a, b) => {
+            const medBiasA = a.kind === 'bed' && a.isMedicalBed ? -10 : 0;
+            const medBiasB = b.kind === 'bed' && b.isMedicalBed ? -10 : 0;
+            const da = dist2(c as any, game.centerOf(a) as any) + medBiasA;
+            const db = dist2(c as any, game.centerOf(b) as any) + medBiasB;
+            return da - db;
+          });
+          targetBed = beds[0];
+        }
+      }
+
+      if (targetBed) {
+        const bedCenter = game.centerOf(targetBed);
+        const distToBed = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+        if (distToBed <= 20) {
+          if (game.tryEnterBuilding && game.tryEnterBuilding(c, targetBed)) {
+            changeState('resting', targetBed.isMedicalBed ? 'entered medical bed (self-care)' : 'entered bed (self-care)');
+            break;
+          }
+        } else {
+          game.moveAlongPath && game.moveAlongPath(c, dt, bedCenter, 20);
+          break;
+        }
+      }
+
+      // Self-tend in place when no bed entry is possible
+      const selfTend = (c as any).selfTend;
+      if (selfTend && c.health) {
+        const slowFactor = 0.5; // slower than doctor treatment
+        healInjuries(c, dt * slowFactor);
+        c.hp = Math.min(100, c.hp + 0.8 * dt * slowFactor);
+      } else if (c.health) {
+        c.hp = Math.min(100, c.hp + 0.4 * dt);
+      }
+
+      if (c.hp >= 85 && (!c.health?.injuries || c.health.injuries.length === 0)) {
+        changeState('seekTask', 'self-healed enough');
       }
       break;
     }
@@ -722,76 +756,73 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     
     case 'beingTreated': {
-      // Patient state - colonist needs medical treatment
-      // Find a bed to rest in, or stay still if being actively treated
-      
+      // Patient state - colonist needs medical treatment or bed rest
       const isBeingTreated = (c as any).isBeingTreated;
       const doctorId = (c as any).doctorId;
       
       if (isBeingTreated && doctorId) {
-        // Being actively treated by a doctor - stay still
-        // Find the doctor
         const doctor = game.colonists.find((col: Colonist) => (col as any).id === doctorId);
         if (doctor) {
-          // Face the doctor
           const dx = doctor.x - c.x;
           const dy = doctor.y - c.y;
           if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
             c.direction = Math.atan2(dy, dx);
           }
         }
-        // Do nothing - just wait for doctor
         break;
       }
       
-      // Not being treated - try to find a bed
-      const needsMedicalBed = c.health && (c.health.injuries.some((i: any) => i.severity > 0.6) || c.health.bloodLevel < 0.5);
-      const beds = (game.buildings as Building[]).filter((b: Building) => 
-        (b.kind === 'bed' || b.kind === 'house') && 
-        b.done && 
-        (!needsMedicalBed || (b.kind === 'bed' && b.isMedicalBed)) &&
-        game.buildingHasSpace && game.buildingHasSpace(b, c)
-      );
-      
-      if (beds.length > 0) {
-        // Find closest bed
-        let closest = beds[0];
-        let minDist = dist2(c as any, game.centerOf(closest) as any);
-        for (const bed of beds.slice(1)) {
-          const d = dist2(c as any, game.centerOf(bed) as any);
-          if (d < minDist) {
-            minDist = d;
-            closest = bed;
-          }
-        }
-        
-        const bedCenter = game.centerOf(closest);
-        const distToBed = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
-        
-        if (distToBed <= 20) {
-          // Try to enter bed
-          if (game.tryEnterBuilding && game.tryEnterBuilding(c, closest)) {
-            changeState('resting', 'entered medical bed');
-          }
-        } else {
-          // Move to bed
-          game.moveAlongPath && game.moveAlongPath(c, dt, bedCenter, 20);
-        }
-      } else {
-        // No beds available - stay still and wait
-        // Heal slowly while waiting
-        if (c.health) {
-          c.hp = Math.min(100, c.hp + 0.3 * dt);
-        }
-        
-        // If injuries are minor now, can go back to work
-        if (c.health && !(c as any).needsMedical) {
-          changeState('seekTask', 'minor injuries, resuming work');
+      // Prefer medical beds for any injury; fall back to regular beds with space
+      let targetBed: Building | null = null;
+      if (game.buildingManager?.findBestRestBuilding) {
+        targetBed = game.buildingManager.findBestRestBuilding(c as any, { preferMedical: true, allowShelterFallback: true }) as any;
+      }
+      if (!targetBed) {
+        const beds = (game.buildings as Building[]).filter((b: Building) =>
+          (b.kind === 'bed' || b.kind === 'house') &&
+          b.done &&
+          game.buildingHasSpace && game.buildingHasSpace(b, c)
+        );
+        if (beds.length) {
+          beds.sort((a, b) => {
+            const medBiasA = a.kind === 'bed' && a.isMedicalBed ? -10 : 0;
+            const medBiasB = b.kind === 'bed' && b.isMedicalBed ? -10 : 0;
+            const da = dist2(c as any, game.centerOf(a) as any) + medBiasA;
+            const db = dist2(c as any, game.centerOf(b) as any) + medBiasB;
+            return da - db;
+          });
+          targetBed = beds[0];
         }
       }
       
-      // Timeout - if stuck too long, give up and seek task
-      if (c.stateSince > 30) {
+      if (targetBed) {
+        const bedCenter = game.centerOf(targetBed);
+        const distToBed = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+        if (distToBed <= 20) {
+          if (game.tryEnterBuilding && game.tryEnterBuilding(c, targetBed)) {
+            changeState('resting', targetBed.isMedicalBed ? 'entered medical bed' : 'entered bed for recovery');
+          }
+        } else {
+          game.moveAlongPath && game.moveAlongPath(c, dt, bedCenter, 20);
+        }
+      } else {
+        // No bed available: self-tend slowly if enabled, otherwise passive regen
+        const selfTend = (c as any).selfTend;
+        if (selfTend && c.health) {
+          const slowFactor = 0.6; // slower than doctor treatment
+          healInjuries(c, dt * slowFactor);
+          c.hp = Math.min(100, c.hp + 0.6 * dt * slowFactor);
+        } else if (c.health) {
+          c.hp = Math.min(100, c.hp + 0.25 * dt);
+        }
+
+        // If mostly healed, return to tasks
+        if (c.health && c.hp >= 98 && (!c.health.injuries || c.health.injuries.length === 0)) {
+          changeState('seekTask', 'healed enough without bed');
+        }
+      }
+      
+      if (c.stateSince > 60) {
         changeState('seekTask', 'medical bed search timeout');
       }
       break;

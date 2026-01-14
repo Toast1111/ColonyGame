@@ -143,15 +143,21 @@ export class MedicalSystem {
     if (!treatment || !targetInjury) return false;
     
     const doctorSkill = this.getDoctorSkill(doctor);
-    
-    // Calculate success rate based on doctor skill
+    const needsSupplies = (treatment.requiredMedicine || []).length > 0;
+    const hasSupplies = needsSupplies && this.hasRequiredItems(doctor, treatment.requiredMedicine || []);
+
+    // Success rate: skill + base, penalize if no supplies, cap at 95%
     const skillBonus = Math.max(0, (doctorSkill - treatment.skillRequired) * 0.05);
-    const successRate = Math.min(0.95, treatment.baseSuccessRate + skillBonus);
+    const supplyFactor = needsSupplies ? (hasSupplies ? 1.0 : 0.75) : 1.0;
+    const successRate = Math.min(0.95, (treatment.baseSuccessRate + skillBonus) * supplyFactor);
     
     const success = Math.random() < successRate;
     
     if (success) {
-      this.applySuccessfulTreatment(patient, targetInjury, treatment, doctorSkill);
+      this.applySuccessfulTreatment(patient, targetInjury, treatment, doctorSkill, hasSupplies);
+      if (hasSupplies) {
+        this.consumeItems(doctor, treatment.requiredMedicine || []);
+      }
       // Grant Medicine XP; more for harder treatments
       if (doctor.skills) {
         const base = 20 + treatment.skillRequired * 4;
@@ -159,7 +165,7 @@ export class MedicalSystem {
       }
       return true;
     } else {
-      this.applyFailedTreatment(patient, targetInjury, treatment);
+      this.applyFailedTreatment(patient, targetInjury, treatment, hasSupplies);
       if (doctor.skills) {
         const amt = 8 + Math.max(0, treatment.skillRequired - doctorSkill) * 2;
         grantSkillXP(doctor, 'Medicine', amt, (doctor as any).t || 0);
@@ -169,15 +175,14 @@ export class MedicalSystem {
   }
 
   // Apply successful treatment effects
-  private applySuccessfulTreatment(patient: Colonist, injury: Injury, treatment: MedicalTreatment, doctorSkill: number): void {
+  private applySuccessfulTreatment(patient: Colonist, injury: Injury, treatment: MedicalTreatment, doctorSkill: number, hasSupplies: boolean): void {
     if (!patient.health) return;
 
     // Calculate treatment quality (0-1 scale)
     // Base quality from skill: 0.2 + (skill * 0.03) caps at ~0.8 for skill 20
-    // Medicine bonus will be added here in future (herbal +0.1, medicine +0.2, advanced +0.3)
     const baseQuality = Math.min(1.0, 0.2 + (doctorSkill * 0.03));
-    const medicineBonus = 0; // TODO: Add medicine quality bonus when medicine types are implemented
-    injury.treatmentQuality = Math.min(1.0, baseQuality + medicineBonus);
+    const supplyBonus = hasSupplies ? 0.15 : -0.1; // supplies give a bump; missing supplies hurts quality slightly
+    injury.treatmentQuality = Math.min(1.0, Math.max(0.05, baseQuality + supplyBonus));
 
     // Reduce pain
     injury.pain = Math.max(0, injury.pain - treatment.painReduction);
@@ -187,14 +192,14 @@ export class MedicalSystem {
     
     // Reduce bleeding
     if (treatment.id === 'bandage_wound') {
-      injury.bleeding = Math.max(0, injury.bleeding * 0.2);
+      injury.bleeding = Math.max(0, injury.bleeding * (hasSupplies ? 0.2 : 0.4));
       injury.bandaged = true;
-      injury.infectionChance = Math.max(0, injury.infectionChance * 0.5);
+      injury.infectionChance = Math.max(0, injury.infectionChance * (hasSupplies ? 0.5 : 0.8));
     }
 
     if (treatment.id === 'treat_burn') {
       injury.bandaged = true;
-      injury.infectionChance = Math.max(0, injury.infectionChance * 0.6);
+      injury.infectionChance = Math.max(0, injury.infectionChance * (hasSupplies ? 0.6 : 0.85));
     }
 
     if (treatment.id === 'set_fracture') {
@@ -217,11 +222,12 @@ export class MedicalSystem {
   }
 
   // Apply failed treatment effects
-  private applyFailedTreatment(patient: Colonist, injury: Injury, treatment: MedicalTreatment): void {
+  private applyFailedTreatment(patient: Colonist, injury: Injury, treatment: MedicalTreatment, hadSupplies: boolean): void {
     if (!patient.health) return;
 
     // Risk of infection on failed treatment
-    if (Math.random() < treatment.riskOfInfection && !injury.infected) {
+    const infectionRisk = hadSupplies ? treatment.riskOfInfection : treatment.riskOfInfection * 1.5;
+    if (Math.random() < infectionRisk && !injury.infected) {
       injury.infected = true;
       injury.infectionChance = 0.1;
       console.log(`Treatment failed and caused infection: ${injury.description}`);
