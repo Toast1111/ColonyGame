@@ -662,6 +662,76 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         break;
       }
 
+      // Pre-step: fetch required medical supplies if missing; otherwise proceed to patient
+      const required = job.treatment?.requiredMedicine || [];
+      const hasItem = (name: string): boolean => {
+        if (!c.inventory || !c.inventory.items) return false;
+        return c.inventory.items.some((it: any) =>
+          it.defName === name || it.name === name || it.type === 'medicine'
+        );
+      };
+      const missing = required.filter(r => !hasItem(r));
+
+      // Find a supply source (building inventory with medicine resource, or HQ/stock/warehouse with inventory medicine)
+      const findSupplyBuilding = (): Building | null => {
+        const candidates = (game.buildings as Building[]).filter((b: Building) => b.inventory && b.done);
+        let best: Building | null = null;
+        let bestD = Infinity;
+        for (const b of candidates) {
+          const stack = b.inventory!.items.find(it => it.type === 'medicine' && it.quantity > 0);
+          if (!stack) continue;
+          const d = dist2(c as any, game.centerOf(b) as any);
+          if (d < bestD) { best = b; bestD = d; }
+        }
+        return best;
+      };
+
+      if (missing.length > 0 && !(c as any).fetchingMedicalSupplies) {
+        const supplyBuilding = findSupplyBuilding();
+        if (supplyBuilding) {
+          (c as any).fetchingMedicalSupplies = supplyBuilding;
+        } else if ((game.RES?.medicine || 0) > 0) {
+          (c as any).fetchingMedicalSupplies = 'RES';
+        }
+        // If nothing found, proceed without supplies
+      }
+
+      if ((c as any).fetchingMedicalSupplies) {
+        const target = (c as any).fetchingMedicalSupplies;
+        if (target === 'RES') {
+          // Take from global resources instantly if nearby HQ is not required
+          if ((game.RES?.medicine || 0) > 0) {
+            game.RES.medicine = Math.max(0, (game.RES.medicine || 0) - 1);
+            // Add to doctor inventory
+            c.inventory = c.inventory || { items: [] as any } as any;
+            const stack = c.inventory.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
+            if (stack) stack.quantity += 1; else c.inventory.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
+          }
+          (c as any).fetchingMedicalSupplies = null;
+        } else {
+          const b = target as Building;
+          const center = game.centerOf(b);
+          const reach = Math.max(b.w, b.h) / 2 + c.r + 15;
+          const dist = Math.hypot(c.x - center.x, c.y - center.y);
+          if (dist <= reach) {
+            const stack = b.inventory?.items.find(it => it.type === 'medicine' && it.quantity > 0);
+            if (stack) {
+              stack.quantity = Math.max(0, stack.quantity - 1);
+              if (stack.quantity === 0) {
+                b.inventory!.items = b.inventory!.items.filter(it => it.quantity > 0);
+              }
+              c.inventory = c.inventory || { items: [] as any } as any;
+              const held = c.inventory.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
+              if (held) held.quantity += 1; else c.inventory.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
+            }
+            (c as any).fetchingMedicalSupplies = null;
+          } else {
+            game.moveAlongPath(c, dt, center, reach);
+            break;
+          }
+        }
+      }
+
       // Validate job and patient still exist and need treatment
       const patient = job.patient;
       if (!patient || !patient.alive || !patient.health || !patient.health.injuries.length) {
