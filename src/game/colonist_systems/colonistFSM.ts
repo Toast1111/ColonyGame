@@ -652,6 +652,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (!pendingJob.reservedBy) medicalWorkGiver.reserveJob(pendingJob, c);
         (c as any).medicalJob = pendingJob;
       }
+      // Ensure doctor inventory exists for supply pickup and checks
+      if (!c.inventory) {
+        c.inventory = { items: [], equipment: {}, carryCapacity: 0, currentWeight: 0 } as any;
+      }
       const job: MedicalJob | undefined = (c as any).medicalJob;
       
       if (!job) {
@@ -665,10 +669,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Pre-step: fetch required medical supplies if missing; otherwise proceed to patient
       const required = job.treatment?.requiredMedicine || [];
       const hasItem = (name: string): boolean => {
-        if (!c.inventory || !c.inventory.items) return false;
-        return c.inventory.items.some((it: any) =>
+        return c.inventory?.items?.some((it: any) =>
           it.defName === name || it.name === name || it.type === 'medicine'
-        );
+        ) ?? false;
       };
       const missing = required.filter(r => !hasItem(r));
 
