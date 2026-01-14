@@ -113,7 +113,7 @@ export const BACKGROUNDS: Background[] = [
       social: 2,
       dexterity: 2
     },
-    startingItems: ['medical_kit', 'bandages'],
+    startingItems: ['MedicineKit', 'Bandages'],
     rarity: 'uncommon'
   },
 

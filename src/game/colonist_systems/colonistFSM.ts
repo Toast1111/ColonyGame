@@ -705,10 +705,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // Take from global resources instantly if nearby HQ is not required
           if ((game.RES?.medicine || 0) > 0) {
             game.RES.medicine = Math.max(0, (game.RES.medicine || 0) - 1);
-            // Add to doctor inventory
-            c.inventory = c.inventory || { items: [] as any } as any;
-            const stack = c.inventory.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
-            if (stack) stack.quantity += 1; else c.inventory.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
+            const inv = c.inventory!;
+            const stack = inv.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
+            if (stack) stack.quantity += 1; else inv.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
           }
           (c as any).fetchingMedicalSupplies = null;
         } else {
@@ -723,9 +722,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               if (stack.quantity === 0) {
                 b.inventory!.items = b.inventory!.items.filter(it => it.quantity > 0);
               }
-              c.inventory = c.inventory || { items: [] as any } as any;
-              const held = c.inventory.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
-              if (held) held.quantity += 1; else c.inventory.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
+              const inv = c.inventory!;
+              const held = inv.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
+              if (held) held.quantity += 1; else inv.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
             }
             (c as any).fetchingMedicalSupplies = null;
           } else {
