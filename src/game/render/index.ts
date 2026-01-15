@@ -1,4 +1,5 @@
 import { COLORS, T, WORLD } from "../constants";
+import { BUILD_TYPES } from "../buildings";
 import type { Building, Bullet, Camera, Particle } from "../types";
 import type { TerrainGrid } from "../terrain";
 import { getFloorTypeFromId, FloorType, FLOOR_VISUALS, getTerrainTypeFromId, TerrainType, getOreTypeFromId, OreType, ORE_PROPERTIES } from "../terrain";
@@ -682,10 +683,11 @@ export function drawBuildingProgressBars(ctx: CanvasRenderingContext2D, building
       ctx.fillRect(b.x, barY, pct * b.w, barHeight);
     }
     
-    // HP bar if damaged
-    if (b.done && b.hp < 100) {
-      const maxHp = 100; // You may want to store this
-      const hpPct = b.hp / maxHp;
+    // HP bar if damaged - use the definition's max HP so lower-HP buildings (e.g., beds at 80 HP) don't show a bar when full
+    const def = BUILD_TYPES[b.kind];
+    const maxHp = def?.hp;
+    if (b.done && maxHp != null && Number.isFinite(maxHp) && b.hp < maxHp) {
+      const hpPct = Math.max(0, Math.min(1, b.hp / maxHp));
       ctx.fillStyle = '#0b1220'; 
       ctx.fillRect(b.x, b.y + b.h + 2, b.w, 3);
       ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.25 ? '#fbbf24' : '#ef4444';

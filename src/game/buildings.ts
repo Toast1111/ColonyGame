@@ -218,7 +218,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     description: 'Cooling station for hot metal ingots. Smelters automatically place hot ingots here to cool into usable metal ingots for smithing.',
     key: 'C',
     cost: { wood: 15, stone: 10 },
-    hp: 100,
+    hp: 50,
     size: { w: 1, h: 1 },
     build: 40,
     color: '#94a3b8'  // Cool gray
