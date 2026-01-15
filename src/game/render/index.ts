@@ -666,12 +666,15 @@ export function drawBullets(ctx: CanvasRenderingContext2D, bullets: Bullet[]) {
  */
 export function drawBuildingProgressBars(ctx: CanvasRenderingContext2D, buildings: Building[]) {
   for (const b of buildings) {
+    const baseY = b.y + b.h + 2;
+    let nextY = baseY;
+
     // Build progress bar - only show if construction has actually started
     if (!b.done && b.buildLeft < b.build) {
       const pct = 1 - (b.buildLeft / b.build);
       
       // Position progress bar below the building to avoid overlapping with adjacent buildings
-      const barY = b.y + b.h + 2;
+      const barY = nextY;
       const barHeight = 4;
       
       // Background
@@ -682,16 +685,30 @@ export function drawBuildingProgressBars(ctx: CanvasRenderingContext2D, building
       ctx.fillStyle = '#6ee7ff'; 
       ctx.fillRect(b.x, barY, pct * b.w, barHeight);
     }
+
+    // Farm growth bar (shows time until ready)
+    if (b.done && b.kind === 'farm') {
+      const growTime = (b as any).growTime || 1;
+      const growthPct = Math.max(0, Math.min(1, (b.growth || 0) / growTime));
+      const barHeight = 3;
+      const barY = nextY;
+      ctx.fillStyle = '#0b1220';
+      ctx.fillRect(b.x, barY, b.w, barHeight);
+      ctx.fillStyle = b.ready ? '#4ade80' : '#a3e635'; // green when ready, lime while growing
+      ctx.fillRect(b.x, barY, b.w * growthPct, barHeight);
+      nextY += barHeight + 2;
+    }
     
     // HP bar if damaged - use the definition's max HP so lower-HP buildings (e.g., beds at 80 HP) don't show a bar when full
     const def = BUILD_TYPES[b.kind];
     const maxHp = def?.hp;
     if (b.done && maxHp != null && Number.isFinite(maxHp) && b.hp < maxHp) {
       const hpPct = Math.max(0, Math.min(1, b.hp / maxHp));
+      const barY = nextY;
       ctx.fillStyle = '#0b1220'; 
-      ctx.fillRect(b.x, b.y + b.h + 2, b.w, 3);
+      ctx.fillRect(b.x, barY, b.w, 3);
       ctx.fillStyle = hpPct > 0.5 ? '#4ade80' : hpPct > 0.25 ? '#fbbf24' : '#ef4444';
-      ctx.fillRect(b.x, b.y + b.h + 2, b.w * hpPct, 3);
+      ctx.fillRect(b.x, barY, b.w * hpPct, 3);
     }
   }
 }

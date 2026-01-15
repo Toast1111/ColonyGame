@@ -5,7 +5,6 @@ type CropOption = { id: string; label: string; type: string; desc: string; growT
 
 const CROP_OPTIONS: CropOption[] = [
   { id: 'farm_crop_wheat', label: 'Wheat', type: 'wheat', desc: 'Grow wheat for bread/cooking.', growTime: 1, yield: 10 },
-  { id: 'farm_crop_food', label: 'Food', type: 'food', desc: 'Grow direct food (added to storage).', growTime: 1, yield: 8 },
   { id: 'farm_crop_healroot', label: 'Healroot', type: 'healroot', desc: 'Medicinal herb used for crafting medicine.', growTime: 2, yield: 6 },
 ];
 
@@ -26,7 +25,7 @@ buildingContextMenuManager.register('farm', ({ game, building }) => {
     items.push({
       id: opt.id,
       label: opt.label,
-      icon: opt.type === 'food' ? '🥕' : opt.type === 'healroot' ? '🌿' : '🌾',
+      icon: opt.type === 'healroot' ? '🌿' : '🌾',
       enabled: current !== opt.type,
       action: ({ target }) => {
         (target as any).cropType = opt.type;

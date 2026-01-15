@@ -72,7 +72,10 @@ export class ReservationManager {
     const cap = this.getBuildingCapacity(b);
     const cur = this.insideCounts.get(b) || 0;
     const reserved = this.getReservedSleepCount(b, ignoreColonist);
-    return cur + reserved < cap;
+    // Beds can be manually occupied via medical workflows; include that in capacity checks
+    const ignoreId = (ignoreColonist as any)?.id;
+    const occupied = b.kind === 'bed' && (b as any).occupiedBy && (b as any).occupiedBy !== ignoreId ? 1 : 0;
+    return cur + reserved + occupied < cap;
   }
 
   /**
@@ -118,6 +121,13 @@ export class ReservationManager {
     if (!this.buildingHasSpace(b, c)) return false;
     this.insideCounts.set(b, (this.insideCounts.get(b) || 0) + 1);
     this.releaseSleepReservation(c);
+    // Track bed occupancy for medical and sleep routing
+    if (b.kind === 'bed') {
+      if (!(c as any).id) {
+        (c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      }
+      (b as any).occupiedBy = (c as any).id;
+    }
     c.inside = b; 
     c.hideTimer = 0;
     if (b.kind === 'bed') {
@@ -141,6 +151,14 @@ export class ReservationManager {
       const cur = (this.insideCounts.get(b) || 1) - 1;
       if (cur <= 0) this.insideCounts.delete(b); 
       else this.insideCounts.set(b, cur);
+      if (b.kind === 'bed') {
+        if (!(c as any).id) {
+          (c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        }
+        if ((b as any).occupiedBy === (c as any).id) {
+          (b as any).occupiedBy = undefined;
+        }
+      }
     }
     if (b && b.kind === 'bed') {
       c.restingOn = null;

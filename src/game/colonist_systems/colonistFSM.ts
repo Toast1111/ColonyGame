@@ -11,8 +11,8 @@ import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDo
 import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
-import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from "../terrain";
-import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState } from "./states";
+import { isMountainTile as checkIsMountainTile } from "../terrain";
+import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateGoToSleepState } from "./states";
 import { canInterruptColonist, forceInterruptIntent, shouldEnterDecisionPhase, getColonistIntent, setColonistIntent, updateColonistIntent, hasIntent, createWorkIntent } from "../systems/colonistIntent";
 
 
@@ -405,6 +405,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (c.target && game.assignedTargets && game.assignedTargets.has(c.target)) {
             game.assignedTargets.delete(c.target);
           }
+          // Release mountain tile reservations when abandoning mining
+          if (c.task === 'mine' && c.target && (c.target as any).gx !== undefined && (c.target as any).gy !== undefined) {
+            const tileKey = `${(c.target as any).gx},${(c.target as any).gy}`;
+            if ((game as any).assignedTiles?.has(tileKey)) {
+              (game as any).assignedTiles.delete(tileKey);
+            }
+          }
           c.task = null;
           c.target = null;
           // Clear path to prevent navigation conflicts
@@ -503,8 +510,15 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     // Self-care intent for very low health (falls back to self-tend if enabled)
     if (!danger && (c.hp || 0) < 35) set('heal', 86 - Math.max(0, c.hp) * 0.1, 'low health');
     
-    // Sleep is now purely intent-based - colonists choose beds via spatial interactions
-    // No more automatic fatigue-based forcing - full player and colonist agency
+    // Fatigue-driven sleep intent with hysteresis
+    const fatigue = c.fatigue || 0;
+    const restingInBed = c.state === 'resting' && !!c.inside && (c.inside as any).kind === 'bed';
+    if (!c.isDrafted && !danger) {
+      if (fatigue >= fatigueEnterThreshold && !restingInBed) {
+        const prioBoost = Math.min(12, Math.floor(fatigue - fatigueEnterThreshold));
+        set('goToSleep', 70 + prioBoost, 'fatigued');
+      }
+    }
     
     if (!c.inside && (c.hunger || 0) > 75 && (game.RES.food || 0) > 0)
       set('eat', 60 + Math.min(25, (c.hunger || 0) - 75), 'hunger');
@@ -574,22 +588,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
 
   switch (c.state) {
     case 'resting': {
-      c.hideTimer = Math.max(0, (c.hideTimer || 0) - dt);
-      if (c.inside && c.inside.kind === 'bed') {
-        const bed = c.inside;
-        const centerX = bed.x + bed.w / 2;
-        const centerY = bed.y + bed.h / 2;
-        c.x = centerX;
-        c.y = centerY;
-        if ((c as any).sleepFacing != null) {
-          c.direction = (c as any).sleepFacing;
-        }
-      }
-      // Rest recovers fatigue quickly and heals slowly
-      c.hp = Math.min(100, c.hp + 1.2 * dt);
-      
-      // Colonists now stay in bed until they actively choose to leave via spatial interaction
-      // No more automatic exit based on fatigue - full player and colonist control
+      updateRestingState(c, game, dt, changeState, { fatigueExitThreshold });
       break;
     }
     case 'heal': {
@@ -840,12 +839,23 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
             c.direction = Math.atan2(dy, dx);
           }
+          // If treatment stalls too long, allow repicking care
+          if (c.stateSince > 90) {
+            (c as any).isBeingTreated = false;
+            (c as any).doctorId = undefined;
+          } else {
+            break;
+          }
+        } else {
+          // Doctor vanished or abandoned - clear and retry bed logic
+          (c as any).isBeingTreated = false;
+          (c as any).doctorId = undefined;
         }
-        break;
       }
       
+      // Prefer staying in the current bed to avoid oscillation
+      let targetBed: Building | null = (c.inside && c.inside.kind === 'bed') ? c.inside : null;
       // Prefer medical beds for any injury; fall back to regular beds with space
-      let targetBed: Building | null = null;
       if (game.buildingManager?.findBestRestBuilding) {
         targetBed = game.buildingManager.findBestRestBuilding(c as any, { preferMedical: true, allowShelterFallback: true }) as any;
       }
@@ -870,6 +880,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (targetBed) {
         const bedCenter = game.centerOf(targetBed);
         const distToBed = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
+        if (game.reserveSleepSpot) game.reserveSleepSpot(c, targetBed);
         if (distToBed <= 20) {
           if (game.tryEnterBuilding && game.tryEnterBuilding(c, targetBed)) {
             changeState('resting', targetBed.isMedicalBed ? 'entered medical bed' : 'entered bed for recovery');
@@ -1443,15 +1454,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'sleep': {
-      // Sleep is now purely intent-based via spatial interactions
-      // Just rest in place if no bed is available
-      changeState('resting', 'sleeping without bed');
+      // Route through goToSleep for bed selection
+      changeState('goToSleep', 'sleep intent');
       break;
     }
     case 'goToSleep': {
-      // GoToSleep is now purely intent-based via spatial interactions
-      // Just rest in place if no bed is available  
-      changeState('resting', 'resting without bed');
+      updateGoToSleepState(c, game, dt, changeState);
       break;
     }
     case 'seekTask': {
@@ -1946,7 +1954,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (f.kind === 'farm') {
           f.ready = false; 
           f.growth = 0; 
-          const crop = (f as any).cropType || 'wheat';
+          let crop = (f as any).cropType || 'wheat';
+          if (crop === 'food') crop = 'wheat'; // legacy fallback for removed crop type
           const baseYield = (f as any).yieldPerHarvest || 10;
           const amount = Math.max(1, Math.round(baseYield * yieldMult));
           if (crop === 'food') {
@@ -2151,200 +2160,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'mine': {
-      const r = c.target as any; 
-      if (!r || (r.hp !== undefined && r.hp <= 0)) {
-        // Only switch to seekTask if we've been in this state for at least a short duration
-        if (c.stateSince >= 0.5) {
-          // Handle mountain tile key tracking
-          if (r && r.gx !== undefined && r.gy !== undefined) {
-            const tileKey = `${r.gx},${r.gy}`;
-            if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
-          } else if (r && game.assignedTargets.has(r)) {
-            game.assignedTargets.delete(r);
-          }
-          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'rock gone');
-        }
-        break; 
-      }
-      
-      // Check if target is a mountain tile (object with gx/gy properties) or a rock (Circle)
-      const isMountainTile = r.gx !== undefined && r.gy !== undefined;
-      
-      if (isMountainTile) {
-        // Mining a mountain tile
-        const { gx, gy } = r;
-        const worldX = gx * T + T / 2;
-        const worldY = gy * T + T / 2;
-        
-        const dx = worldX - c.x;
-        const dy = worldY - c.y;
-        const distance = Math.hypot(dx, dy);
-        const interact = T; // One tile away
-        
-        if (distance <= interact + 2) {
-          // Close enough to mine
-          
-          // Verify it's still a mountain
-          if (!checkIsMountainTile(game.terrainGrid, gx, gy)) {
-            // Mountain already mined
-            const tileKey = `${gx},${gy}`;
-            if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
-            c.task = null; c.target = null; game.clearPath(c); 
-            changeState('seekTask', 'mountain already mined');
-            break;
-          }
-          
-          const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Mining') : 1;
-          const miningLvl = c.skills ? skillLevel(c, 'Mining') : 0;
-          const skillMult = skillWorkSpeedMultiplier(miningLvl);
-          const workMult = equipMult * skillMult;
-          
-          // Mountain tiles have HP stored in the target object
-          if (!r.hp) {
-            // Initialize HP based on ore type
-            const idx = gy * game.terrainGrid.cols + gx;
-            const oreType = getOreTypeFromId(game.terrainGrid.ores[idx]);
-            r.hp = ORE_PROPERTIES[oreType].hp;
-          }
-          
-          r.hp -= 12 * dt * workMult; // Slower than regular rocks
-          if (c.skills) grantSkillXP(c, 'Mining', 5 * dt, c.t || 0);
-          
-          if (r.hp <= 0) {
-            // Mine the tile
-            const oreType = mineMountainTile(game.terrainGrid, gx, gy);
-            
-            if (oreType) {
-              const oreProps = ORE_PROPERTIES[oreType];
-              const yieldMult = 1 + Math.min(0.5, miningLvl * 0.02);
-              const amount = Math.round(oreProps.miningYield * yieldMult);
-              
-              // Determine resource type from ore - oreType enum values match ItemType
-              let resourceType: ItemType;
-              switch (oreType) {
-                case OreType.COAL: resourceType = 'coal'; break;
-                case OreType.COPPER: resourceType = 'copper'; break;
-                case OreType.STEEL: resourceType = 'steel'; break;
-                case OreType.SILVER: resourceType = 'silver'; break;
-                case OreType.GOLD: resourceType = 'gold'; break;
-                default: resourceType = 'rubble'; break; // Plain mountain drops rubble (must be refined to stone)
-              }
-              
-              // Drop resources on the ground as floor items
-              const dropAt = { x: worldX, y: worldY };
-              (game as any).itemManager?.dropItems(resourceType, amount, dropAt);
-              game.msg(`Mined ${amount} ${oreProps.name}`, 'good');
-              
-              // Update pathfinding (mountain is now passable)
-              game.navigationManager.rebuildNavGridPartial(worldX, worldY, T * 2);
-              
-              // Invalidate world cache so the mined mountain disappears from rendering
-              game.renderManager?.invalidateWorldCache();
-            }
-            
-            const tileKey = `${gx},${gy}`;
-            if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
-            c.task = null; c.target = null; game.clearPath(c); 
-            changeState('seekTask', 'mined mountain');
-          }
-        } else {
-          // Move toward the mountain tile
-          game.moveAlongPath(c, dt, { x: worldX, y: worldY }, interact);
-          
-          // If colonist hasn't moved much in a while, they might be stuck
-          // Store last position check in the target object itself
-          if (!(r as any).lastCheckTime || c.t - (r as any).lastCheckTime > 3) {
-            const lastX = (r as any).lastCheckX ?? c.x;
-            const lastY = (r as any).lastCheckY ?? c.y;
-            const movedDist = Math.hypot(c.x - lastX, c.y - lastY);
-            
-            if ((r as any).lastCheckTime && movedDist < 10) {
-              // Stuck - clear path and abandon
-              // console.log(`Colonist stuck mining mountain at (${gx},${gy}), abandoning`);
-              const tileKey = `${gx},${gy}`;
-              if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
-              c.task = null; c.target = null; game.clearPath(c);
-              delete (r as any).lastCheckTime;
-              delete (r as any).lastCheckX;
-              delete (r as any).lastCheckY;
-              changeState('seekTask', 'stuck mining mountain');
-              break;
-            }
-            
-            // Update check position
-            (r as any).lastCheckTime = c.t;
-            (r as any).lastCheckX = c.x;
-            (r as any).lastCheckY = c.y;
-          }
-        }
-        
-        // Timeout check
-        if (c.stateSince && c.stateSince > 20) {
-          console.log(`Mountain mining timeout after ${c.stateSince.toFixed(1)}s`);
-          const tileKey = `${gx},${gy}`;
-          if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
-          c.task = null; c.target = null; game.clearPath(c); 
-          delete (r as any).lastCheckTime;
-          delete (r as any).lastCheckX;
-          delete (r as any).lastCheckY;
-          changeState('seekTask', 'mine timeout');
-        }
-      } else {
-        // Mining a regular rock (existing code)
-        const dx = r.x - c.x;
-        const dy = r.y - c.y;
-        const distance = Math.hypot(dx, dy);
-        const interact = (r.r || 12) + c.r + 4;
-        const slack = 2.5;
-        
-        // Debug logging
-        if (Math.random() < 0.01) { 
-          console.log(`Mining: distance=${distance.toFixed(1)}, interact=${interact}, colonist at (${c.x.toFixed(1)}, ${c.y.toFixed(1)}), rock at (${r.x.toFixed(1)}, ${r.y.toFixed(1)})`);
-        }
-        
-        if (distance <= interact + slack + 0.1) {
-          // Close enough to mine
-          const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Mining') : 1;
-          const miningLvl = c.skills ? skillLevel(c, 'Mining') : 0;
-          const skillMult = skillWorkSpeedMultiplier(miningLvl);
-          const workMult = equipMult * skillMult;
-          r.hp -= 16 * dt * workMult;
-          if (c.skills) grantSkillXP(c, 'Mining', 4 * dt, c.t || 0); // trickle while mining
-          if (r.hp <= 0) {
-            const yieldMult = 1 + Math.min(0.5, miningLvl * 0.02);
-            const amount = Math.round(5 * yieldMult);
-            // Drop stone on the ground at the rock position
-            const dropAt = { x: r.x, y: r.y };
-            (game as any).itemManager?.dropItems('stone', amount, dropAt);
-            (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
-            if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
-            game.msg(`Dropped ${amount} stone`, 'good');
-            // OPTIMIZATION: No nav grid rebuild needed - rocks don't block pathfinding anymore!
-            // This eliminates stuttering from region rebuilds when harvesting
-            
-            // Only switch to seekTask if we've been in this state for at least a short duration
-            if (c.stateSince >= 0.5) {
-              c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'mined rock');
-            }
-          }
-          break;
-        } else {
-          // Move toward the rock using pathfinding
-          game.moveAlongPath(c, dt, r, interact + slack);
-          
-          // Debug movement
-          if (Math.random() < 0.01) {
-            console.log(`Moving toward rock: target=(${r.x.toFixed(1)}, ${r.y.toFixed(1)}), distance=${distance.toFixed(1)}`);
-          }
-        }
-        
-        // If stuck too long, abandon
-        if (c.stateSince && c.stateSince > 15) {
-          console.log(`Colonist stuck mining for ${c.stateSince.toFixed(1)}s, abandoning`);
-          if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
-          c.task = null; c.target = null; game.clearPath(c); changeState('seekTask', 'mine timeout');
-        }
-      }
+      updateMineState(c, game, dt, changeState);
       break;
     }
     case 'waitingAtDoor': {
