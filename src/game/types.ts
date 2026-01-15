@@ -61,6 +61,7 @@ export type Building = BuildingDef & {
   x: number; y: number; w: number; h: number;
   buildLeft: number; done: boolean; hp: number;
   growth?: number; ready?: boolean; cooldown?: number;
+  cropType?: string; // For farms: current crop selection
   rot?: 0 | 90 | 180 | 270; // orientation in degrees
   // Door-specific properties
   doorState?: 'closed' | 'opening' | 'open' | 'closing';

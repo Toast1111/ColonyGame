@@ -378,7 +378,7 @@ export class TutorialSystem {
     const step = this.steps[this.currentStepIndex];
     
     // Check for manual skip input
-    if (this.game.keyPressed('escape')) {
+    if (this.game.keyPressed('escape') || this.game.keyPressed('q')) {
       this.skip();
       return;
     }
@@ -418,7 +418,7 @@ export class TutorialSystem {
       case 'title':
         this.fadeOpacity = 1.0;
         // Allow skip during title
-        if (this.game.keyPressed(' ') || this.game.keyPressed('escape')) {
+        if (this.game.keyPressed(' ') || this.game.keyPressed('escape') || this.game.keyPressed('q')) {
           this.introPhase = 'fade-out';
           this.introTimer = 0;
         } else if (this.introTimer >= this.INTRO_TITLE_DURATION) {
@@ -685,8 +685,8 @@ export class TutorialSystem {
     if (skipBlink) {
       // Show mobile-friendly skip instructions
       const skipText = this.game.touchUIEnabled ? 
-        'Skip Tutorial: [ESC] or ⏭️ button' : 
-        '[ESC] Skip Tutorial';
+        'Skip Tutorial: [ESC]/[Q] or ⏭️ button' : 
+        '[ESC]/[Q] Skip Tutorial';
       ctx.fillText(skipText, boxX + boxWidth / 2, boxY + boxHeight - boxPadding + 5);
     }
     

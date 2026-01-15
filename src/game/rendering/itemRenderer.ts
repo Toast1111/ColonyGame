@@ -194,6 +194,7 @@ export class ItemRenderer {
       case 'food': icon = '🍖'; break;
       case 'wheat': icon = '🌾'; break;
       case 'bread': icon = '🍞'; break;
+      case 'healroot': icon = '🌿'; break;
       case 'metal': icon = 'M'; break;
       case 'cloth': icon = 'T'; break; // T for Textile
       case 'medicine': icon = '💊'; break;

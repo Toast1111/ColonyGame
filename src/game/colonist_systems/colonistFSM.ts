@@ -1946,11 +1946,19 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (f.kind === 'farm') {
           f.ready = false; 
           f.growth = 0; 
-          // Farms now drop wheat on the floor for haulers to transport
-          const wheatAmount = Math.round(10 * yieldMult);
-          const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
-          game.itemManager.dropItems('wheat', wheatAmount, dropAt);
-          game.msg(`Farm harvested (dropped ${wheatAmount} wheat)`, 'good');
+          const crop = (f as any).cropType || 'wheat';
+          const baseYield = (f as any).yieldPerHarvest || 10;
+          const amount = Math.max(1, Math.round(baseYield * yieldMult));
+          if (crop === 'food') {
+            const gained = game.addResource('food', amount);
+            if (gained > 0) {
+              game.msg(`Farm harvested (+${gained} food)`, 'good');
+            }
+          } else {
+            const dropAt = { x: f.x + f.w / 2, y: f.y + f.h / 2 };
+            game.itemManager.dropItems(crop as any, amount, dropAt);
+            game.msg(`Farm harvested (dropped ${amount} ${crop})`, 'good');
+          }
           
           if (c.skills) grantSkillXP(c, 'Plants', 20, c.t || 0); // big tick on harvest
         } else if (f.kind === 'well') {

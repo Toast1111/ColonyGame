@@ -39,6 +39,12 @@ export const ITEM_DEFINITIONS: Record<ItemType, { weight: number; stackLimit: nu
     stackRadius: 18,
     color: '#DEB887'
   },
+  healroot: {
+    weight: 0.3,
+    stackLimit: 40,
+    stackRadius: 18,
+    color: '#6ee7b7'
+  },
   metal: {
     weight: 2,
     stackLimit: 25,

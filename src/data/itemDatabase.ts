@@ -701,6 +701,32 @@ export class ItemDatabase {
           cropType: 'Corn',
           growthTime: 20
         },
+        {
+          defName: 'Healroot',
+          label: 'healroot',
+          description: 'A potent medicinal herb used to craft medicine.',
+          category: 'Medicine',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 50,
+          value: 8,
+          weight: 0.2,
+          nutrition: 1,
+          spoilage: 20
+        },
+        {
+          defName: 'HealrootSeeds',
+          label: 'healroot seeds',
+          description: 'Seeds for growing healroot crops.',
+          category: 'Seeds',
+          equipSlot: 'none',
+          stackable: true,
+          maxStack: 50,
+          value: 6,
+          weight: 0.1,
+          cropType: 'Healroot',
+          growthTime: 40
+        },
         
         // Components
         {

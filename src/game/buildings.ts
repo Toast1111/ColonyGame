@@ -277,6 +277,7 @@ export function makeBuilding(kind: keyof typeof BUILD_TYPES, wx: number, wy: num
     ready: false,
     cooldown: 0,
     ...(kind === 'bed' ? { isMedicalBed: false } : {}),
+    ...(kind === 'farm' ? { cropType: 'wheat' } : {}),
   } as Building;
   
   // Initialize inventory for storage buildings

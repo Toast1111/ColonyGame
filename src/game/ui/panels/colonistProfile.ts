@@ -420,22 +420,75 @@ function drawSocialTab(game: any, c: any, x: number, y: number, w: number, h: nu
 
 // Stats tab removed
 
+type ActivityLogEntry = {
+  label: string;
+  type?: string;
+  timeStr?: string; // preformatted timestamp
+  day?: number;
+  tDay?: number; // 0-1 time-of-day fraction
+  at?: number; // absolute timestamp in seconds (fallback)
+};
+
 function drawLogTab(game: any, c: any, x: number, y: number, w: number, h: number) {
-  const ctx = game.ctx as CanvasRenderingContext2D; let textY = y + game.scale(8);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left'; ctx.fillText('Activity Log', x, textY); textY += game.scale(24);
-  const activities = [
-    { time: `Day ${game.day} 08:30`, action: 'Started construction work', type: 'work' },
-    { time: `Day ${game.day} 07:45`, action: 'Finished eating breakfast', type: 'need' },
-    { time: `Day ${game.day} 07:00`, action: 'Woke up', type: 'rest' },
-    { time: `Day ${game.day - 1} 22:30`, action: 'Went to sleep', type: 'rest' },
-    { time: `Day ${game.day - 1} 19:15`, action: 'Had dinner', type: 'need' }
-  ];
-  for (const activity of activities) {
-    const activityColor = activity.type === 'work' ? '#60a5fa' : activity.type === 'need' ? '#22c55e' : activity.type === 'rest' ? '#a78bfa' : '#94a3b8';
-    ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400'); ctx.fillText(activity.time, x, textY);
-    ctx.fillStyle = activityColor; ctx.font = game.getScaledFont(11, '400'); ctx.fillText(activity.action, x + game.scale(100), textY);
-    textY += game.scale(16);
-    if (textY > y + h - game.scale(20)) break;
+  const ctx = game.ctx as CanvasRenderingContext2D;
+  let textY = y + game.scale(8);
+
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = game.getScaledFont(16, '600');
+  ctx.textAlign = 'left';
+  ctx.fillText('Activity Log', x, textY);
+  textY += game.scale(24);
+
+  const entries: ActivityLogEntry[] = c.activityLog || [];
+
+  // Limit stored entries to what fits on screen to avoid unbounded growth.
+  const rowH = game.scale(16);
+  const maxVisible = Math.max(0, Math.floor((h - (textY - y) - game.scale(8)) / rowH));
+  if (entries.length > maxVisible) {
+    entries.splice(0, entries.length - maxVisible);
+  }
+
+  if (entries.length === 0) {
+    ctx.fillStyle = '#6b7280';
+    ctx.font = game.getScaledFont(12, '400');
+    ctx.fillText('No activity recorded yet.', x, textY);
+    return;
+  }
+
+  for (const entry of entries) {
+    const stamp = formatLogTime(game, entry);
+    const color = getLogColor(entry.type);
+
+    ctx.fillStyle = '#6b7280';
+    ctx.font = game.getScaledFont(10, '400');
+    ctx.fillText(stamp, x, textY);
+
+    ctx.fillStyle = color;
+    ctx.font = game.getScaledFont(11, '400');
+    ctx.fillText(entry.label || '—', x + game.scale(108), textY);
+
+    textY += rowH;
+    if (textY > y + h - game.scale(4)) break;
+  }
+}
+
+function formatLogTime(game: any, entry: ActivityLogEntry): string {
+  if (entry.timeStr) return entry.timeStr;
+  const day = entry.day ?? game.day;
+  const tDay = entry.tDay ?? game.tDay;
+  const hour = Math.floor((tDay || 0) * 24);
+  const minute = Math.floor(((tDay || 0) * 24 - hour) * 60);
+  return `Day ${day} ${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+}
+
+function getLogColor(type?: string): string {
+  switch (type) {
+    case 'work': return '#60a5fa';
+    case 'need': return '#22c55e';
+    case 'rest': return '#a78bfa';
+    case 'combat': return '#f87171';
+    case 'social': return '#fbbf24';
+    default: return '#94a3b8';
   }
 }
 
