@@ -397,7 +397,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           newState === 'eat' || newState === 'resting' || newState === 'beingTreated' || 
           newState === 'doctoring') {
         const oldTask = c.task;
-        if (oldTask && (oldTask === 'chop' || oldTask === 'mine' || oldTask === 'build' || oldTask === 'harvestFarm' || oldTask === 'harvestWell')) {
+        if (oldTask && (oldTask === 'chop' || oldTask === 'mine' || oldTask === 'build' || oldTask === 'harvestFarm' || oldTask === 'harvestWell' || oldTask === 'haulFloorItem')) {
           // Release any reservations for work tasks
           if (c.task === 'build' && c.target) {
             game.releaseBuildReservation && game.releaseBuildReservation(c);
@@ -411,6 +411,16 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             if ((game as any).assignedTiles?.has(tileKey)) {
               (game as any).assignedTiles.delete(tileKey);
             }
+          }
+          // Drop carried floor items if abandoning haul
+          if (c.task === 'haulFloorItem') {
+            const rim = (game as any).itemManager;
+            const carried = (c as any).carryingItem;
+            if (rim && carried && carried.qty > 0) {
+              rim.dropItems(carried.type, carried.qty, { x: c.x, y: c.y });
+            }
+            (c as any).carryingItem = null;
+            c.taskData = null;
           }
           c.task = null;
           c.target = null;
@@ -1587,6 +1597,31 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (!dst) {
         // Create a random idle target if none exists
         c.target = { x: c.x + (Math.random() - 0.5) * 160, y: c.y + (Math.random() - 0.5) * 160 };
+        break;
+      }
+
+      // Safety: if carrying a floor item but somehow in idle, finish the haul by dropping and rescheduling
+      if ((c as any).carryingItem) {
+        const payload = (c as any).carryingItem;
+        const rim = (game as any).itemManager;
+        if (rim && payload.qty > 0) {
+          rim.dropItems(payload.type, payload.qty, { x: c.x, y: c.y });
+        }
+        (c as any).carryingItem = null;
+        c.taskData = null;
+        c.task = null;
+        c.target = null;
+        game.clearPath(c);
+        changeState('seekTask', 'reset idle with carried item');
+        break;
+      }
+
+      // If we’ve been idling too long, re-seek a task to avoid lingering
+      if (c.stateSince > 15) {
+        c.task = null;
+        c.target = null;
+        game.clearPath(c);
+        changeState('seekTask', 'idle timeout');
         break;
       }
       

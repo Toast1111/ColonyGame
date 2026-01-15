@@ -8,6 +8,24 @@ export function updateRestingState(
   changeState: (state: import('../../types').ColonistState, reason?: string) => void,
   opts: { fatigueExitThreshold: number }
 ) {
+  // Ensure we are logically inside a bed if we're lying on one (handles teleports or desyncs)
+  if (!c.inside) {
+    const bedHere = (game.buildings as Building[]).find((b) => b.kind === 'bed' && b.done && game.pointInRect({ x: c.x, y: c.y }, b));
+    if (bedHere) {
+      // Try to formally enter to align occupancy/reservations
+      if (!game.tryEnterBuilding(c, bedHere)) {
+        // Fallback: mark occupancy if enter failed (capacity mismatch) but we are physically on it
+        if (game.buildingHasSpace(bedHere, c)) {
+          if (!(c as any).id) {
+            (c as any).id = `colonist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          }
+          (bedHere as any).occupiedBy = (c as any).id;
+          c.inside = bedHere;
+        }
+      }
+    }
+  }
+
   c.hideTimer = Math.max(0, (c.hideTimer || 0) - dt);
   if (c.inside && c.inside.kind === 'bed') {
     const bed = c.inside;
