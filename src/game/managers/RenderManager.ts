@@ -1086,9 +1086,15 @@ export class RenderManager {
       drawWorkPriorityPanel(ctx, game.colonists, canvas, game);
     }
 
-    // Colonist profile panel
+    // Colonist profile panel (protected to avoid hard UI lock if a bad colonist payload sneaks in)
     if (game.selColonist) {
-      drawColonistProfileUI(game, game.selColonist);
+      try {
+        drawColonistProfileUI(game, game.selColonist);
+      } catch (err) {
+        console.error('[RenderUI] Failed to draw colonist profile:', err);
+        game.selColonist = null;
+        game.colonistPanelRect = game.colonistPanelCloseRect = null;
+      }
     } else {
       game.colonistPanelRect = game.colonistPanelCloseRect = null;
     }

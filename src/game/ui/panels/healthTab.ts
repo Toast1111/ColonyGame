@@ -10,6 +10,7 @@
  */
 
 import type { Colonist, ColonistHealth, BodyPart, Injury, Operation, OperationType } from '../../types';
+import { initializeColonistHealth } from '../../health/healthSystem';
 
 // Bodily system definitions (RimWorld-style)
 interface BodySystem {
@@ -53,6 +54,9 @@ interface HealthTabContext {
  */
 export function drawHealthTab(game: any, c: Colonist, x: number, y: number, w: number, h: number): void {
   const ctx: HealthTabContext = { game, colonist: c, x, y, w, h };
+  if (!c.health) {
+    initializeColonistHealth(c);
+  }
   
   // Initialize sub-tab if not set
   if (!game.colonistHealthSubTab) {
