@@ -153,4 +153,23 @@ export class CameraSystem {
     this.camera.y = 0;
     this.camera.zoom = 1;
   }
+  
+  /**
+   * Clamp camera position to stay within world bounds
+   * Prevents camera from showing areas outside the game world
+   */
+  clampToWorld(worldWidth: number, worldHeight: number): void {
+    const viewW = (this.canvasWidth / this.DPR) / this.camera.zoom;
+    const viewH = (this.canvasHeight / this.DPR) / this.camera.zoom;
+    const maxX = Math.max(0, worldWidth - viewW);
+    const maxY = Math.max(0, worldHeight - viewH);
+    
+    // Fix NaN values
+    if (!Number.isFinite(this.camera.x)) this.camera.x = 0;
+    if (!Number.isFinite(this.camera.y)) this.camera.y = 0;
+    
+    // Clamp to bounds
+    this.camera.x = Math.max(0, Math.min(maxX, this.camera.x));
+    this.camera.y = Math.max(0, Math.min(maxY, this.camera.y));
+  }
 }

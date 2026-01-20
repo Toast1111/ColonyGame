@@ -593,16 +593,12 @@ export class Game {
     this.healthManager.recalculateColonistHealth(colonist);
   }
 
-  // Ensure camera remains within world bounds based on current zoom and canvas size
+  /**
+   * Ensure camera remains within world bounds based on current zoom and canvas size
+   * Delegated to CameraSystem
+   */
   private clampCameraToWorld() {
-    const viewW = this.canvas.width / this.DPR / this.camera.zoom;
-    const viewH = this.canvas.height / this.DPR / this.camera.zoom;
-    const maxX = Math.max(0, WORLD.w - viewW);
-    const maxY = Math.max(0, WORLD.h - viewH);
-    if (!Number.isFinite(this.camera.x)) this.camera.x = 0;
-    if (!Number.isFinite(this.camera.y)) this.camera.y = 0;
-    this.camera.x = clamp(this.camera.x, 0, maxX);
-    this.camera.y = clamp(this.camera.y, 0, maxY);
+    this.cameraSystem.clampToWorld(WORLD.w, WORLD.h);
   }
 
   handleResize = () => {
