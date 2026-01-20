@@ -26,6 +26,9 @@ import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
 import { updateEnemyFSM } from "../ai/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
+import { handleHotbarClick } from "./ui/hud/modernHotbar";
+import { handleBuildMenuClick as handleModernBuildMenuClick } from "./ui/hud/modernBuildMenu";
+import { handleControlPanelClick } from "./ui/hud/controlPanel";
 import { drawColonistProfile as drawColonistProfileUI } from "./ui/panels/colonistProfile";
 import { drawContextMenu as drawContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
 import { showColonistContextMenu } from "./ui/contextMenus/colonistMenu";
@@ -73,8 +76,6 @@ import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/Audi
 import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
 import { ResourceSpawnManager } from './managers/ResourceSpawnManager';
 import { MusicManager } from './managers/MusicManager';
-import { initializeGame } from './initialization/initializeGame';
-import { bindInput } from './input/bindInput';
 import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
@@ -412,7 +413,81 @@ export class Game {
     this.canvas = canvas; this.ctx = ctx;
     this.DPR = Math.max(1, Math.min(2, (window as any).devicePixelRatio || 1));
     this.handleResize();
-    initializeGame(this);
+    
+    // Initialize dirty rect tracker with canvas dimensions
+    this.dirtyRectTracker = new DirtyRectTracker(canvas.width, canvas.height);
+    
+    // Initialize task manager (requires reservationManager to be constructed)
+    this.taskManager = new TaskManager(this, this.reservationManager);
+    
+    window.addEventListener('resize', () => this.handleResize());
+    this.bindInput();
+    
+    // Initialize item database BEFORE newGame() (needed for stockpile creation)
+    itemDatabase.loadItems();
+    
+    // Initialize floor item + stockpile system BEFORE newGame() (needed for initial stockpiles)
+    this.itemManager = new ItemManager({
+      canvas: this.canvas,
+      enableAutoHauling: false, // We'll drive hauling via our WorkGiver so it fits FSM
+      defaultStockpileSize: this.defaultStockpileSize
+    } as ItemManagerConfig);
+    
+    // Now call newGame() - it will create initial stockpile zones
+    this.newGame();
+    
+    // Link terrain grid to pathfinding grid
+    this.grid.terrainGrid = this.terrainGrid;
+    
+    // Sync terrain costs to pathfinding grid (all grass initially)
+    this.syncTerrainToGrid();
+    
+    this.rebuildNavGridImmediate(); // Use immediate rebuild during initialization
+    
+    // Initialize systems with starting resources and time
+    this.resourceSystem.reset(); // Sets starting resources
+    this.timeSystem.reset(); // Sets day 1, tDay 0
+    
+    // Initialize research system
+    this.researchManager = new ResearchManager();
+    this.researchUI = new ResearchUI(this.researchManager, this);
+    
+    // Initialize new managers (refactor)
+    this.medicalManager = new MedicalManager(this);
+    this.buildingManager = new BuildingManager(this);
+    this.colonistActionManager = new ColonistActionManager(this);
+    this.colonistNavigationManager = new ColonistNavigationManager(this);
+    this.treeGrowingManager = new TreeGrowingManager();
+    
+    // Initialize camera system
+    this.cameraSystem.setCanvasDimensions(this.canvas.width, this.canvas.height, this.DPR);
+    this.cameraSystem.setZoom(1);
+    this.cameraSystem.centerOn(HQ_POS.x, HQ_POS.y);
+    
+    this.clampCameraToWorld();
+    // Init debug console
+    initDebugConsole(this);
+    // Init performance HUD
+    initPerformanceHUD({ visible: false, position: 'top-right' });
+    
+    // Expose damage API for external modules (combat, scripts)
+    (this as any).applyDamageToColonist = (colonist: any, dmg: number, type: any = 'cut') => {
+      applyDamageToColonist(this, colonist, dmg, type);
+    };
+
+    // Preload common UI and feedback sounds
+    void this.audioManager.preload('ui.click.primary');
+    void this.audioManager.preload('ui.panel.open');
+    void this.audioManager.preload('ui.panel.close');
+    void this.audioManager.preload('ui.hover');
+    // Hotbar-specific UI sounds (single-variant)
+    void this.audioManager.preload('ui.hotbar.open');
+    void this.audioManager.preload('ui.hotbar.hover');
+    void this.audioManager.preload('ui.hotbar.close');
+    void this.audioManager.preload('ui.drag.start');
+    void this.audioManager.preload('ui.drag.end');
+    void this.audioManager.preload('buildings.placement.confirm');
+    
     requestAnimationFrame(this.frame);
   }
 
