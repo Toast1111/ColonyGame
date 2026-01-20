@@ -75,6 +75,7 @@ import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
 import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
 import { ResourceSpawnManager } from './managers/ResourceSpawnManager';
+import { MusicManager } from './managers/MusicManager';
 import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
@@ -394,6 +395,7 @@ export class Game {
   public colonistNavigationManager!: ColonistNavigationManager; // Colonist movement and navigation
   public treeGrowingManager!: TreeGrowingManager; // Tree planting and growing zones
   public resourceSpawnManager = new ResourceSpawnManager(); // Resource spawning and respawning
+  public musicManager = new MusicManager(); // Background music system
 
   // UI Click Regions (populated during render)
   public modernHotbarRects?: import('./ui/hud/modernHotbar').HotbarTabRect[];
@@ -2056,78 +2058,17 @@ export class Game {
     this.audioManager.stop(key);
   }
 
-  // MUSIC SYSTEM: Manages day music and raid music
-  private raidMusicActive = false;
-  private dayMusicActive = false;
-  
+  /**
+   * Update background music based on game state
+   * Delegated to MusicManager
+   */
   updateMusic() {
     const hasEnemies = this.enemies.length > 0;
     const hqExists = this.buildings.some(b => b.kind === 'hq' && b.done);
     const isDay = !this.timeSystem.isNight();
     const isGameActive = !this.paused && !this.gameOverScreen.isActive();
     
-    // Priority order: Raid music > Day music > No music
-    
-    // RAID MUSIC: Takes priority during combat
-    const shouldPlayRaidMusic = hasEnemies && hqExists && isGameActive;
-    
-    if (shouldPlayRaidMusic && !this.raidMusicActive) {
-      // Stop day music and start raid music
-      if (this.dayMusicActive) {
-        this.audioManager.stop('music.day.ambient');
-        this.dayMusicActive = false;
-      }
-      
-      this.audioManager.play('music.raid.combat', { 
-        volume: 0.6, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err) => {
-        console.warn('[Game] Failed to start raid music:', err);
-      });
-      this.raidMusicActive = true;
-      console.log('[Game] Started raid music - enemies attacking HQ');
-      
-    } else if (!shouldPlayRaidMusic && this.raidMusicActive) {
-      // Stop raid music
-      this.audioManager.stop('music.raid.combat');
-      this.raidMusicActive = false;
-      
-      if (hasEnemies) {
-        console.log('[Game] Stopped raid music - HQ destroyed or game paused');
-      } else {
-        console.log('[Game] Stopped raid music - all enemies defeated');
-      }
-    }
-    
-    // DAY MUSIC: Plays during daytime when no enemies are present
-    const shouldPlayDayMusic = isDay && !hasEnemies && hqExists && isGameActive && !this.raidMusicActive;
-    
-    if (shouldPlayDayMusic && !this.dayMusicActive) {
-      // Start day music
-      this.audioManager.play('music.day.ambient', { 
-        volume: 0.4, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err) => {
-        console.warn('[Game] Failed to start day music:', err);
-      });
-      this.dayMusicActive = true;
-      console.log('[Game] Started day music - peaceful daytime');
-      
-    } else if (!shouldPlayDayMusic && this.dayMusicActive) {
-      // Stop day music
-      this.audioManager.stop('music.day.ambient');
-      this.dayMusicActive = false;
-      
-      if (!isDay) {
-        console.log('[Game] Stopped day music - night has fallen');
-      } else if (hasEnemies) {
-        console.log('[Game] Stopped day music - enemies detected');
-      } else {
-        console.log('[Game] Stopped day music - game paused or ended');
-      }
-    }
+    this.musicManager.updateMusic(hasEnemies, hqExists, isDay, isGameActive);
   }
 
   // World setup
@@ -2997,11 +2938,8 @@ export class Game {
     this.paused = true; 
     this.msg('HQ destroyed. Colony fell.', 'bad'); 
     
-    // Stop raid music before game over sequence starts
-    if (this.raidMusicActive) {
-      this.audioManager.stop('music.raid.combat');
-      this.raidMusicActive = false;
-    }
+    // Stop all music before game over sequence starts
+    this.musicManager.stopAllMusic();
     
     // Start dramatic game over sequence instead of alert
     this.gameOverScreen.start();
