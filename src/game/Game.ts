@@ -74,6 +74,7 @@ import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
 import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
+import { ResourceSpawnManager } from './managers/ResourceSpawnManager';
 import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
@@ -392,6 +393,7 @@ export class Game {
   public colonistActionManager!: ColonistActionManager; // Colonist actions and commands
   public colonistNavigationManager!: ColonistNavigationManager; // Colonist movement and navigation
   public treeGrowingManager!: TreeGrowingManager; // Tree planting and growing zones
+  public resourceSpawnManager = new ResourceSpawnManager(); // Resource spawning and respawning
 
   // UI Click Regions (populated during render)
   public modernHotbarRects?: import('./ui/hud/modernHotbar').HotbarTabRect[];
@@ -2129,71 +2131,33 @@ export class Game {
   }
 
   // World setup
+  /**
+   * Scatter initial resources (trees and rocks) across the map
+   * Delegated to ResourceSpawnManager
+   */
   scatter() {
-    // Beta feedback: Resources spawn closer to HQ for more convenient early game (120px = ~4 tiles)
-    // Check if position is on a mountain before spawning
-    const isMountainPos = (x: number, y: number): boolean => {
-      const gx = Math.floor(x / T);
-      const gy = Math.floor(y / T);
-      const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
-      return getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN;
-    };
-
-    for (let i = 0; i < 220; i++) { 
-      const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
-      if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
-      if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
-      
-      // Snap tree to tile center for pathfinding alignment
-      const alignedPos = snapToTileCenter(p.x, p.y);
-      this.trees.push({ x: alignedPos.x, y: alignedPos.y, r: 12, hp: 40, type: 'tree' }); 
-    }
-    for (let i = 0; i < 140; i++) { 
-      const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
-      if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
-      if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
-      
-      // Snap rock to tile center for pathfinding alignment
-      const alignedPos = snapToTileCenter(p.x, p.y);
-      this.rocks.push({ x: alignedPos.x, y: alignedPos.y, r: 12, hp: 50, type: 'rock' }); 
-    }
-    // Rebuild navigation grid after scattering resources
-    this.rebuildNavGridImmediate(); // Use immediate rebuild during game init
+    this.resourceSpawnManager.scatterResources(
+      this.trees,
+      this.rocks,
+      this.terrainGrid,
+      () => this.rebuildNavGridImmediate()
+    );
   }
-  respawnTimer = 0; // seconds accumulator for resource respawn
+
+  /**
+   * Try to respawn resources periodically
+   * Delegated to ResourceSpawnManager
+   */
   tryRespawn(dt: number) {
-    this.respawnTimer += dt * this.fastForward;
-    // attempt every ~4 seconds
-    if (this.respawnTimer >= 4) {
-      this.respawnTimer = 0;
-      // small random chance to spawn a tree or rock away from HQ and buildings
-      const tryOne = (kind: 'tree'|'rock') => {
-        for (let k=0;k<6;k++) { // few tries
-          const p = { x: rand(60, WORLD.w - 60), y: rand(60, WORLD.h - 60) };
-          // Beta feedback: Resources respawn closer to HQ (150px = ~5 tiles)
-          if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 150) continue;
-          // avoid too close to buildings
-          let ok = true;
-          for (const b of this.buildings) { if (p.x > b.x-24 && p.x < b.x+b.w+24 && p.y > b.y-24 && p.y < b.y+b.h+24) { ok=false; break; } }
-          if (!ok) continue;
-          // Don't spawn on mountains
-          const gx = Math.floor(p.x / T);
-          const gy = Math.floor(p.y / T);
-          const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
-          if (getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN) continue;
-          
-          // Snap to tile center for pathfinding alignment
-          const alignedPos = snapToTileCenter(p.x, p.y);
-          if (kind==='tree') this.trees.push({ x:alignedPos.x, y:alignedPos.y, r:12, hp:40, type:'tree' }); 
-          else this.rocks.push({ x:alignedPos.x, y:alignedPos.y, r:12, hp:50, type:'rock' });
-          // Use partial rebuild for new resource (only affects small area around spawn point)
-          this.navigationManager.rebuildNavGridPartial(alignedPos.x, alignedPos.y, 12 + 32);
-          break;
-        }
-      };
-      if (Math.random() < 0.5 && this.trees.length < 260) tryOne('tree');
-      if (Math.random() < 0.35 && this.rocks.length < 180) tryOne('rock');
-    }
+    this.resourceSpawnManager.tryRespawn(
+      dt,
+      this.fastForward,
+      this.trees,
+      this.rocks,
+      this.buildings,
+      this.terrainGrid,
+      (x: number, y: number, radius: number) => this.navigationManager.rebuildNavGridPartial(x, y, radius)
+    );
   }
   buildHQ() {
     const def = { w: 3 * T, h: 3 * T };
