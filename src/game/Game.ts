@@ -495,11 +495,6 @@ export class Game {
   // Previously more paste-eating behavior (Game.ts lines 395-555).
   // Now we delegate to InventoryManager - no more eating inventory paste! 🍝✨
   
-  /** Get equipped items - DELEGATED to InventoryManager so all this needs to be refactored and then moved*/
-  private getEquippedItems(c: Colonist) {
-    return this.inventoryManager.getEquippedItems(c);
-  }
-
   /** Movement speed multiplier from equipment - DELEGATED to InventoryManager */
   getMoveSpeedMultiplier(c: Colonist): number {
     return this.inventoryManager.getMoveSpeedMultiplier(c);
@@ -563,36 +558,6 @@ export class Game {
   // Previously this was egregious paste-eating behavior (Game.ts lines 483-578).
   // Now we properly pass the paste to HealthManager like responsible adults! 🎨✨
   
-  /** Calculate pain from damage - DELEGATED to HealthManager */
-  private calculatePainFromDamage(damageType: string, severity: number): number {
-    return this.healthManager.calculatePainFromDamage(damageType, severity);
-  }
-
-  /** Calculate bleeding from damage - DELEGATED to HealthManager */
-  private calculateBleedingFromDamage(damageType: string, severity: number): number {
-    return this.healthManager.calculateBleedingFromDamage(damageType, severity);
-  }
-
-  /** Calculate heal rate - DELEGATED to HealthManager */
-  private calculateHealRate(damageType: string, severity: number): number {
-    return this.healthManager.calculateHealRate(damageType, severity);
-  }
-
-  /** Calculate infection chance - DELEGATED to HealthManager */
-  private calculateInfectionChance(damageType: string, severity: number): number {
-    return this.healthManager.calculateInfectionChance(damageType, severity);
-  }
-
-  /** Generate injury description - DELEGATED to HealthManager */
-  private generateInjuryDescription(damageType: string, bodyPart: string, severity: number): string {
-    return this.healthManager.generateInjuryDescription(damageType, bodyPart, severity);
-  }
-
-  /** Recalculate colonist health stats - DELEGATED to HealthManager */
-  private recalculateColonistHealth(colonist: Colonist): void {
-    this.healthManager.recalculateColonistHealth(colonist);
-  }
-
   /**
    * Ensure camera remains within world bounds based on current zoom and canvas size
    * Delegated to CameraSystem
