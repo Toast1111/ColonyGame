@@ -74,6 +74,8 @@ import { DirtyRectTracker } from '../core/DirtyRectTracker';
 import { colonistSpriteCache } from '../core/RenderCache';
 import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/AudioManager';
 import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
+import { ResourceSpawnManager } from './managers/ResourceSpawnManager';
+import { MusicManager } from './managers/MusicManager';
 import type { MobileControls } from './ui/dom/mobileControls';
 
 export class Game {
@@ -392,6 +394,8 @@ export class Game {
   public colonistActionManager!: ColonistActionManager; // Colonist actions and commands
   public colonistNavigationManager!: ColonistNavigationManager; // Colonist movement and navigation
   public treeGrowingManager!: TreeGrowingManager; // Tree planting and growing zones
+  public resourceSpawnManager = new ResourceSpawnManager(); // Resource spawning and respawning
+  public musicManager = new MusicManager(); // Background music system
 
   // UI Click Regions (populated during render)
   public modernHotbarRects?: import('./ui/hud/modernHotbar').HotbarTabRect[];
@@ -491,11 +495,6 @@ export class Game {
   // Previously more paste-eating behavior (Game.ts lines 395-555).
   // Now we delegate to InventoryManager - no more eating inventory paste! 🍝✨
   
-  /** Get equipped items - DELEGATED to InventoryManager so all this needs to be refactored and then moved*/
-  private getEquippedItems(c: Colonist) {
-    return this.inventoryManager.getEquippedItems(c);
-  }
-
   /** Movement speed multiplier from equipment - DELEGATED to InventoryManager */
   getMoveSpeedMultiplier(c: Colonist): number {
     return this.inventoryManager.getMoveSpeedMultiplier(c);
@@ -559,46 +558,12 @@ export class Game {
   // Previously this was egregious paste-eating behavior (Game.ts lines 483-578).
   // Now we properly pass the paste to HealthManager like responsible adults! 🎨✨
   
-  /** Calculate pain from damage - DELEGATED to HealthManager */
-  private calculatePainFromDamage(damageType: string, severity: number): number {
-    return this.healthManager.calculatePainFromDamage(damageType, severity);
-  }
-
-  /** Calculate bleeding from damage - DELEGATED to HealthManager */
-  private calculateBleedingFromDamage(damageType: string, severity: number): number {
-    return this.healthManager.calculateBleedingFromDamage(damageType, severity);
-  }
-
-  /** Calculate heal rate - DELEGATED to HealthManager */
-  private calculateHealRate(damageType: string, severity: number): number {
-    return this.healthManager.calculateHealRate(damageType, severity);
-  }
-
-  /** Calculate infection chance - DELEGATED to HealthManager */
-  private calculateInfectionChance(damageType: string, severity: number): number {
-    return this.healthManager.calculateInfectionChance(damageType, severity);
-  }
-
-  /** Generate injury description - DELEGATED to HealthManager */
-  private generateInjuryDescription(damageType: string, bodyPart: string, severity: number): string {
-    return this.healthManager.generateInjuryDescription(damageType, bodyPart, severity);
-  }
-
-  /** Recalculate colonist health stats - DELEGATED to HealthManager */
-  private recalculateColonistHealth(colonist: Colonist): void {
-    this.healthManager.recalculateColonistHealth(colonist);
-  }
-
-  // Ensure camera remains within world bounds based on current zoom and canvas size
+  /**
+   * Ensure camera remains within world bounds based on current zoom and canvas size
+   * Delegated to CameraSystem
+   */
   private clampCameraToWorld() {
-    const viewW = this.canvas.width / this.DPR / this.camera.zoom;
-    const viewH = this.canvas.height / this.DPR / this.camera.zoom;
-    const maxX = Math.max(0, WORLD.w - viewW);
-    const maxY = Math.max(0, WORLD.h - viewH);
-    if (!Number.isFinite(this.camera.x)) this.camera.x = 0;
-    if (!Number.isFinite(this.camera.y)) this.camera.y = 0;
-    this.camera.x = clamp(this.camera.x, 0, maxX);
-    this.camera.y = clamp(this.camera.y, 0, maxY);
+    this.cameraSystem.clampToWorld(WORLD.w, WORLD.h);
   }
 
   handleResize = () => {
@@ -2054,146 +2019,47 @@ export class Game {
     this.audioManager.stop(key);
   }
 
-  // MUSIC SYSTEM: Manages day music and raid music
-  private raidMusicActive = false;
-  private dayMusicActive = false;
-  
+  /**
+   * Update background music based on game state
+   * Delegated to MusicManager
+   */
   updateMusic() {
     const hasEnemies = this.enemies.length > 0;
     const hqExists = this.buildings.some(b => b.kind === 'hq' && b.done);
     const isDay = !this.timeSystem.isNight();
     const isGameActive = !this.paused && !this.gameOverScreen.isActive();
     
-    // Priority order: Raid music > Day music > No music
-    
-    // RAID MUSIC: Takes priority during combat
-    const shouldPlayRaidMusic = hasEnemies && hqExists && isGameActive;
-    
-    if (shouldPlayRaidMusic && !this.raidMusicActive) {
-      // Stop day music and start raid music
-      if (this.dayMusicActive) {
-        this.audioManager.stop('music.day.ambient');
-        this.dayMusicActive = false;
-      }
-      
-      this.audioManager.play('music.raid.combat', { 
-        volume: 0.6, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err) => {
-        console.warn('[Game] Failed to start raid music:', err);
-      });
-      this.raidMusicActive = true;
-      console.log('[Game] Started raid music - enemies attacking HQ');
-      
-    } else if (!shouldPlayRaidMusic && this.raidMusicActive) {
-      // Stop raid music
-      this.audioManager.stop('music.raid.combat');
-      this.raidMusicActive = false;
-      
-      if (hasEnemies) {
-        console.log('[Game] Stopped raid music - HQ destroyed or game paused');
-      } else {
-        console.log('[Game] Stopped raid music - all enemies defeated');
-      }
-    }
-    
-    // DAY MUSIC: Plays during daytime when no enemies are present
-    const shouldPlayDayMusic = isDay && !hasEnemies && hqExists && isGameActive && !this.raidMusicActive;
-    
-    if (shouldPlayDayMusic && !this.dayMusicActive) {
-      // Start day music
-      this.audioManager.play('music.day.ambient', { 
-        volume: 0.4, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err) => {
-        console.warn('[Game] Failed to start day music:', err);
-      });
-      this.dayMusicActive = true;
-      console.log('[Game] Started day music - peaceful daytime');
-      
-    } else if (!shouldPlayDayMusic && this.dayMusicActive) {
-      // Stop day music
-      this.audioManager.stop('music.day.ambient');
-      this.dayMusicActive = false;
-      
-      if (!isDay) {
-        console.log('[Game] Stopped day music - night has fallen');
-      } else if (hasEnemies) {
-        console.log('[Game] Stopped day music - enemies detected');
-      } else {
-        console.log('[Game] Stopped day music - game paused or ended');
-      }
-    }
+    this.musicManager.updateMusic(hasEnemies, hqExists, isDay, isGameActive);
   }
 
   // World setup
+  /**
+   * Scatter initial resources (trees and rocks) across the map
+   * Delegated to ResourceSpawnManager
+   */
   scatter() {
-    // Beta feedback: Resources spawn closer to HQ for more convenient early game (120px = ~4 tiles)
-    // Check if position is on a mountain before spawning
-    const isMountainPos = (x: number, y: number): boolean => {
-      const gx = Math.floor(x / T);
-      const gy = Math.floor(y / T);
-      const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
-      return getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN;
-    };
-
-    for (let i = 0; i < 220; i++) { 
-      const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
-      if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
-      if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
-      
-      // Snap tree to tile center for pathfinding alignment
-      const alignedPos = snapToTileCenter(p.x, p.y);
-      this.trees.push({ x: alignedPos.x, y: alignedPos.y, r: 12, hp: 40, type: 'tree' }); 
-    }
-    for (let i = 0; i < 140; i++) { 
-      const p = { x: rand(80, WORLD.w - 80), y: rand(80, WORLD.h - 80) }; 
-      if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 120) continue;
-      if (isMountainPos(p.x, p.y)) continue; // Don't spawn on mountains
-      
-      // Snap rock to tile center for pathfinding alignment
-      const alignedPos = snapToTileCenter(p.x, p.y);
-      this.rocks.push({ x: alignedPos.x, y: alignedPos.y, r: 12, hp: 50, type: 'rock' }); 
-    }
-    // Rebuild navigation grid after scattering resources
-    this.rebuildNavGridImmediate(); // Use immediate rebuild during game init
+    this.resourceSpawnManager.scatterResources(
+      this.trees,
+      this.rocks,
+      this.terrainGrid,
+      () => this.rebuildNavGridImmediate()
+    );
   }
-  respawnTimer = 0; // seconds accumulator for resource respawn
+
+  /**
+   * Try to respawn resources periodically
+   * Delegated to ResourceSpawnManager
+   */
   tryRespawn(dt: number) {
-    this.respawnTimer += dt * this.fastForward;
-    // attempt every ~4 seconds
-    if (this.respawnTimer >= 4) {
-      this.respawnTimer = 0;
-      // small random chance to spawn a tree or rock away from HQ and buildings
-      const tryOne = (kind: 'tree'|'rock') => {
-        for (let k=0;k<6;k++) { // few tries
-          const p = { x: rand(60, WORLD.w - 60), y: rand(60, WORLD.h - 60) };
-          // Beta feedback: Resources respawn closer to HQ (150px = ~5 tiles)
-          if (Math.hypot(p.x - HQ_POS.x, p.y - HQ_POS.y) < 150) continue;
-          // avoid too close to buildings
-          let ok = true;
-          for (const b of this.buildings) { if (p.x > b.x-24 && p.x < b.x+b.w+24 && p.y > b.y-24 && p.y < b.y+b.h+24) { ok=false; break; } }
-          if (!ok) continue;
-          // Don't spawn on mountains
-          const gx = Math.floor(p.x / T);
-          const gy = Math.floor(p.y / T);
-          const terrainTypeId = this.terrainGrid.terrain[gy * this.terrainGrid.cols + gx];
-          if (getTerrainTypeFromId(terrainTypeId) === TerrainType.MOUNTAIN) continue;
-          
-          // Snap to tile center for pathfinding alignment
-          const alignedPos = snapToTileCenter(p.x, p.y);
-          if (kind==='tree') this.trees.push({ x:alignedPos.x, y:alignedPos.y, r:12, hp:40, type:'tree' }); 
-          else this.rocks.push({ x:alignedPos.x, y:alignedPos.y, r:12, hp:50, type:'rock' });
-          // Use partial rebuild for new resource (only affects small area around spawn point)
-          this.navigationManager.rebuildNavGridPartial(alignedPos.x, alignedPos.y, 12 + 32);
-          break;
-        }
-      };
-      if (Math.random() < 0.5 && this.trees.length < 260) tryOne('tree');
-      if (Math.random() < 0.35 && this.rocks.length < 180) tryOne('rock');
-    }
+    this.resourceSpawnManager.tryRespawn(
+      dt,
+      this.fastForward,
+      this.trees,
+      this.rocks,
+      this.buildings,
+      this.terrainGrid,
+      (x: number, y: number, radius: number) => this.navigationManager.rebuildNavGridPartial(x, y, radius)
+    );
   }
   buildHQ() {
     const def = { w: 3 * T, h: 3 * T };
@@ -3033,11 +2899,8 @@ export class Game {
     this.paused = true; 
     this.msg('HQ destroyed. Colony fell.', 'bad'); 
     
-    // Stop raid music before game over sequence starts
-    if (this.raidMusicActive) {
-      this.audioManager.stop('music.raid.combat');
-      this.raidMusicActive = false;
-    }
+    // Stop all music before game over sequence starts
+    this.musicManager.stopAllMusic();
     
     // Start dramatic game over sequence instead of alert
     this.gameOverScreen.start();
