@@ -1,5 +1,5 @@
 import type { WorkGiver, WorkGiverContext, WorkCandidate } from './types';
-import { isMountainTile, getVisibleOreAt } from '../terrain';
+import { isMountainTile } from '../terrain';
 import { T } from '../constants';
 import { snapToTileCenter } from '../utils/tileAlignment';
 
@@ -28,10 +28,6 @@ export const MiningWorkGiver: WorkGiver = {
           for (let gx = startGX; gx <= endGX; gx++) {
             // Check if this tile is a mountain
             if (!isMountainTile(game.terrainGrid, gx, gy)) continue;
-
-            // Check if ore is visible (exposed)
-            const oreType = getVisibleOreAt(game.terrainGrid, gx, gy);
-            if (oreType === null) continue; // Not exposed yet
 
             // Check if already assigned
             const tileKey = `${gx},${gy}`;
