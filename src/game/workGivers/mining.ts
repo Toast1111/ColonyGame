@@ -1,5 +1,5 @@
 import type { WorkGiver, WorkGiverContext, WorkCandidate } from './types';
-import { isMountainTile } from '../terrain';
+import { isMountainTile, getVisibleOreAt } from '../terrain';
 import { T } from '../constants';
 import { snapToTileCenter } from '../utils/tileAlignment';
 
@@ -14,8 +14,21 @@ export const MiningWorkGiver: WorkGiver = {
     // Look for mountain tiles within mining zones
     const miningZones = (game as any).miningZones || [];
     if (miningZones.length > 0) {
-      let nearestMountainTile: { gx: number; gy: number; x: number; y: number } | null = null;
-      let nearestDist = Infinity;
+      let nearestVisibleOre: { gx: number; gy: number; x: number; y: number; dist: number } | null = null;
+      let nearestEdgeTile: { gx: number; gy: number; x: number; y: number; dist: number } | null = null;
+
+      const isEdgeTile = (gx: number, gy: number) => {
+        const n = [
+          [gx + 1, gy],
+          [gx - 1, gy],
+          [gx, gy + 1],
+          [gx, gy - 1],
+        ];
+        for (const [nx, ny] of n) {
+          if (!isMountainTile(game.terrainGrid, nx, ny)) return true;
+        }
+        return false;
+      };
 
       for (const zone of miningZones) {
         // Scan the zone for mineable mountain tiles
@@ -33,47 +46,55 @@ export const MiningWorkGiver: WorkGiver = {
             const tileKey = `${gx},${gy}`;
             if ((game as any).assignedTiles?.has(tileKey)) continue;
 
-            // Calculate distance using tile-aligned position
             const tileCenter = snapToTileCenter(gx * T, gy * T);
             const dist = Math.hypot(colonist.x - tileCenter.x, colonist.y - tileCenter.y);
 
-            if (dist < nearestDist) {
-              nearestDist = dist;
-              nearestMountainTile = { 
-                gx, 
-                gy, 
-                x: tileCenter.x, 
-                y: tileCenter.y 
-              };
+            // Prefer tiles with visible ore first
+            const oreType = getVisibleOreAt(game.terrainGrid, gx, gy);
+            if (oreType) {
+              if (!nearestVisibleOre || dist < nearestVisibleOre.dist) {
+                nearestVisibleOre = { gx, gy, x: tileCenter.x, y: tileCenter.y, dist };
+              }
+              continue;
+            }
+
+            // Otherwise pick an edge tile to expose ore deeper in the mountain
+            if (isEdgeTile(gx, gy)) {
+              if (!nearestEdgeTile || dist < nearestEdgeTile.dist) {
+                nearestEdgeTile = { gx, gy, x: tileCenter.x, y: tileCenter.y, dist };
+              }
             }
           }
         }
       }
 
+      // Prefer visible ore tiles; otherwise mine edge tiles to expose ore
+      const chosen = nearestVisibleOre || nearestEdgeTile;
+
       // If we found a mountain tile, validate pathfinding before assigning
-      if (nearestMountainTile) {
+      if (chosen) {
         // Quick pathfinding validation to prevent stuck colonists
         try {
           const path = game.navigationManager?.computePathWithDangerAvoidance(
-            colonist, colonist.x, colonist.y, nearestMountainTile.x, nearestMountainTile.y
+            colonist, colonist.x, colonist.y, chosen.x, chosen.y
           );
           
           if (path && path.length > 0) {
             out.push({
               workType: 'Mining',
               task: 'mine',
-              target: nearestMountainTile,
-              distance: nearestDist,
+              target: { gx: chosen.gx, gy: chosen.gy, x: chosen.x, y: chosen.y },
+              distance: chosen.dist,
               priority
             });
             return out; // Return immediately - mountain mining takes precedence
           } else {
             // Mountain tile is unreachable - mark as assigned to prevent retrying
-            const tileKey = `${nearestMountainTile.gx},${nearestMountainTile.gy}`;
+            const tileKey = `${chosen.gx},${chosen.gy}`;
             if ((game as any).assignedTiles) {
               (game as any).assignedTiles.add(tileKey);
             }
-            console.log(`[Mining] Mountain tile at (${nearestMountainTile.gx},${nearestMountainTile.gy}) is unreachable, skipping`);
+            console.log(`[Mining] Mountain tile at (${chosen.gx},${chosen.gy}) is unreachable, skipping`);
           }
         } catch (error) {
           console.warn('[Mining] Pathfinding validation failed:', error);
