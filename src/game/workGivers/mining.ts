@@ -102,6 +102,11 @@ export const MiningWorkGiver: WorkGiver = {
       }
     }
 
+    // If mining zones exist, only mine within them - don't fall back to floor rocks
+    if (miningZones.length > 0) {
+      return out;
+    }
+
     // Fallback: mine rocks if we need stone
     if (!(game.RES.stone < game.RES.wood || game.RES.stone < 20)) return out;
 
