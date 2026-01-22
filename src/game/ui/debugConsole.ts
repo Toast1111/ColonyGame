@@ -33,17 +33,18 @@ export function initDebugConsole(game: Game) {
 
   reg("toggle", (g, args) => {
     const flag = (args[0] || "").toLowerCase();
-    if (!flag) return "usage: toggle <nav|colonists|combat|enemies>";
+    if (!flag) return "usage: toggle <nav|colonists|combat|enemies|mining>";
     if (flag === "nav") g.debug.nav = !g.debug.nav;
     else if (flag === "colonists") g.debug.colonists = !g.debug.colonists;
     else if (flag === "combat") (g.debug as any).combat = !(g.debug as any).combat;
+    else if (flag === "mining") (g.debug as any).mining = !(g.debug as any).mining;
     else if (flag === "enemies") {
       (g as any).disableEnemySpawns = !(g as any).disableEnemySpawns;
       return `enemy spawns ${(g as any).disableEnemySpawns ? 'disabled' : 'enabled'}`;
     }
     else return `unknown toggle '${flag}'`;
     return `${flag} = ${flag === 'combat' ? (g.debug as any).combat : (g.debug as any)[flag]}`;
-  }, "toggle nav|colonists|combat|enemies — flip debug flags or disable enemy spawning");
+  }, "toggle nav|colonists|combat|enemies|mining — flip debug flags or disable enemy spawning");
 
   reg("spawn", (g, args) => {
     const what = (args[0] || "enemy").toLowerCase();

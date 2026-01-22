@@ -7,6 +7,7 @@ import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOve
 import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
 import { executeSurgery, getHospitalBedBonus } from "../health/surgerySystem";
+import { startSurgeryAudio, startTendingAudio, stopMedicalAudio } from "../audio/helpers/medicalAudio";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor, findBlockingDoor } from "../systems/doorSystem";
 import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
@@ -384,6 +385,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         }
         c.lastConstructionAudioTime = undefined;
         c.activeConstructionAudio = undefined;
+      }
+
+      // Stop medical audio when leaving doctoring or surgery states
+      if ((c.state === 'doctoring' || c.state === 'performingSurgery') && newState !== c.state) {
+        stopMedicalAudio(game, c, true);
       }
       
       const leavingSleepPipeline = (c.state === 'sleep' || c.state === 'goToSleep') && newState !== 'sleep' && newState !== 'goToSleep';
@@ -764,6 +770,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         game.moveAlongPath(c, dt, { x: patient.x, y: patient.y }, treatmentRange);
         // Reset treatment timer when not in range
         (c as any).treatmentProgress = 0;
+        stopMedicalAudio(game, c, true);
       } else {
         // Close enough to perform treatment
         // Treatment time is in seconds (not milliseconds)
@@ -774,6 +781,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           (c as any).treatmentProgress = 0;
         }
         (c as any).treatmentProgress += dt;
+        startTendingAudio(game, c, patient);
         
         if ((c as any).treatmentProgress >= treatmentTime) {
           // Perform the treatment
@@ -782,6 +790,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             medicalWorkGiver.completeJob(job.id);
             (c as any).medicalJob = null;
             (c as any).treatmentProgress = 0;
+            stopMedicalAudio(game, c, true);
             c.task = null;
             changeState('seekTask', 'invalid medical job');
             return;
@@ -801,6 +810,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           (c as any).medicalJob = null;
           (c as any).taskData = null;
           (c as any).treatmentProgress = 0;
+          stopMedicalAudio(game, c, true);
           
           // If patient is downed, haul them to the best available medical bed
           if (patient.state === 'downed' && game.buildingManager?.findBestRestBuilding) {
@@ -1032,6 +1042,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (distance > workRange) {
         // Move closer to bedside
         game.moveAlongPath(c, dt, bedCenter, workRange);
+        stopMedicalAudio(game, c, false);
       } else {
         // At bedside - perform surgery
         // Surgery duration based on operation complexity (30-120 seconds)
@@ -1041,6 +1052,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
                                operation.type === 'transplant_organ' ? 120 :
                                operation.type === 'harvest_organ' ? 90 :
                                45; // Default for other operations
+
+        startSurgeryAudio(game, c, bedCenter);
 
         if (c.stateSince >= surgeryDuration) {
           // Surgery time complete - execute the operation
@@ -1079,6 +1092,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           medicalWorkGiver.completeJob(job.id);
           (c as any).medicalJob = null;
           (c as any).taskData = null;
+          stopMedicalAudio(game, c, true);
           
           changeState('seekTask', 'surgery completed');
         }

@@ -36,6 +36,8 @@ export function updateMineState(
     const { gx, gy } = r;
     const worldX = gx * T + T / 2;
     const worldY = gy * T + T / 2;
+    const approachX = typeof (r as any).approachX === 'number' ? (r as any).approachX : (typeof r.x === 'number' ? r.x : worldX);
+    const approachY = typeof (r as any).approachY === 'number' ? (r as any).approachY : (typeof r.y === 'number' ? r.y : worldY);
 
     const dx = worldX - c.x;
     const dy = worldY - c.y;
@@ -101,7 +103,7 @@ export function updateMineState(
         changeState('seekTask', 'mined mountain');
       }
     } else {
-      game.moveAlongPath(c, dt, { x: worldX, y: worldY }, interact);
+      game.moveAlongPath(c, dt, { x: approachX, y: approachY }, interact);
 
       if (!(r as any).lastCheckTime || c.t - (r as any).lastCheckTime > 3) {
         const lastX = (r as any).lastCheckX ?? c.x;

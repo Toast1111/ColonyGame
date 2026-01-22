@@ -1,7 +1,7 @@
 import type { WorkGiver, WorkGiverContext, WorkCandidate } from './types';
 import { isMountainTile, getVisibleOreAt } from '../terrain';
 import { T } from '../constants';
-import { snapToTileCenter } from '../utils/tileAlignment';
+import { snapToTileCenter, findNearbyAlignedPosition } from '../utils/tileAlignment';
 
 export const MiningWorkGiver: WorkGiver = {
   getCandidates(ctx: WorkGiverContext): WorkCandidate[] {
@@ -16,6 +16,14 @@ export const MiningWorkGiver: WorkGiver = {
     if (miningZones.length > 0) {
       let nearestVisibleOre: { gx: number; gy: number; x: number; y: number; dist: number } | null = null;
       let nearestEdgeTile: { gx: number; gy: number; x: number; y: number; dist: number } | null = null;
+
+      const isBlocked = (wx: number, wy: number) =>
+        game.navigationManager?.isBlocked?.(wx, wy) ?? (game as any).isBlocked?.(wx, wy) ?? false;
+
+      const getApproachPoint = (gx: number, gy: number) => {
+        const tileCenter = snapToTileCenter(gx * T, gy * T);
+        return findNearbyAlignedPosition(tileCenter.x, tileCenter.y, 2, isBlocked);
+      };
 
       const isEdgeTile = (gx: number, gy: number) => {
         const n = [
@@ -46,14 +54,15 @@ export const MiningWorkGiver: WorkGiver = {
             const tileKey = `${gx},${gy}`;
             if ((game as any).assignedTiles?.has(tileKey)) continue;
 
-            const tileCenter = snapToTileCenter(gx * T, gy * T);
-            const dist = Math.hypot(colonist.x - tileCenter.x, colonist.y - tileCenter.y);
+            const approach = getApproachPoint(gx, gy);
+            if (!approach) continue;
+            const dist = Math.hypot(colonist.x - approach.x, colonist.y - approach.y);
 
             // Prefer tiles with visible ore first
             const oreType = getVisibleOreAt(game.terrainGrid, gx, gy);
             if (oreType) {
               if (!nearestVisibleOre || dist < nearestVisibleOre.dist) {
-                nearestVisibleOre = { gx, gy, x: tileCenter.x, y: tileCenter.y, dist };
+                nearestVisibleOre = { gx, gy, x: approach.x, y: approach.y, dist };
               }
               continue;
             }
@@ -61,7 +70,7 @@ export const MiningWorkGiver: WorkGiver = {
             // Otherwise pick an edge tile to expose ore deeper in the mountain
             if (isEdgeTile(gx, gy)) {
               if (!nearestEdgeTile || dist < nearestEdgeTile.dist) {
-                nearestEdgeTile = { gx, gy, x: tileCenter.x, y: tileCenter.y, dist };
+                nearestEdgeTile = { gx, gy, x: approach.x, y: approach.y, dist };
               }
             }
           }
@@ -83,7 +92,7 @@ export const MiningWorkGiver: WorkGiver = {
             out.push({
               workType: 'Mining',
               task: 'mine',
-              target: { gx: chosen.gx, gy: chosen.gy, x: chosen.x, y: chosen.y },
+              target: { gx: chosen.gx, gy: chosen.gy, x: chosen.x, y: chosen.y, approachX: chosen.x, approachY: chosen.y },
               distance: chosen.dist,
               priority
             });

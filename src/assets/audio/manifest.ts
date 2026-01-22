@@ -336,7 +336,9 @@ export const AUDIO_MANIFEST = {
   ]),
 
   'music.day.ambient': variants('music/day', [
-    { name: 'Dust and Echoes', loop: true, volume: 0.4 }
+    { name: 'Dust and Echoes', loop: true, volume: 0.4 },
+    { name: 'Only Some Clouds', loop: true, volume: 0.4 },
+    { name: 'Zen Garden', loop: true, volume: 0.4 }
   ]),
 
   'music.raid.combat': variants('music/raid', [

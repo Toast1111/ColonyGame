@@ -377,7 +377,7 @@ export class Game {
   get touchUIEnabled(): boolean { return this.touchUIEnabledInternal; }
   
   // Debug flags (keep as is - not part of managers)
-  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false };
+  debug = { nav: false, paths: true, colonists: false, forceDesktopMode: false, terrain: false, performanceHUD: false, mining: false };
   // Systems
   public workGiverManager = new WorkGiverManager();
   public reservationManager = new ReservationManager();

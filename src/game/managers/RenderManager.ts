@@ -680,6 +680,11 @@ export class RenderManager {
       this.renderEnemyDebug();
     }
 
+    // Mining debug visualization
+    if ((game.debug as any).mining) {
+      this.renderMiningDebug();
+    }
+
     // Debug console (rendered last in world space)
     drawDebugConsole(game);
   }
@@ -972,6 +977,60 @@ export class RenderManager {
           ctx.fillText(`${distance.toFixed(1)}`, midX - 15, midY);
         }
       }
+    }
+
+    ctx.restore();
+  }
+
+  /**
+   * Render mining debug visualization (approach point vs. mountain tile)
+   */
+  private renderMiningDebug(): void {
+    const { game } = this;
+    const { ctx } = game;
+
+    const camera = game.camera;
+    const viewportPadding = 120;
+    const minX = camera.x - viewportPadding;
+    const minY = camera.y - viewportPadding;
+    const maxX = camera.x + (game.canvas.width / camera.zoom) + viewportPadding;
+    const maxY = camera.y + (game.canvas.height / camera.zoom) + viewportPadding;
+
+    const inViewport = (x: number, y: number) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+
+    ctx.save();
+    ctx.lineWidth = 2;
+
+    for (const c of game.colonists) {
+      if (!c.alive || c.task !== 'mine' || !c.target) continue;
+      const target = c.target as any;
+      if (target.gx === undefined || target.gy === undefined) continue;
+
+      const worldX = target.gx * T + T / 2;
+      const worldY = target.gy * T + T / 2;
+      const approachX = typeof target.approachX === 'number' ? target.approachX : (typeof target.x === 'number' ? target.x : worldX);
+      const approachY = typeof target.approachY === 'number' ? target.approachY : (typeof target.y === 'number' ? target.y : worldY);
+
+      if (!inViewport(worldX, worldY) && !inViewport(approachX, approachY) && !inViewport(c.x, c.y)) continue;
+
+      // Line from approach to tile center
+      ctx.strokeStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.moveTo(approachX, approachY);
+      ctx.lineTo(worldX, worldY);
+      ctx.stroke();
+
+      // Approach point (green)
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.arc(approachX, approachY, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Tile center (orange)
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(worldX, worldY, 4, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     ctx.restore();
