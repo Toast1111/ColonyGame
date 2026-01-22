@@ -10,6 +10,7 @@
  */
 
 import type { Game } from '../Game';
+import { playGameOverMusic, stopGameOverMusic } from '../audio/helpers/musicAudio';
 import { drawColonistAvatar } from '../render/sprites/colonistRenderer';
 
 interface Message {
@@ -128,7 +129,7 @@ export class GameOverScreen {
     this.creditsScrollY = 0;
     
     // Play sad music
-    this.game.audioManager.play('music.gameover.sad', { volume: 0.4, loop: true });
+    playGameOverMusic(this.game.audioManager);
     
     // Pause the game
     this.game.paused = true;
@@ -339,7 +340,7 @@ export class GameOverScreen {
   stop() {
     this.active = false;
     // Stop music if playing
-    this.game.audioManager.stop('music.gameover.sad');
+    stopGameOverMusic(this.game.audioManager);
   }
   
   /**

@@ -10,6 +10,7 @@
  */
 
 import type { Game } from '../Game';
+import { playUiClickPrimary, playUiPanelClose, playUiPanelOpen } from '../audio/helpers/uiAudio';
 import { HQ_POS } from '../constants';
 
 interface TutorialStep {
@@ -349,7 +350,7 @@ export class TutorialSystem {
     this.hideMobileSkipButton();
     
     // Play a confirmation sound
-    void this.game.audioManager.play('ui.panel.close').catch(() => {});
+    playUiPanelClose(this.game);
   }
   
   /**
@@ -454,7 +455,7 @@ export class TutorialSystem {
     }
     
     // Play step complete sound
-    void this.game.audioManager.play('ui.click.primary').catch(() => {});
+    playUiClickPrimary(this.game);
     
     // Move to next step
     this.currentStepIndex++;
@@ -492,7 +493,7 @@ export class TutorialSystem {
     this.hideMobileSkipButton();
     
     // Play success sound
-    void this.game.audioManager.play('ui.panel.open').catch(() => {});
+    playUiPanelOpen(this.game);
   }
   
   /**

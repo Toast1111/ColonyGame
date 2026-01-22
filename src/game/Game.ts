@@ -38,6 +38,7 @@ import { handleMobilePlacementClick, isClickOnGhost } from "./ui/mobilePlacement
 import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { initializeColonistHealth } from "./health/healthSystem";
+import { playUiClickPrimary, playUiClickSecondary, playUiDragEnd, playUiDragStart, playUiHotbarHover, playUiHover, playUiPanelOpen } from "./audio/helpers/uiAudio";
 import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
 import { medicalWorkGiver } from "./health/medicalWorkGiver";
 import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth } from './health/healthSystem';
@@ -859,7 +860,7 @@ export class Game {
         if (hoveredTab !== (this.uiManager as any).lastHoveredHotbarTab) {
           (this.uiManager as any).lastHoveredHotbarTab = hoveredTab;
           if (hoveredTab) {
-            void this.audioManager.play('ui.hotbar.hover').catch(() => {});
+            playUiHotbarHover(this);
           }
         }
       }
@@ -876,7 +877,7 @@ export class Game {
           }
           if (hoveredCategory !== (this.uiManager as any).lastHoveredBuildCategory) {
             (this.uiManager as any).lastHoveredBuildCategory = hoveredCategory;
-            if (hoveredCategory) { void this.audioManager.play('ui.hover').catch(() => {}); }
+            if (hoveredCategory) { playUiHover(this); }
           }
           // Building item hover
           let hoveredBuilding: any = null;
@@ -885,7 +886,7 @@ export class Game {
           }
           if (hoveredBuilding !== (this.uiManager as any).lastHoveredBuildingKey) {
             (this.uiManager as any).lastHoveredBuildingKey = hoveredBuilding;
-            if (hoveredBuilding) { void this.audioManager.play('ui.hover').catch(() => {}); }
+            if (hoveredBuilding) { playUiHover(this); }
           }
         }
       }
@@ -1021,10 +1022,10 @@ export class Game {
                 if (mx0 >= button.x && mx0 <= button.x + button.w && my0 >= button.y && my0 <= button.y + button.h) {
                   if (button.type === 'add' && this.selColonist && button.operation) {
                     this.queueOperation(this.selColonist, button.operation);
-                    this.audioManager.play('ui.click.primary');
+                    playUiClickPrimary(this);
                   } else if (button.type === 'cancel' && this.selColonist && button.operationId) {
                     this.cancelOperation(this.selColonist, button.operationId);
-                    this.audioManager.play('ui.click.secondary');
+                    playUiClickSecondary(this);
                   }
                   return;
                 }
@@ -1057,7 +1058,7 @@ export class Game {
             // Begin dragging the ghost instead of instant-confirm; double-click not needed
             this.pendingDragging = true; 
             // UI drag start SFX
-            void this.audioManager.play('ui.drag.start').catch(() => {});
+            playUiDragStart(this);
             return; 
           }
           const rot = p.rot || 0; const rotated = (rot === 90 || rot === 270);
@@ -1093,11 +1094,11 @@ export class Game {
               if (clickResult.type === 'category') {
                 // Category clicked - select it
                 this.uiManager.setSelectedBuildCategory(clickResult.value);
-                void this.audioManager.play('ui.click.primary').catch(() => {});
+                playUiClickPrimary(this);
               } else if (clickResult.type === 'building') {
                 // Building or zone clicked - select it and close menus
                 this.selectedBuild = clickResult.value;
-                void this.audioManager.play('ui.click.primary').catch(() => {});
+                playUiClickPrimary(this);
                 this.uiManager.setHotbarTab(null); // Close the build menu
                 
                 // Get name from either BUILD_TYPES or ZONE_TYPES
@@ -1129,7 +1130,7 @@ export class Game {
                   if (!rect.isSubmenu && item.submenu && item.submenu.length) {
                     if (enabled) {
                       menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
-                      if (menu.openSubmenu) { void this.audioManager.play('ui.panel.open').catch(() => {}); }
+                      if (menu.openSubmenu) { playUiPanelOpen(this); }
                     }
                     clickedOnMenu = true;
                     return;
@@ -1141,7 +1142,7 @@ export class Game {
                     } else if (menu.onSelect) {
                       menu.onSelect({ game: this, target: menu.target, item });
                     }
-                    void this.audioManager.play('ui.click.primary').catch(() => {});
+                    playUiClickPrimary(this);
                   }
 
                   hideContextMenuUI(this);
@@ -1178,7 +1179,7 @@ export class Game {
       if ((e as MouseEvent).button === 2) {
         if (this.pendingPlacement) {
           this.cancelPending();
-          void this.audioManager.play('ui.click.secondary').catch(() => {});
+          playUiClickSecondary(this);
           return;
         }
         this.mouse.rdown = true;
@@ -1231,7 +1232,7 @@ export class Game {
         this.mouse.down = false; this.lastPaintCell = null; 
         if (this.pendingDragging) {
           // UI drag end SFX
-          void this.audioManager.play('ui.drag.end').catch(() => {});
+          playUiDragEnd(this);
         }
         this.pendingDragging = false;
       }
@@ -1443,7 +1444,7 @@ export class Game {
           if (!this.pendingDragging) {
             this.pendingDragging = true;
             // UI drag start SFX (only play once per drag session)
-            void this.audioManager.play('ui.drag.start').catch(() => {});
+            playUiDragStart(this);
           }
           
           const def = BUILD_TYPES[this.pendingPlacement.key];
@@ -1668,7 +1669,7 @@ export class Game {
           this.confirmPending();
         } else {
           // Play drag end sound for touch dragging
-          void this.audioManager.play('ui.drag.end').catch(() => {});
+          playUiDragEnd(this);
         }
         // Clear drag state regardless
         this.pendingDragging = false;
@@ -1767,10 +1768,10 @@ export class Game {
         if (clickResult) {
           if (clickResult.type === 'category') {
             this.uiManager.setSelectedBuildCategory(clickResult.value);
-            void this.audioManager.play('ui.click.primary').catch(() => {});
+            playUiClickPrimary(this);
           } else if (clickResult.type === 'building') {
             this.selectedBuild = clickResult.value;
-            void this.audioManager.play('ui.click.primary').catch(() => {});
+              playUiClickPrimary(this);
             this.uiManager.setHotbarTab(null);
             this.toast('Selected: ' + BUILD_TYPES[clickResult.value].name);
           }
@@ -2469,7 +2470,7 @@ export class Game {
   if (!consoleOpen && this.keyPressed('r')) { 
     // Toggle research panel
     this.researchUI.toggle();
-    void this.audioManager.play('ui.panel.open');
+    playUiPanelOpen(this);
   }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }

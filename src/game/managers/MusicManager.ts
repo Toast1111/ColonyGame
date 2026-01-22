@@ -8,7 +8,8 @@
  * - Stop music when game is paused or ended
  */
 
-import { AudioManager, type AudioKey } from '../audio/AudioManager';
+import { AudioManager } from '../audio/AudioManager';
+import { playDayMusic, playRaidMusic, stopDayMusic, stopRaidMusic } from '../audio/helpers/musicAudio';
 
 export class MusicManager {
   private audioManager = AudioManager.getInstance();
@@ -33,23 +34,17 @@ export class MusicManager {
     if (shouldPlayRaidMusic && !this.raidMusicActive) {
       // Stop day music and start raid music
       if (this.dayMusicActive) {
-        this.audioManager.stop('music.day.ambient');
+        stopDayMusic(this.audioManager);
         this.dayMusicActive = false;
       }
       
-      this.audioManager.play('music.raid.combat', { 
-        volume: 0.6, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err) => {
-        console.warn('[MusicManager] Failed to start raid music:', err);
-      });
+      playRaidMusic(this.audioManager);
       this.raidMusicActive = true;
       console.log('[MusicManager] Started raid music - enemies attacking HQ');
       
     } else if (!shouldPlayRaidMusic && this.raidMusicActive) {
       // Stop raid music
-      this.audioManager.stop('music.raid.combat');
+      stopRaidMusic(this.audioManager);
       this.raidMusicActive = false;
       
       if (hasEnemies) {
@@ -64,19 +59,13 @@ export class MusicManager {
     
     if (shouldPlayDayMusic && !this.dayMusicActive) {
       // Start day music
-      this.audioManager.play('music.day.ambient', { 
-        volume: 0.4, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err) => {
-        console.warn('[MusicManager] Failed to start day music:', err);
-      });
+      playDayMusic(this.audioManager);
       this.dayMusicActive = true;
       console.log('[MusicManager] Started day music - peaceful daytime');
       
     } else if (!shouldPlayDayMusic && this.dayMusicActive) {
       // Stop day music
-      this.audioManager.stop('music.day.ambient');
+      stopDayMusic(this.audioManager);
       this.dayMusicActive = false;
       
       if (!isDay) {
@@ -94,11 +83,11 @@ export class MusicManager {
    */
   stopAllMusic(): void {
     if (this.raidMusicActive) {
-      this.audioManager.stop('music.raid.combat');
+      stopRaidMusic(this.audioManager);
       this.raidMusicActive = false;
     }
     if (this.dayMusicActive) {
-      this.audioManager.stop('music.day.ambient');
+      stopDayMusic(this.audioManager);
       this.dayMusicActive = false;
     }
   }

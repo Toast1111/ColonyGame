@@ -7,6 +7,7 @@
  */
 
 import type { Game } from '../../Game';
+import { playUiClickPrimary } from '../../audio/helpers/uiAudio';
 
 export interface ControlPanelRect {
   x: number;
@@ -164,7 +165,7 @@ export function handleControlPanelClick(
       mouseY <= rect.y + rect.h
     ) {
       // Play click sound
-      game.audioManager.play('ui.click.primary').catch(() => {});
+      playUiClickPrimary(game);
       
       switch (rect.action) {
         case 'pause':

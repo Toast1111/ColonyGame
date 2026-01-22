@@ -1,4 +1,5 @@
 import type { Game } from "../Game";
+import { playDayMusic, playGameOverMusic, playRaidMusic, stopDayMusic, stopGameOverMusic, stopRaidMusic } from "../audio/helpers/musicAudio";
 import { itemDatabase } from "../../data/itemDatabase";
 import { initializeColonistHealth, applyDamageToColonist } from "../health/healthSystem";
 import { addItemToInventory } from "../systems/buildingInventory";
@@ -1015,43 +1016,25 @@ Co-authored-by: Another User <another@example.com>
     
     if (action === "raid" || action === "combat") {
       // Test raid music
-      g.audioManager.play('music.raid.combat', { 
-        volume: 0.6, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err: any) => {
-        console.warn('[Debug] Failed to start raid music:', err);
-      });
+      playRaidMusic(g.audioManager);
       (g as any).raidMusicActive = true;
       return "started raid music (Raid Siren)";
     } else if (action === "day" || action === "ambient") {
       // Test day music
-      g.audioManager.play('music.day.ambient', { 
-        volume: 0.4, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err: any) => {
-        console.warn('[Debug] Failed to start day music:', err);
-      });
+      playDayMusic(g.audioManager);
       (g as any).dayMusicActive = true;
       return "started day music (Dust and Echoes)";
     } else if (action === "stop" || action === "off") {
       // Stop all music
-      g.audioManager.stop('music.raid.combat');
-      g.audioManager.stop('music.day.ambient');
-      g.audioManager.stop('music.gameover.sad');
+      stopRaidMusic(g.audioManager);
+      stopDayMusic(g.audioManager);
+      stopGameOverMusic(g.audioManager);
       (g as any).raidMusicActive = false;
       (g as any).dayMusicActive = false;
       return "stopped all music";
     } else if (action === "gameover" || action === "sad") {
       // Test game over music
-      g.audioManager.play('music.gameover.sad', { 
-        volume: 0.4, 
-        loop: true,
-        replaceExisting: true 
-      }).catch((err: any) => {
-        console.warn('[Debug] Failed to start game over music:', err);
-      });
+      playGameOverMusic(g.audioManager);
       return "started game over music (New Horizons)";
     } else if (action === "status") {
       // Show current music status

@@ -8,6 +8,7 @@ import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";
 import { executeSurgery, getHospitalBedBonus } from "../health/surgerySystem";
 import { startSurgeryAudio, startTendingAudio, stopMedicalAudio } from "../audio/helpers/medicalAudio";
+import { stopConstructionAudio, stopConstructionLoop } from "../audio/helpers/constructionAudio";
 import { isDoorBlocking, isDoorPassable, releaseDoorQueue, isNearDoor, requestDoorOpen, shouldWaitAtDoor, initializeDoor, findBlockingDoor } from "../systems/doorSystem";
 import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
@@ -380,11 +381,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     if (c.state !== newState) {
       // Stop any looping construction audio when leaving build state
       if (c.state === 'build' && newState !== 'build') {
-        if (c.activeConstructionAudio && (game as any).audioManager) {
-          (game as any).audioManager.stop(c.activeConstructionAudio);
-        }
-        c.lastConstructionAudioTime = undefined;
-        c.activeConstructionAudio = undefined;
+        stopConstructionAudio(game, c);
       }
 
       // Stop medical audio when leaving doctoring or surgery states
@@ -1751,11 +1748,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           c.target = null; 
           game.clearPath(c);
           // Stop any looping construction audio before clearing tracking
-          if (c.activeConstructionAudio && (game as any).audioManager) {
-            (game as any).audioManager.stop(c.activeConstructionAudio);
-          }
-          c.lastConstructionAudioTime = undefined;
-          c.activeConstructionAudio = undefined;
+          stopConstructionAudio(game, c);
           changeState('seekTask', 'building complete');
         }
         break; 
@@ -1781,11 +1774,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         c.target = null;
         game.clearPath(c);
         // Stop any looping construction audio before clearing tracking
-        if (c.activeConstructionAudio && (game as any).audioManager) {
-          (game as any).audioManager.stop(c.activeConstructionAudio);
-        }
-        c.lastConstructionAudioTime = undefined;
-        c.activeConstructionAudio = undefined;
+        stopConstructionAudio(game, c);
         changeState('seekTask', 'build timeout');
         break;
       }
@@ -1843,9 +1832,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           
           if (!c.lastConstructionAudioTime || (currentTime - c.lastConstructionAudioTime) >= audioInterval) {
             // Stop any previous looping construction audio before starting new one
-            if (c.activeConstructionAudio && (game as any).audioManager) {
-              (game as any).audioManager.stop(c.activeConstructionAudio);
-            }
+            stopConstructionLoop(game, c);
             
             // Play construction sound with per-clip volume control
             (game as any).playAudio?.(audioClip.key, { 
@@ -1872,9 +1859,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           
           // === CONSTRUCTION COMPLETION AUDIO ===
           // Stop any looping construction audio first
-          if (c.activeConstructionAudio && (game as any).audioManager) {
-            (game as any).audioManager.stop(c.activeConstructionAudio);
-          }
+          stopConstructionAudio(game, c);
           // Play completion sound when building finishes
           if (buildingDef) {
             const completeAudioClip = getConstructionCompleteAudio(b.kind, buildingDef);
@@ -1885,9 +1870,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
               listenerPosition: (game as any).audioManager?.getListenerPosition()
             });
           }
-          // Clear construction audio tracking
-          c.lastConstructionAudioTime = undefined;
-          c.activeConstructionAudio = undefined;
           // === END COMPLETION AUDIO ===
           
           if (b.kind === 'farm') { b.growth = 0; b.ready = false; }
