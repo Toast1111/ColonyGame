@@ -1,4 +1,5 @@
 import type { Game } from "../Game";
+import type { Resources } from "../types";
 import { playDayMusic, playGameOverMusic, playRaidMusic, stopDayMusic, stopGameOverMusic, stopRaidMusic } from "../audio/helpers/musicAudio";
 import { itemDatabase } from "../../data/itemDatabase";
 import { initializeColonistHealth, applyDamageToColonist } from "../health/healthSystem";
@@ -639,11 +640,12 @@ Co-authored-by: Another User <another@example.com>
         return `invalid resource type '${resourceType}'. Use: ${validTypes.join(', ')}`;
       }
       
-      const current = g.RES[resourceType as any] || 0;
+      const resourceKey = resourceType as keyof Resources;
+      const current = g.RES[resourceKey] || 0;
       if (amount > current) {
-        g.addResource(resourceType as any, amount - current);
+        g.addResource(resourceKey, amount - current);
       } else if (amount < current) {
-        g.consumeStockpileResource(resourceType as any, current - amount);
+        g.consumeStockpileResource(resourceKey, current - amount);
       }
       return `set ${resourceType} to ${amount}`;
     }

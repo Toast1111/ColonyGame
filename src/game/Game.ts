@@ -221,8 +221,8 @@ export class Game {
     return amount;
   }
 
-  private getStockpileResourceTotals(): Resources {
-    const totals: Resources = {
+  private getStockpileResourceTotals(): Required<Resources> {
+    const totals: Required<Resources> = {
       wood: 0,
       stone: 0,
       food: 0,
