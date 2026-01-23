@@ -42,9 +42,12 @@ export function updateMineState(
     const dx = worldX - c.x;
     const dy = worldY - c.y;
     const distance = Math.hypot(dx, dy);
+    const approachDx = approachX - c.x;
+    const approachDy = approachY - c.y;
+    const approachDistance = Math.hypot(approachDx, approachDy);
     const interact = T;
 
-    if (distance <= interact + 2) {
+    if (approachDistance <= interact + 2) {
       if (!checkIsMountainTile(game.terrainGrid, gx, gy)) {
         const tileKey = `${gx},${gy}`;
         if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
