@@ -62,7 +62,8 @@ export function updateMineState(
 
       if (!r.hp) {
         const idx = gy * game.terrainGrid.cols + gx;
-        const oreType = getOreTypeFromId(game.terrainGrid.ores[idx]);
+        const rawOreType = getOreTypeFromId(game.terrainGrid.ores[idx]);
+        const oreType = ORE_PROPERTIES[rawOreType] ? rawOreType : OreType.NONE;
         r.hp = ORE_PROPERTIES[oreType].hp;
       }
 
@@ -73,12 +74,13 @@ export function updateMineState(
         const oreType = mineMountainTile(game.terrainGrid, gx, gy);
 
         if (oreType) {
-          const oreProps = ORE_PROPERTIES[oreType];
+          const safeOreType = ORE_PROPERTIES[oreType] ? oreType : OreType.NONE;
+          const oreProps = ORE_PROPERTIES[safeOreType];
           const yieldMult = 1 + Math.min(0.5, miningLvl * 0.02);
           const amount = Math.round(oreProps.miningYield * yieldMult);
 
           let resourceType: ItemType;
-          switch (oreType) {
+          switch (safeOreType) {
             case OreType.COAL: resourceType = 'coal'; break;
             case OreType.COPPER: resourceType = 'copper'; break;
             case OreType.STEEL: resourceType = 'steel'; break;

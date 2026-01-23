@@ -266,7 +266,8 @@ export function getOreTypeId(type: OreType): number {
  * Get ore type from numeric ID
  */
 export function getOreTypeFromId(id: number): OreType {
-  return Object.values(OreType)[id] as OreType;
+  const values = Object.values(OreType) as OreType[];
+  return values[id] ?? OreType.NONE;
 }
 
 /**
