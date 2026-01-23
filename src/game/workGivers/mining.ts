@@ -42,8 +42,8 @@ export const MiningWorkGiver: WorkGiver = {
         // Scan the zone for mineable mountain tiles
         const startGX = Math.floor(zone.x / T);
         const startGY = Math.floor(zone.y / T);
-        const endGX = Math.floor((zone.x + zone.w) / T);
-        const endGY = Math.floor((zone.y + zone.h) / T);
+        const endGX = Math.floor((zone.x + zone.w - 1) / T);
+        const endGY = Math.floor((zone.y + zone.h - 1) / T);
 
         for (let gy = startGY; gy <= endGY; gy++) {
           for (let gx = startGX; gx <= endGX; gx++) {

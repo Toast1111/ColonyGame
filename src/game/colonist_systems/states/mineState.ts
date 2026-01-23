@@ -34,6 +34,7 @@ export function updateMineState(
 
   if (isMountainTile) {
     const { gx, gy } = r;
+    (r as any).isMountain = true;
     const worldX = gx * T + T / 2;
     const worldY = gy * T + T / 2;
     const approachX = typeof (r as any).approachX === 'number' ? (r as any).approachX : (typeof r.x === 'number' ? r.x : worldX);
@@ -68,10 +69,31 @@ export function updateMineState(
         const rawOreType = getOreTypeFromId(game.terrainGrid.ores[idx]);
         const oreType = ORE_PROPERTIES[rawOreType] ? rawOreType : OreType.NONE;
         r.hp = ORE_PROPERTIES[oreType].hp;
+        (r as any).maxHp = ORE_PROPERTIES[oreType].hp;
+      } else if (!(r as any).maxHp) {
+        const idx = gy * game.terrainGrid.cols + gx;
+        const rawOreType = getOreTypeFromId(game.terrainGrid.ores[idx]);
+        const oreType = ORE_PROPERTIES[rawOreType] ? rawOreType : OreType.NONE;
+        (r as any).maxHp = Math.max(r.hp, ORE_PROPERTIES[oreType].hp);
       }
 
       r.hp -= 12 * dt * workMult;
       if (c.skills) grantSkillXP(c, 'Mining', 5 * dt, c.t || 0);
+
+      // Mining audio (per-colonist)
+      const currentTime = c.t || 0;
+      const audioInterval = 1.2 + Math.random() * 0.6; // 1.2-1.8 seconds
+      if (!(c as any).lastMiningAudioTime || (currentTime - (c as any).lastMiningAudioTime) >= audioInterval) {
+        (game as any).playAudio?.('buildings.construct.stone.hammer', {
+          category: 'buildings',
+          volume: 0.75,
+          rng: Math.random,
+          position: { x: worldX, y: worldY },
+          listenerPosition: (game as any).audioManager?.getListenerPosition(),
+          replaceExisting: false
+        });
+        (c as any).lastMiningAudioTime = currentTime;
+      }
 
       if (r.hp <= 0) {
         const oreType = mineMountainTile(game.terrainGrid, gx, gy);
