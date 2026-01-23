@@ -14,3 +14,7 @@ export { updateSmithingState } from './smithingState';
 export { updateEquipmentState, findBestWeaponUpgrade } from './equipmentState';
 export { updateMineState } from './mineState';
 export { updateRestingState, updateSleepState, updateGoToSleepState } from './restingSleepState';
+export { updateResearchState } from './researchState';
+export { updateIdleState } from './idleState';
+export { updateMoveState } from './moveState';
+export { updateGuardState } from './guardState';

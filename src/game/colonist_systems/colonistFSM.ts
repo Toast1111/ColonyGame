@@ -14,7 +14,7 @@ import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile } from "../terrain";
-import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateSleepState } from "./states";
+import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateSleepState, updateResearchState, updateIdleState, updateMoveState, updateGuardState } from "./states";
 import { canInterruptColonist, forceInterruptIntent, shouldEnterDecisionPhase, getColonistIntent, setColonistIntent, updateColonistIntent, hasIntent, createWorkIntent } from "../systems/colonistIntent";
 
 
@@ -1543,196 +1543,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'idle': {
-      // Idle colonists can choose to interact with nearby objects like beds
-      
-      // Check for nearby spatial interactions when colonist is idle
-      if (!c.target && c.stateSince > 1.0) {  // Wait 1 second before checking interactions
-        const nearbyBuildings = (game.buildings as Building[]).filter(b => {
-          if (!b.done || b.kind !== 'bed') return false;
-          const distance = Math.hypot(c.x - (b.x + b.w/2), c.y - (b.y + b.h/2));
-          return distance <= 40; // Check beds within 40 pixels
-        });
-        
-        if (nearbyBuildings.length > 0) {
-          // If colonist is tired and there's a bed nearby, consider using it
-          if ((c.fatigue || 0) > 50 && !c.inside) {
-            const bed = nearbyBuildings[0];
-            const bedCenter = { x: bed.x + bed.w/2, y: bed.y + bed.h/2 };
-            const distance = Math.hypot(c.x - bedCenter.x, c.y - bedCenter.y);
-            
-            if (distance <= 20) {
-              // Close enough to interact - get in bed
-              c.inside = bed;
-              c.x = bedCenter.x;
-              c.y = bedCenter.y;
-              (c as any).sleepFacing = Math.PI / 2;
-              
-              // Update reservation system
-              if (game.reservationManager) {
-                game.reservationManager.insideCounts.set(bed, (game.reservationManager.insideCounts.get(bed) || 0) + 1);
-              }
-              
-              changeState('resting', 'chose to use bed');
-              break;
-            } else {
-              // Move toward bed
-              c.target = bedCenter;
-            }
-          } else if (c.inside && (c.fatigue || 0) < 30) {
-            // In bed but not tired - consider getting out
-            const bed = c.inside;
-            if (bed && bed.kind === 'bed') {
-              // Get out of bed
-              c.inside = null;
-              c.x = bed.x + bed.w/2 + 20;
-              c.y = bed.y + bed.h/2;
-              (c as any).sleepFacing = undefined;
-              
-              // Update reservation system
-              if (game.reservationManager) {
-                const cur = (game.reservationManager.insideCounts.get(bed) || 1) - 1;
-                if (cur <= 0) game.reservationManager.insideCounts.delete(bed);
-                else game.reservationManager.insideCounts.set(bed, cur);
-              }
-              
-              changeState('seekTask', 'got out of bed');
-              break;
-            }
-          }
-        }
-      }
-      
-      const dst = c.target;
-      if (!dst) {
-        // Create a random idle target if none exists
-        c.target = { x: c.x + (Math.random() - 0.5) * 160, y: c.y + (Math.random() - 0.5) * 160 };
-        break;
-      }
-
-      // Safety: if carrying a floor item but somehow in idle, finish the haul by dropping and rescheduling
-      if ((c as any).carryingItem) {
-        const payload = (c as any).carryingItem;
-        const rim = (game as any).itemManager;
-        if (rim && payload.qty > 0) {
-          rim.dropItems(payload.type, payload.qty, { x: c.x, y: c.y });
-        }
-        (c as any).carryingItem = null;
-        c.taskData = null;
-        c.task = null;
-        c.target = null;
-        game.clearPath(c);
-        changeState('seekTask', 'reset idle with carried item');
-        break;
-      }
-
-      // If we’ve been idling too long, re-seek a task to avoid lingering
-      if (c.stateSince > 15) {
-        c.task = null;
-        c.target = null;
-        game.clearPath(c);
-        changeState('seekTask', 'idle timeout');
-        break;
-      }
-      
-      if (game.moveAlongPath(c, dt, dst, 8)) {
-        c.task = null;
-        c.target = null;
-        game.clearPath(c);
-        changeState('seekTask', 'reached target');
-      }
+      updateIdleState(c, game, dt, changeState);
       break;
     }
     case 'move': {
-      const intent = c.commandIntent;
-      const target = c.target as any;
-      if (!intent || !target) {
-        if (intent !== 'guard') {
-          c.task = null;
-          c.target = null;
-          c.taskData = null;
-          c.commandData = null;
-          c.guardAnchor = null;
-        }
-        if (intent !== 'guard') {
-          c.commandIntent = null;
-        }
-        changeState('seekTask', 'move missing context');
-        break;
-      }
-
-      const targetIsBuilding = typeof target.x === 'number' && typeof target.y === 'number' && target.w != null && target.h != null;
-      const destination = targetIsBuilding
-        ? { x: (target as Building).x + (target as Building).w / 2, y: (target as Building).y + (target as Building).h / 2 }
-        : { x: target.x, y: target.y };
-      const arriveRadius = intent === 'guard'
-        ? 14
-        : targetIsBuilding ? Math.max((target as Building).w, (target as Building).h) / 2 + c.r + 12 : 14;
-
-      if (game.moveAlongPath(c, dt, destination, arriveRadius)) {
-        const clearCommand = () => {
-          c.task = null;
-          c.target = null;
-          c.taskData = null;
-          c.commandIntent = null;
-          c.commandData = null;
-          c.guardAnchor = null;
-          game.clearPath && game.clearPath(c);
-        };
-
-        switch (intent) {
-          case 'goto': {
-            let entered = false;
-            if (targetIsBuilding && game.tryEnterBuilding) {
-              if (!game.buildingHasSpace || game.buildingHasSpace(target, c)) {
-                entered = game.tryEnterBuilding(c, target);
-              }
-            }
-            if (entered) {
-              clearCommand();
-              changeState('resting', 'entered requested building');
-            } else {
-              clearCommand();
-              changeState('seekTask', 'reached ordered location');
-            }
-            break;
-          }
-          case 'rest': {
-            let entered = false;
-            if (targetIsBuilding && game.tryEnterBuilding) {
-              entered = game.tryEnterBuilding(c, target);
-            }
-            clearCommand();
-            changeState('resting', entered ? 'resting in assigned shelter' : 'resting at ordered spot');
-            break;
-          }
-          case 'medical':
-          case 'seekMedical': {
-            let entered = false;
-            if (targetIsBuilding && game.tryEnterBuilding) {
-              entered = game.tryEnterBuilding(c, target);
-            }
-            (c as any).needsMedical = true;
-            clearCommand();
-            changeState('beingTreated', entered ? 'entered medical facility' : 'awaiting treatment');
-            break;
-          }
-          case 'guard': {
-            c.guardAnchor = { x: destination.x, y: destination.y };
-            c.commandIntent = 'guard';
-            c.commandData = c.commandData ?? null;
-            c.target = { x: destination.x, y: destination.y };
-            c.taskData = null;
-            game.clearPath && game.clearPath(c);
-            changeState('guard', 'holding position');
-            break;
-          }
-          default: {
-            clearCommand();
-            changeState('seekTask', 'unknown move intent');
-            break;
-          }
-        }
-      }
+      updateMoveState(c, game, dt, changeState);
       break;
     }
     case 'build': {
@@ -2414,84 +2229,12 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     }
     
     case 'guard': {
-      const anchor = c.guardAnchor;
-      if (!anchor) {
-        c.task = null;
-        c.commandIntent = null;
-        c.commandData = null;
-        changeState('seekTask', 'guard anchor missing');
-        break;
-      }
-
-      const distance = Math.hypot(c.x - anchor.x, c.y - anchor.y);
-      if (distance > 18) {
-        game.moveAlongPath(c, dt, anchor, 10);
-      } else {
-        const dx = anchor.x - c.x;
-        const dy = anchor.y - c.y;
-        if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
-          c.direction = Math.atan2(-dy, -dx);
-        }
-      }
-
-      const commandStillActive = c.playerCommand?.issued && (!c.playerCommand.expires || (c.t || 0) < c.playerCommand.expires);
-      if (!commandStillActive) {
-        c.task = null;
-        c.target = null;
-        c.commandIntent = null;
-        c.commandData = null;
-        c.guardAnchor = null;
-        changeState('seekTask', 'guard command expired');
-      }
+      updateGuardState(c, game, dt, changeState);
       break;
     }
     
     case 'research': {
-      // Research state - colonist works at research bench
-      const bench = c.target as Building;
-      if (!bench || bench.kind !== 'research_bench' || !bench.done) {
-        // Research bench was destroyed or doesn't exist
-        c.target = null;
-        game.clearPath(c);
-        changeState('seekTask', 'research bench no longer available');
-        break;
-      }
-      
-      // Check if research is still active
-      if (!game.researchManager?.getCurrentResearch()) {
-        c.target = null;
-        changeState('seekTask', 'no active research');
-        break;
-      }
-      
-      const pt = { x: bench.x + bench.w / 2, y: bench.y + bench.h / 2 };
-      const distance = Math.hypot(c.x - pt.x, c.y - pt.y);
-      
-      // Move to research bench
-      if (distance > 20) {
-        game.moveAlongPath(c, dt, pt, 20);
-        break;
-      }
-      
-      // At research bench - do research work
-      if (game.pointInRect(c, bench)) {
-        // Generate research points based on colonist's research skill (or use base rate)
-        const researchSpeed = 5; // Base research points per second
-        const points = researchSpeed * dt;
-        
-        // Add progress to research manager
-        const completed = game.researchManager.addProgress(points);
-        
-        if (completed) {
-          // Research completed!
-          game.msg(`Research completed!`, 'success');
-          c.target = null;
-          changeState('seekTask', 'research completed');
-        }
-      } else {
-        // Not in correct position, try to move there
-        game.moveAlongPath(c, dt, pt, 0);
-      }
+      updateResearchState(c, game, dt, changeState);
       break;
     }
     
