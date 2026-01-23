@@ -60,7 +60,7 @@ export class ColonistNavigationManager {
       }
       // Simulate eating
       colonist.hunger = Math.max(0, (colonist.hunger || 0) - 30);
-      this.game.RES.food = Math.max(0, this.game.RES.food - 1);
+      this.game.consumeStockpileResource('food', 1);
       this.game.msg(`${colonist.profile?.name || 'Colonist'} eating food`, 'good');
     } else {
       this.game.msg('No food available', 'warn');

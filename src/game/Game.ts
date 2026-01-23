@@ -6,6 +6,7 @@ import { makeGrid } from "../core/pathfinding";
 import { makeTerrainGrid, type TerrainGrid, generateMountains, getTerrainTypeId, getTerrainTypeFromId, TerrainType, isMountainTile, mineMountainTile, type OreType, ORE_PROPERTIES } from "./terrain";
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, Message, Resources, Particle, MiningZone } from "./types";
+import type { ItemType } from "./types/items";
 import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { getZoneDef } from "./zones";
@@ -186,15 +187,175 @@ export class Game {
   }
 
   addResource(type: keyof Resources, amount: number): number {
-    const capacity = this.getStorageCapacity();
-    const actualAmount = this.resourceSystem.addResource(type, amount, capacity);
-    
-    // Warn if storage full
-    if (actualAmount === 0 && amount > 0) {
-      this.msg(`Storage full! Cannot store more ${String(type)}`, 'warn');
+    if (!this.itemManager) {
+      const capacity = this.getStorageCapacity();
+      const actualAmount = this.resourceSystem.addResource(type, amount, capacity);
+      if (actualAmount === 0 && amount > 0) {
+        this.msg(`Storage full! Cannot store more ${String(type)}`, 'warn');
+      }
+      return actualAmount;
     }
-    
-    return actualAmount;
+
+    const resourceToItem: Record<keyof Resources, ItemType | undefined> = {
+      wood: 'wood',
+      stone: 'stone',
+      food: 'food',
+      medicine: 'medicine',
+      herbal: 'healroot',
+      wheat: 'wheat',
+      bread: 'bread',
+      coal: 'coal',
+      copper: 'copper',
+      steel: 'steel',
+      silver: 'silver',
+      gold: 'gold'
+    } as any;
+
+    const itemType = resourceToItem[type];
+    if (!itemType) return 0;
+
+    const best = this.itemManager.findBestStorageLocation(itemType);
+    const dropPos = best?.position || { x: HQ_POS.x, y: HQ_POS.y };
+    this.itemManager.dropItems(itemType, amount, dropPos, { source: 'resource' });
+    this.syncResourcesFromStockpiles();
+    return amount;
+  }
+
+  private getStockpileResourceTotals(): Resources {
+    const totals: Resources = {
+      wood: 0,
+      stone: 0,
+      food: 0,
+      medicine: 0,
+      herbal: 0,
+      wheat: 0,
+      bread: 0,
+      coal: 0,
+      copper: 0,
+      steel: 0,
+      silver: 0,
+      gold: 0
+    };
+
+    if (!this.itemManager) return totals;
+
+    const items = this.itemManager.floorItems.getAllItems();
+    for (const item of items) {
+      const zone = this.itemManager.stockpiles.getZoneAtPosition(item.position);
+      if (!zone) continue;
+      if (!(zone.settings.allowAll || zone.allowedItems.has(item.type))) continue;
+
+      switch (item.type) {
+        case 'wood': totals.wood += item.quantity; break;
+        case 'stone': totals.stone += item.quantity; break;
+        case 'food': totals.food += item.quantity; break;
+        case 'medicine': totals.medicine += item.quantity; break;
+        case 'healroot': totals.herbal += item.quantity; break;
+        case 'wheat': totals.wheat += item.quantity; break;
+        case 'bread': totals.bread += item.quantity; break;
+        case 'coal': totals.coal += item.quantity; break;
+        case 'copper': totals.copper += item.quantity; break;
+        case 'steel': totals.steel += item.quantity; break;
+        case 'silver': totals.silver += item.quantity; break;
+        case 'gold': totals.gold += item.quantity; break;
+        default: break;
+      }
+    }
+
+    return totals;
+  }
+
+  syncResourcesFromStockpiles(): void {
+    const totals = this.getStockpileResourceTotals();
+    for (const key of Object.keys(totals) as (keyof Resources)[]) {
+      this.resourceSystem.setResource(key, totals[key] || 0);
+    }
+  }
+
+  private materializeResourcesToStockpiles(): void {
+    if (!this.itemManager) return;
+
+    const resources = this.resourceSystem.getAllResources();
+    const resourceToItem: Record<keyof Resources, ItemType | undefined> = {
+      wood: 'wood',
+      stone: 'stone',
+      food: 'food',
+      medicine: 'medicine',
+      herbal: 'healroot',
+      wheat: 'wheat',
+      bread: 'bread',
+      coal: 'coal',
+      copper: 'copper',
+      steel: 'steel',
+      silver: 'silver',
+      gold: 'gold'
+    } as any;
+
+    for (const key of Object.keys(resources) as (keyof Resources)[]) {
+      const qty = resources[key] || 0;
+      const itemType = resourceToItem[key];
+      if (!itemType || qty <= 0) continue;
+
+      const best = this.itemManager.findBestStorageLocation(itemType);
+      const dropPos = best?.position || { x: HQ_POS.x, y: HQ_POS.y };
+      this.itemManager.dropItems(itemType, qty, dropPos, { source: 'starting' });
+      this.resourceSystem.setResource(key, 0);
+    }
+
+    this.syncResourcesFromStockpiles();
+  }
+
+  consumeStockpileResource(type: keyof Resources, amount: number): number {
+    if (!this.itemManager || amount <= 0) return 0;
+
+    const itemTypeMap: Record<keyof Resources, ItemType | undefined> = {
+      wood: 'wood',
+      stone: 'stone',
+      food: 'food',
+      medicine: 'medicine',
+      herbal: 'healroot',
+      wheat: 'wheat',
+      bread: 'bread',
+      coal: 'coal',
+      copper: 'copper',
+      steel: 'steel',
+      silver: 'silver',
+      gold: 'gold'
+    } as any;
+
+    const itemType = itemTypeMap[type];
+    if (!itemType) return 0;
+
+    let remaining = amount;
+    const items = this.itemManager.floorItems.getAllItems();
+    for (const item of items) {
+      if (item.type !== itemType) continue;
+      const zone = this.itemManager.stockpiles.getZoneAtPosition(item.position);
+      if (!zone || !(zone.settings.allowAll || zone.allowedItems.has(item.type))) continue;
+
+      const take = Math.min(item.quantity, remaining);
+      const taken = this.itemManager.pickupItems(item.id, take)?.taken || 0;
+      remaining -= taken;
+      if (remaining <= 0) break;
+    }
+
+    const consumed = amount - remaining;
+    if (consumed > 0) this.syncResourcesFromStockpiles();
+    return consumed;
+  }
+
+  consumeStockpileCost(cost?: Partial<Resources>): boolean {
+    if (!cost) return true;
+    if (!hasCost(this.RES, cost)) return false;
+
+    for (const key of Object.keys(cost) as (keyof Resources)[]) {
+      const needed = cost[key] || 0;
+      if (needed > 0) {
+        const taken = this.consumeStockpileResource(key, needed);
+        if (taken < needed) return false;
+      }
+    }
+    return true;
   }
 
   // Removed old properties - now using systems via getters
@@ -446,8 +607,7 @@ export class Game {
     this.rebuildNavGridImmediate(); // Use immediate rebuild during initialization
     
     // Initialize systems with starting resources and time
-    this.resourceSystem.reset(); // Sets starting resources
-    this.timeSystem.reset(); // Sets day 1, tDay 0
+    // Handled inside newGame() to keep stockpile-backed resources consistent.
     
     // Initialize research system
     this.researchManager = new ResearchManager();
@@ -2072,13 +2232,22 @@ export class Game {
   this.colonists.length = this.enemies.length = this.trees.length = this.rocks.length = this.buildings.length = this.bullets.length = this.messages.length = 0;
   this.miningZones.length = 0; // Clear mining zones
   this.reservationManager.clearAll(); // Clear all reservations via manager
+
+  if (this.itemManager) {
+    // Clear existing stockpile zones
+    const zones = this.itemManager.stockpiles.getAllZones();
+    for (const zone of zones) this.itemManager.removeStockpileZone(zone.id);
+
+    // Clear all floor items
+    const items = this.itemManager.floorItems.getAllItems();
+    for (const item of items) this.itemManager.floorItems.removeItem(item.id);
+  }
   
   // Clear colonist sprite cache on new game to ensure fresh sprite composition
   colonistSpriteCache.clear();
   
-  this.RES.wood = 50; this.RES.stone = 30; this.RES.food = 20; 
-  // Initialize ore resources
-  this.RES.coal = 0; this.RES.copper = 0; this.RES.steel = 0; this.RES.silver = 0; this.RES.gold = 0;
+  this.resourceSystem.reset();
+  this.timeSystem.reset();
   
   this.day = 1; this.tDay = 0; this.fastForward = 1; this.camera.zoom = 1; this.camera.x = HQ_POS.x - (this.canvas.width / this.DPR) / (2 * this.camera.zoom); this.camera.y = HQ_POS.y - (this.canvas.height / this.DPR) / (2 * this.camera.zoom);
     
@@ -2157,6 +2326,7 @@ export class Game {
       'Food Storage'
     );
     this.itemManager.updateStockpileItems(foodZone.id, ['food', 'wheat', 'bread']);
+    this.materializeResourcesToStockpiles();
     this.msg("Welcome! Build farms before night, then turrets.");
     
     // Start tutorial for first-time players
@@ -2359,7 +2529,7 @@ export class Game {
   nextDay() {
     // Day already incremented by TimeSystem
     (this as any).waveSpawnedForDay = false;
-    let dead = 0; for (let i = 0; i < this.colonists.length; i++) { if (this.RES.food > 0) { this.RES.food -= 1; } else { dead++; if (this.colonists[i]) { (this.colonists[i] as any).alive = false; } } }
+    let dead = 0; for (let i = 0; i < this.colonists.length; i++) { if (this.RES.food > 0) { this.consumeStockpileResource('food', 1); } else { dead++; if (this.colonists[i]) { (this.colonists[i] as any).alive = false; } } }
     if (dead > 0) { 
       // Track dead colonists for game over screen before removing them
       const deadColonists = this.colonists.filter(c => !c.alive);
@@ -2378,7 +2548,7 @@ export class Game {
     }
   const tent = this.buildings.find(b => b.kind === 'tent' && b.done);
   const cap = this.getPopulationCap();
-    if (tent && this.colonists.length < cap && this.RES.food >= 15) { this.RES.food -= 15; this.spawnColonist({ x: HQ_POS.x + rand(-20, 20), y: HQ_POS.y + rand(-20, 20) }); this.msg('A new colonist joined! (-15 food)', 'info'); }
+    if (tent && this.colonists.length < cap && this.RES.food >= 15) { this.consumeStockpileResource('food', 15); this.spawnColonist({ x: HQ_POS.x + rand(-20, 20), y: HQ_POS.y + rand(-20, 20) }); this.msg('A new colonist joined! (-15 food)', 'info'); }
     if (this.day > 20) { this.win(); }
   }
 
@@ -2659,7 +2829,7 @@ export class Game {
     // Clean up dead enemies
     if (e.hp <= 0) { 
       this.enemies.splice(i, 1); 
-      if (Math.random() < .5) this.RES.food += 1;
+      if (Math.random() < .5) this.addResource('food', 1);
       this.adaptiveTickRate.removeEntity(enemyId);
     }
   }
@@ -2701,7 +2871,7 @@ export class Game {
           const totalFoodNeeded = foodReserveNeeded + recruitmentCost;
           
           if (this.colonists.length < cap && this.RES.food >= totalFoodNeeded) {
-            this.RES.food -= 15;
+            this.consumeStockpileResource('food', 15);
             const spawnPos = this.centerOf(b);
             this.spawnColonist({ 
               x: spawnPos.x + (Math.random() - 0.5) * 40, 
@@ -2758,6 +2928,7 @@ export class Game {
     
     // Update floor item/stockpile systems
     if (this.itemManager) this.itemManager.update();
+    this.syncResourcesFromStockpiles();
 
     // Update tree growing zones (growth progression)
     if (this.treeGrowingManager) {

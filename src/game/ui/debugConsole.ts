@@ -609,13 +609,13 @@ Co-authored-by: Another User <another@example.com>
     
     if (action === "unlimited" || action === "god" || action === "infinite") {
       // Set to very high amounts
-      g.resourceSystem.setResource('wood', 999999);
-      g.resourceSystem.setResource('stone', 999999);
-      g.resourceSystem.setResource('food', 999999);
-      g.resourceSystem.setResource('medicine', 999999);
-      g.resourceSystem.setResource('herbal', 999999);
-      g.resourceSystem.setResource('wheat', 999999);
-      g.resourceSystem.setResource('bread', 999999);
+      g.addResource('wood', 999999);
+      g.addResource('stone', 999999);
+      g.addResource('food', 999999);
+      g.addResource('medicine', 999999);
+      g.addResource('herbal', 999999);
+      g.addResource('wheat', 999999);
+      g.addResource('bread', 999999);
       return "resources set to unlimited (999999 each)";
     } 
     else if (action === "add") {
@@ -627,7 +627,7 @@ Co-authored-by: Another User <another@example.com>
         return `invalid resource type '${resourceType}'. Use: ${validTypes.join(', ')}`;
       }
       
-      g.resourceSystem.setResource(resourceType as any, g.resourceSystem.getResource(resourceType as any) + amount);
+      g.addResource(resourceType as any, amount);
       return `added ${amount} ${resourceType}`;
     }
     else if (action === "set") {
@@ -639,11 +639,16 @@ Co-authored-by: Another User <another@example.com>
         return `invalid resource type '${resourceType}'. Use: ${validTypes.join(', ')}`;
       }
       
-      g.resourceSystem.setResource(resourceType as any, amount);
+      const current = g.RES[resourceType as any] || 0;
+      if (amount > current) {
+        g.addResource(resourceType as any, amount - current);
+      } else if (amount < current) {
+        g.consumeStockpileResource(resourceType as any, current - amount);
+      }
       return `set ${resourceType} to ${amount}`;
     }
     else if (action === "show" || action === "list" || action === "") {
-      const res = g.resourceSystem.getResourcesRef();
+      const res = g.RES;
       return `Wood:${res.wood} Stone:${res.stone} Food:${res.food} Medicine:${res.medicine} Herbal:${res.herbal} Wheat:${res.wheat} Bread:${res.bread}`;
     }
     else {

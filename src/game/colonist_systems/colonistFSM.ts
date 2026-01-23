@@ -722,7 +722,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (target === 'RES') {
           // Take from global resources instantly if nearby HQ is not required
           if ((game.RES?.medicine || 0) > 0) {
-            game.RES.medicine = Math.max(0, (game.RES.medicine || 0) - 1);
+            game.consumeStockpileResource?.('medicine', 1);
             const inv = c.inventory!;
             const stack = inv.items.find((it: any) => it.defName === 'MedicineKit' || it.type === 'medicine');
             if (stack) stack.quantity += 1; else inv.items.push({ defName: 'MedicineKit', name: 'MedicineKit', quantity: 1 });
@@ -1243,13 +1243,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const isPantry = closestBuilding.kind === 'pantry';
           if (isPantry && (closestBuilding.breadStored || 0) > 0 && (game.RES.bread || 0) > 0) {
             // Pick up bread from pantry
-            game.RES.bread = (game.RES.bread || 0) - 1;
-            closestBuilding.breadStored = Math.max(0, (closestBuilding.breadStored || 0) - 1);
-            (c as any).carryingFood = 'bread';
+            const taken = game.consumeStockpileResource?.('bread', 1) || 0;
+            if (taken > 0) {
+              closestBuilding.breadStored = Math.max(0, (closestBuilding.breadStored || 0) - 1);
+              (c as any).carryingFood = 'bread';
+            }
           } else if ((game.RES.food || 0) > 0) {
             // Pick up regular food from storage
-            game.RES.food = Math.max(0, game.RES.food - 1);
-            (c as any).carryingFood = 'food';
+            const taken = game.consumeStockpileResource?.('food', 1) || 0;
+            if (taken > 0) {
+              (c as any).carryingFood = 'food';
+            }
           }
           
           // Update job to reflect doctor now has food
@@ -1303,6 +1307,48 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const hasBread = (game.RES.bread || 0) > 0;
       const hasFood = (game.RES.food || 0) > 0;
       const canEat = hasBread || hasFood;
+
+      // Prefer eating actual floor items in stockpile zones
+      const rim = (game as any).itemManager;
+      if (rim) {
+        const items = rim.floorItems.getAllItems();
+        let closestItem: any = null;
+        let closestDist = Infinity;
+        for (const item of items) {
+          if (item.type !== 'food' && item.type !== 'bread') continue;
+          const zone = rim.stockpiles.getZoneAtPosition(item.position);
+          if (!zone || !(zone.settings.allowAll || zone.allowedItems.has(item.type))) continue;
+          const dist = Math.hypot(c.x - item.position.x, c.y - item.position.y);
+          if (dist < closestDist) {
+            closestDist = dist;
+            closestItem = item;
+          }
+        }
+
+        if (closestItem) {
+          const reachDist = c.r + 12;
+          if (closestDist <= reachDist) {
+            const taken = rim.pickupItems(closestItem.id, 1)?.taken || 0;
+            if (taken <= 0) {
+              changeState('seekTask', 'food missing');
+              break;
+            }
+
+            if (closestItem.type === 'bread') {
+              c.hunger = Math.max(0, (c.hunger || 0) - 80);
+              c.hp = Math.min(100, c.hp + 5);
+            } else {
+              c.hunger = Math.max(0, (c.hunger || 0) - 60);
+              c.hp = Math.min(100, c.hp + 2.5);
+            }
+            game.syncResourcesFromStockpiles?.();
+            changeState('seekTask', 'finished eating');
+          } else {
+            game.moveAlongPath(c, dt, { x: closestItem.position.x, y: closestItem.position.y }, reachDist);
+          }
+          break;
+        }
+      }
       
       // Debug: Log when colonist is in eat state (reduced frequency)
       if (Math.random() < 0.01) {
@@ -1351,13 +1397,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (c.stateSince > 1.0) {
           // Prefer bread over regular food
           if (hasBread) {
-            game.RES.bread = (game.RES.bread || 0) - 1;
+            game.consumeStockpileResource?.('bread', 1);
             c.hunger = Math.max(0, (c.hunger || 0) - 80); // Bread is more filling
             c.hp = Math.min(100, c.hp + 5);
             changeState('seekTask', 'ate bread without building');
             console.log(`Colonist ate bread without building! Bread remaining: ${game.RES.bread}`);
           } else {
-            game.RES.food -= 1;
+            game.consumeStockpileResource?.('food', 1);
             c.hunger = Math.max(0, (c.hunger || 0) - 60);
             c.hp = Math.min(100, c.hp + 2.5);
             changeState('seekTask', 'ate food without building');
@@ -1395,13 +1441,13 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             const isPantry = closestBuilding.kind === 'pantry';
             if (isPantry && (game.RES.bread || 0) > 0) {
               console.log(`Colonist successfully ate bread from pantry`);
-              game.RES.bread = (game.RES.bread || 0) - 1;
+              game.consumeStockpileResource?.('bread', 1);
               closestBuilding.breadStored = Math.max(0, (closestBuilding.breadStored || 0) - 1);
               c.hunger = Math.max(0, (c.hunger || 0) - 80); // Bread is more filling
               c.hp = Math.min(100, c.hp + 5); // Bread restores more HP
             } else {
               console.log(`Colonist successfully ate food from storage`);
-              game.RES.food = Math.max(0, game.RES.food - 1);
+              game.consumeStockpileResource?.('food', 1);
               c.hunger = Math.max(0, (c.hunger || 0) - 60);
               c.hp = Math.min(100, c.hp + 2.5);
             }
@@ -2010,22 +2056,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       if (payload && payload.qty > 0) {
         // Physically drop on the floor at the stockpile
         rim.dropItems(payload.type, payload.qty, dest);
-
-        // If dropped into a valid stockpile, also credit tracked resources so HUD counts reflect availability
-        try {
-          const zone = rim.stockpiles?.getZoneAtPosition?.(dest);
-          const accepts = zone && (zone.settings.allowAll || zone.allowedItems.has(payload.type));
-          if (accepts) {
-            const map: Record<string, 'wood'|'stone'|'food'|'medicine'|undefined> = {
-              wood: 'wood', stone: 'stone', food: 'food', medicine: 'medicine'
-            };
-            const resKey = map[payload.type];
-            if (resKey) {
-              // Add to global resources (capacity-checked for wood/stone/food; medicine not capacity-limited)
-              (game as any).addResource(resKey, payload.qty);
-            }
-          }
-        } catch {}
         game.msg(`${c.profile?.name || 'Colonist'} hauled ${payload.qty} ${payload.type}`, 'good');
       }
       c.task = null;

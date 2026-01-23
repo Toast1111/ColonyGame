@@ -1,4 +1,4 @@
-import { BUILD_TYPES, hasCost, makeBuilding, payCost, refundCost } from "../buildings";
+import { BUILD_TYPES, hasCost, makeBuilding } from "../buildings";
 import { T, WORLD } from "../constants";
 import { clamp } from "../../core/utils";
 import { setFloorRect, FloorType, getFloorTypeId, getFloorTypeFromId, isMountainTile } from "../terrain";
@@ -84,7 +84,7 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
     }
     
     // Pay cost immediately (resources are reserved for construction)
-    payCost(game.RES, def.cost);
+    game.consumeStockpileCost(def.cost);
     
     // Create a construction marker building
     // This will be built by colonists, then converted to a floor
@@ -110,7 +110,7 @@ export function tryPlaceNow(game: Game, t: keyof typeof BUILD_TYPES, wx: number,
   if (rot) { (b as any).rot = rot; if (rot === 90 || rot === 270) { const tmp = b.w; b.w = b.h; b.h = tmp; } }
   if (!canPlace(game, b as any, b.x, b.y)) { game.toast("Can't place here"); return; }
   if (!hasCost(game.RES, def.cost)) { game.toast('Not enough resources'); return; }
-  payCost(game.RES, def.cost);
+  game.consumeStockpileCost(def.cost);
   if (b.kind !== 'path') {
     for (let i = game.buildings.length - 1; i >= 0; i--) {
       const pb = game.buildings[i];
@@ -231,7 +231,7 @@ export function paintPathAtMouse(game: Game, force = false) {
     if (!hasCost(game.RES, cost)) return;
     
     // Pay cost immediately (resources are reserved for construction)
-    payCost(game.RES, cost);
+    game.consumeStockpileCost(cost);
     
     // Create construction marker
     const floorBuilding = makeBuilding(buildType as any, wx + 1, wy + 1);
@@ -277,7 +277,7 @@ export function paintWallAtMouse(game: Game, force = false) {
     if (exists) return;
     if (!hasCost(game.RES, BUILD_TYPES['wall'].cost)) return;
     if (!canPlace(game, b as any, b.x, b.y)) return;
-    payCost(game.RES, BUILD_TYPES['wall'].cost);
+    game.consumeStockpileCost(BUILD_TYPES['wall'].cost);
     game.buildings.push(b);
   };
   if (game.lastPaintCell == null) {
@@ -310,12 +310,15 @@ export function eraseInRect(game: Game, rect: { x: number; y: number; w: number;
       if (def && def.cost) {
         const completionPercent = b.done ? 1.0 : 1.0 - (b.buildLeft / def.build);
         const refundPercent = b.done ? 0.75 : Math.max(0.5, 1.0 - completionPercent * 0.5);
-        refundCost(game.RES, def.cost, refundPercent);
-        
-        // Track total refunded
-        if (def.cost.wood) totalRefunded.wood += Math.floor((def.cost.wood || 0) * refundPercent);
-        if (def.cost.stone) totalRefunded.stone += Math.floor((def.cost.stone || 0) * refundPercent);
-        if (def.cost.food) totalRefunded.food += Math.floor((def.cost.food || 0) * refundPercent);
+
+        for (const key of Object.keys(def.cost) as (keyof typeof def.cost)[]) {
+          const amount = Math.floor((def.cost[key] || 0) * refundPercent);
+          if (amount <= 0) continue;
+          game.addResource(key as any, amount);
+          if (key === 'wood') totalRefunded.wood += amount;
+          if (key === 'stone') totalRefunded.stone += amount;
+          if (key === 'food') totalRefunded.food += amount;
+        }
       }
       
       game.buildings.splice(i, 1); 
@@ -407,13 +410,12 @@ export function cancelOrErase(game: Game) {
         // Full refund if not started (buildLeft === build time), partial if in progress
         const completionPercent = b.done ? 1.0 : 1.0 - (b.buildLeft / def.build);
         const refundPercent = b.done ? 0.75 : Math.max(0.5, 1.0 - completionPercent * 0.5);
-        refundCost(game.RES, def.cost, refundPercent);
-        
-        if (refundPercent >= 0.75) {
-          game.msg(`Building removed (${Math.floor(refundPercent * 100)}% refund)`);
-        } else {
-          game.msg(`Building removed (${Math.floor(refundPercent * 100)}% refund)`);
+
+        for (const key of Object.keys(def.cost) as (keyof typeof def.cost)[]) {
+          const amount = Math.floor((def.cost[key] || 0) * refundPercent);
+          if (amount > 0) game.addResource(key as any, amount);
         }
+        game.msg(`Building removed (${Math.floor(refundPercent * 100)}% refund)`);
       } else {
         game.msg('Building removed');
       }

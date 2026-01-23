@@ -129,7 +129,7 @@ export function updateMineState(
       }
     }
 
-    if (stateSince > 20) {
+    if (stateSince > 20 && distance > interact + 4) {
       const tileKey = `${gx},${gy}`;
       if ((game as any).assignedTiles?.has(tileKey)) (game as any).assignedTiles.delete(tileKey);
       c.task = null;
@@ -187,7 +187,7 @@ export function updateMineState(
     console.log(`Moving toward rock: target=(${r.x.toFixed(1)}, ${r.y.toFixed(1)}), distance=${distance.toFixed(1)}`);
   }
 
-  if (rockStateSince > 15) {
+  if (rockStateSince > 15 && distance > interact + slack + 0.1) {
     console.log(`Colonist stuck mining for ${rockStateSince.toFixed(1)}s, abandoning`);
     if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
     c.task = null;

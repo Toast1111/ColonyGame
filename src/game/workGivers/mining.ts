@@ -98,11 +98,7 @@ export const MiningWorkGiver: WorkGiver = {
             });
             return out; // Return immediately - mountain mining takes precedence
           } else {
-            // Mountain tile is unreachable - mark as assigned to prevent retrying
-            const tileKey = `${chosen.gx},${chosen.gy}`;
-            if ((game as any).assignedTiles) {
-              (game as any).assignedTiles.add(tileKey);
-            }
+            // Mountain tile is unreachable for now - skip without blacklisting
             console.log(`[Mining] Mountain tile at (${chosen.gx},${chosen.gy}) is unreachable, skipping`);
           }
         } catch (error) {

@@ -8,6 +8,16 @@ export function updateRestingState(
   changeState: (state: import('../../types').ColonistState, reason?: string) => void,
   opts: { fatigueExitThreshold: number }
 ) {
+  const hasEdible = (game.RES?.food || 0) > 0 || (game.RES?.bread || 0) > 0;
+
+  if (c.inside && (!c.inside.done || !(game.buildings as Building[]).includes(c.inside))) {
+    if (game.leaveBuilding) game.leaveBuilding(c);
+    else c.inside = null;
+    (c as any).sleepFacing = undefined;
+    changeState('seekTask', 'resting bed invalid');
+    return;
+  }
+
   // Ensure we are logically inside a bed if we're lying on one (handles teleports or desyncs)
   if (!c.inside) {
     const bedHere = (game.buildings as Building[]).find((b) => b.kind === 'bed' && b.done && game.pointInRect({ x: c.x, y: c.y }, b));
@@ -47,12 +57,17 @@ export function updateRestingState(
   const recoveredFatigue = fatigue <= opts.fatigueExitThreshold;
   const healedEnough = missingHp < 4 || !(c.health?.injuries?.length);
   const starving = hunger > 88;
+  const hungry = hunger > 85;
   const stateSince = c.stateSince ?? 0;
   const timedOut = stateSince > 120 && !waitingForDoctor;
 
-  if ((starving || (recoveredFatigue && healedEnough) || timedOut) && (!waitingForDoctor || starving)) {
+  if ((starving || (hungry && hasEdible) || (recoveredFatigue && healedEnough) || timedOut) && (!waitingForDoctor || starving)) {
     if (game.leaveBuilding) game.leaveBuilding(c);
-    changeState('seekTask', starving ? 'left bed to eat' : 'rested enough');
+    if (hungry && hasEdible) {
+      changeState('eat', 'left bed to eat');
+    } else {
+      changeState('seekTask', starving ? 'left bed to eat' : 'rested enough');
+    }
   }
 }
 
@@ -74,7 +89,8 @@ export function updateSleepState(
   let sleepTarget = (c as any).sleepTarget as Building | undefined;
   const needMedical = (c.health?.injuries?.length || 0) > 0;
 
-  if (!sleepTarget || !game.buildingHasSpace(sleepTarget, c)) {
+  if (!sleepTarget || !sleepTarget.done || !(game.buildings as Building[]).includes(sleepTarget) || !game.buildingHasSpace(sleepTarget, c)) {
+    if (sleepTarget && game.releaseSleepReservation) game.releaseSleepReservation(c);
     sleepTarget = game.buildingManager?.findBestRestBuilding(c as any, { requireMedical: false, preferMedical: needMedical, allowShelterFallback: true }) || undefined;
     if (sleepTarget && game.reserveSleepSpot) {
       game.reserveSleepSpot(c, sleepTarget);
@@ -138,7 +154,8 @@ export function updateGoToSleepState(
   let sleepTarget = (c as any).sleepTarget as Building | undefined;
   const needMedical = (c.health?.injuries?.length || 0) > 0;
 
-  if (!sleepTarget || !game.buildingHasSpace(sleepTarget, c)) {
+  if (!sleepTarget || !sleepTarget.done || !(game.buildings as Building[]).includes(sleepTarget) || !game.buildingHasSpace(sleepTarget, c)) {
+    if (sleepTarget && game.releaseSleepReservation) game.releaseSleepReservation(c);
     sleepTarget = game.buildingManager?.findBestRestBuilding(c as any, { requireMedical: false, preferMedical: needMedical, allowShelterFallback: true }) || undefined;
     if (sleepTarget && game.reserveSleepSpot) {
       game.reserveSleepSpot(c, sleepTarget);
