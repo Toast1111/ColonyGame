@@ -44,7 +44,7 @@ export function updateResearchState(
 
     if (completed) {
       // Research completed!
-      game.msg(`Research completed!`, 'success');
+      game.msg(`Research completed!`, 'good');
       c.target = null;
       changeState('seekTask', 'research completed');
     }

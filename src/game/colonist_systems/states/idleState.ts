@@ -8,7 +8,7 @@ export function updateIdleState(
   changeState: (state: import('../../types').ColonistState, reason?: string) => void
 ) {
   // Idle colonists can choose to interact with nearby objects like beds
-  if (!c.target && c.stateSince > 1.0) {  // Wait 1 second before checking interactions
+  if (!c.target && (c.stateSince ?? 0) > 1.0) {  // Wait 1 second before checking interactions
     const nearbyBuildings = (game.buildings as Building[]).filter(b => {
       if (!b.done || b.kind !== 'bed') return false;
       const distance = Math.hypot(c.x - (b.x + b.w/2), c.y - (b.y + b.h/2));
@@ -24,18 +24,11 @@ export function updateIdleState(
 
         if (distance <= 20) {
           // Close enough to interact - get in bed
-          c.inside = bed;
-          c.x = bedCenter.x;
-          c.y = bedCenter.y;
-          (c as any).sleepFacing = Math.PI / 2;
-
-          // Update reservation system
-          if (game.reservationManager) {
-            game.reservationManager.insideCounts.set(bed, (game.reservationManager.insideCounts.get(bed) || 0) + 1);
+          const entered = game.tryEnterBuilding ? game.tryEnterBuilding(c, bed) : false;
+          if (entered) {
+            changeState('resting', 'chose to use bed');
+            return;
           }
-
-          changeState('resting', 'chose to use bed');
-          return;
         } else {
           // Move toward bed
           c.target = bedCenter;
@@ -45,18 +38,14 @@ export function updateIdleState(
         const bed = c.inside;
         if (bed && bed.kind === 'bed') {
           // Get out of bed
-          c.inside = null;
+          if (game.leaveBuilding) {
+            game.leaveBuilding(c);
+          } else {
+            c.inside = null;
+          }
           c.x = bed.x + bed.w/2 + 20;
           c.y = bed.y + bed.h/2;
           (c as any).sleepFacing = undefined;
-
-          // Update reservation system
-          if (game.reservationManager) {
-            const cur = (game.reservationManager.insideCounts.get(bed) || 1) - 1;
-            if (cur <= 0) game.reservationManager.insideCounts.delete(bed);
-            else game.reservationManager.insideCounts.set(bed, cur);
-          }
-
           changeState('seekTask', 'got out of bed');
           return;
         }
@@ -88,7 +77,7 @@ export function updateIdleState(
   }
 
   // If we’ve been idling too long, re-seek a task to avoid lingering
-  if (c.stateSince > 15) {
+  if ((c.stateSince ?? 0) > 15) {
     c.task = null;
     c.target = null;
     game.clearPath(c);
