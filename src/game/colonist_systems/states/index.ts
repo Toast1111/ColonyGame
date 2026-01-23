@@ -18,3 +18,4 @@ export { updateResearchState } from './researchState';
 export { updateIdleState } from './idleState';
 export { updateMoveState } from './moveState';
 export { updateGuardState } from './guardState';
+export { updateBuildState } from './buildState';
