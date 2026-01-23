@@ -169,6 +169,7 @@ export class Game {
   private touchZoneLastPos: { x: number; y: number } | null = null;
   private skipNextTapAfterLongPress = false;
   private defaultStockpileSize = 64;
+  private miningAssignmentCleanupTimer = 0;
   private justUnlockedFollow = false; // Flag to prevent bio panel close after unlocking follow
   // lastInputWasTouch moved to inputManager (see getter/setter below)
 
@@ -392,6 +393,48 @@ export class Game {
   set messages(value: Message[]) { this.state.messages = value; }
   
   get RES(): Resources { return this.resourceSystem.getResourcesRef(); }
+
+  private releaseColonistReservations(c: Colonist): void {
+    if (c.target) {
+      const target = c.target as any;
+      if (target.gx !== undefined && target.gy !== undefined) {
+        this.reservationManager.releaseMountainTile(target.gx, target.gy);
+      } else {
+        this.reservationManager.releaseTarget(target);
+      }
+    }
+    if (c.reservedBuildFor) {
+      this.reservationManager.releaseBuildReservation(c);
+    }
+  }
+
+  private cleanupMiningAssignments(): void {
+    const assigned = this.reservationManager.getAssignedTiles();
+    if (assigned.size === 0) return;
+
+    const active = new Set<string>();
+    for (const col of this.colonists) {
+      if (!col.alive) continue;
+      if (col.task === 'mine' && (col.target as any)?.gx !== undefined) {
+        const t = col.target as any;
+        active.add(`${t.gx},${t.gy}`);
+      }
+    }
+
+    for (const tileKey of Array.from(assigned)) {
+      if (active.has(tileKey)) continue;
+      const [gxStr, gyStr] = tileKey.split(',');
+      const gx = Number(gxStr);
+      const gy = Number(gyStr);
+      if (!Number.isFinite(gx) || !Number.isFinite(gy) || !isMountainTile(this.terrainGrid, gx, gy)) {
+        assigned.delete(tileKey);
+        continue;
+      }
+
+      // No active miner targeting this tile, release it
+      assigned.delete(tileKey);
+    }
+  }
   
   get day(): number { return this.timeSystem.getDay(); }
   set day(value: number) { this.timeSystem.setDay(value); }
@@ -2533,6 +2576,7 @@ export class Game {
     if (dead > 0) { 
       // Track dead colonists for game over screen before removing them
       const deadColonists = this.colonists.filter(c => !c.alive);
+      for (const c of deadColonists) this.releaseColonistReservations(c);
       this.state.deadColonists.push(...deadColonists);
       this.colonists = this.colonists.filter(c => c.alive); 
       this.msg(`${dead} colonist(s) starved`, 'bad'); 
@@ -2575,6 +2619,7 @@ export class Game {
     for (let i = this.colonists.length - 1; i >= 0; i--) {
       const c = this.colonists[i];
       if (!c.alive) {
+        this.releaseColonistReservations(c);
         this.releaseSleepReservation(c);
         if (c.inside) this.leaveBuilding(c);
         // Track dead colonists for game over screen before removing them
@@ -2933,6 +2978,13 @@ export class Game {
     // Update tree growing zones (growth progression)
     if (this.treeGrowingManager) {
       this.treeGrowingManager.updateGrowth(this.tDay * 24 * 3600); // Convert game days to seconds
+    }
+
+    // Periodically clean up stale mining reservations
+    this.miningAssignmentCleanupTimer -= dt;
+    if (this.miningAssignmentCleanupTimer <= 0) {
+      this.cleanupMiningAssignments();
+      this.miningAssignmentCleanupTimer = 5;
     }
 
     // Process queued navmesh rebuilds at END of frame (deferred rebuild system)
