@@ -56,6 +56,79 @@ export function updateRestingState(
   }
 }
 
+export function updateSleepState(
+  c: Colonist,
+  game: Game,
+  dt: number,
+  changeState: (state: import('../../types').ColonistState, reason?: string) => void,
+  opts: { fatigueExitThreshold: number }
+) {
+  const inBed = !!c.inside && (c.inside as any).kind === 'bed';
+  const sleepingOutside = (c as any).sleepOutside === true;
+
+  if (inBed || sleepingOutside) {
+    updateRestingState(c, game, dt, changeState, opts);
+    return;
+  }
+
+  let sleepTarget = (c as any).sleepTarget as Building | undefined;
+  const needMedical = (c.health?.injuries?.length || 0) > 0;
+
+  if (!sleepTarget || !game.buildingHasSpace(sleepTarget, c)) {
+    sleepTarget = game.buildingManager?.findBestRestBuilding(c as any, { requireMedical: false, preferMedical: needMedical, allowShelterFallback: true }) || undefined;
+    if (sleepTarget && game.reserveSleepSpot) {
+      game.reserveSleepSpot(c, sleepTarget);
+    }
+    (c as any).sleepTarget = sleepTarget;
+  }
+
+  if (!sleepTarget) {
+    (c as any).sleepOutside = true;
+    updateRestingState(c, game, dt, changeState, opts);
+    return;
+  }
+
+  const center = game.centerOf(sleepTarget);
+  const arrive = Math.max(sleepTarget.w, sleepTarget.h) / 2 + 18;
+  const atTarget = Math.hypot(c.x - center.x, c.y - center.y) <= arrive ||
+    game.pointInRect({ x: c.x, y: c.y }, sleepTarget);
+
+  if (atTarget) {
+    const entered = game.tryEnterBuilding ? game.tryEnterBuilding(c, sleepTarget) : false;
+    if (entered) {
+      (c as any).sleepOutside = false;
+      updateRestingState(c, game, dt, changeState, opts);
+      return;
+    }
+    if (game.releaseSleepReservation) game.releaseSleepReservation(c);
+    (c as any).sleepTarget = undefined;
+    (c as any).sleepOutside = true;
+    updateRestingState(c, game, dt, changeState, opts);
+    return;
+  }
+
+  if (game.moveAlongPath(c, dt, center, arrive)) {
+    const entered = game.tryEnterBuilding ? game.tryEnterBuilding(c, sleepTarget) : false;
+    if (entered) {
+      (c as any).sleepOutside = false;
+    } else {
+      if (game.releaseSleepReservation) game.releaseSleepReservation(c);
+      (c as any).sleepTarget = undefined;
+      (c as any).sleepOutside = true;
+    }
+    updateRestingState(c, game, dt, changeState, opts);
+    return;
+  }
+
+  const stateSince = c.stateSince ?? 0;
+  if (stateSince > 40) {
+    if (game.releaseSleepReservation) game.releaseSleepReservation(c);
+    (c as any).sleepTarget = undefined;
+    (c as any).sleepOutside = true;
+    updateRestingState(c, game, dt, changeState, opts);
+  }
+}
+
 export function updateGoToSleepState(
   c: Colonist,
   game: Game,

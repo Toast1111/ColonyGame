@@ -14,7 +14,7 @@ import { itemDatabase } from "../../data/itemDatabase";
 import { getConstructionAudio, getConstructionCompleteAudio } from "../audio/buildingAudioMap";
 import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile } from "../terrain";
-import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateGoToSleepState } from "./states";
+import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateSleepState } from "./states";
 import { canInterruptColonist, forceInterruptIntent, shouldEnterDecisionPhase, getColonistIntent, setColonistIntent, updateColonistIntent, hasIntent, createWorkIntent } from "../systems/colonistIntent";
 
 
@@ -323,8 +323,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
     const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply personality modifier
-    // Only reduce fatigue when actually inside a building or in the resting state, NOT when just seeking sleep
-    if (c.inside || c.state === 'resting') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
+    // Only reduce fatigue when actually inside a building or in a sleep/rest state, NOT when just seeking sleep
+    if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
     else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
   } else {
     // Godmode: keep hunger and fatigue at 0
@@ -394,6 +394,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         game.releaseSleepReservation && game.releaseSleepReservation(c);
         (c as any).sleepTarget = undefined;
         (c as any).sleepTargetLockUntil = 0;
+        (c as any).sleepOutside = false;
       }
       // Clear work task/target when changing to non-work states to prevent navigation conflicts
       if (newState === 'sleep' || newState === 'flee' || newState === 'heal' || newState === 'goToSleep' || 
@@ -444,7 +445,6 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       // Apply a short soft-lock to reduce thrashing for some states
       if (newState === 'eat') c.softLockUntil = c.t + 1.5;
-      else if (newState === 'goToSleep') c.softLockUntil = c.t + 2.0;
       else if (newState === 'sleep') c.softLockUntil = c.t + 2.0;
       else if (newState === 'resting') c.softLockUntil = c.t + 1.0;
       else c.softLockUntil = undefined;
@@ -525,11 +525,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     
     // Fatigue-driven sleep intent with hysteresis
     const fatigue = c.fatigue || 0;
-    const restingInBed = c.state === 'resting' && !!c.inside && (c.inside as any).kind === 'bed';
+    const restingInBed = (c.state === 'resting' || c.state === 'sleep') && !!c.inside && (c.inside as any).kind === 'bed';
     if (!c.isDrafted && !danger) {
       if (fatigue >= fatigueEnterThreshold && !restingInBed) {
         const prioBoost = Math.min(12, Math.floor(fatigue - fatigueEnterThreshold));
-        set('goToSleep', 70 + prioBoost, 'fatigued');
+        set('sleep', 70 + prioBoost, 'fatigued');
       }
     }
     
@@ -556,8 +556,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         case 'doctoring': return 95; // High priority for active medical work
         case 'guard': return 94; // Hold position command from player
         case 'heal': return 90;
-        case 'sleep': return 80; // Sleep in progress (already in bed)
-        case 'goToSleep': return 55; // Base priority at 60% fatigue, scales to 95+ at 100% fatigue with night bonus
+        case 'sleep': return 75; // Unified sleep state (navigation + rest)
         case 'eat': return 65;
         case 'cooking': return 42; // Cooking is productive work
         case 'stonecutting': return 42; // Stonecutting is productive work
@@ -1475,12 +1474,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       break;
     }
     case 'sleep': {
-      // Route through goToSleep for bed selection
-      changeState('goToSleep', 'sleep intent');
+      updateSleepState(c, game, dt, changeState, { fatigueExitThreshold });
       break;
     }
     case 'goToSleep': {
-      updateGoToSleepState(c, game, dt, changeState);
+      changeState('sleep', 'sleep intent');
       break;
     }
     case 'seekTask': {

@@ -146,7 +146,7 @@ export function createBuildingInteractionZones(building: Building): InteractionZ
           {
             id: 'enter_bed',
             name: 'Get in Bed',
-            taskTypes: ['rest', 'sleep', 'goToSleep', 'idle'],  // Allow any colonist to choose to use bed
+            taskTypes: ['rest', 'sleep', 'idle'],  // Allow any colonist to choose to use bed
             canExecute: (c: Colonist) => !c.inside,  // Can only get in if not already inside
             execute: (c: Colonist, dt: number) => {
               // Simple bed entry - just set inside and position, and enter resting state

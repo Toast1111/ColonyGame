@@ -13,4 +13,4 @@ export { updateCoolingState } from './coolingState';
 export { updateSmithingState } from './smithingState';
 export { updateEquipmentState, findBestWeaponUpgrade } from './equipmentState';
 export { updateMineState } from './mineState';
-export { updateRestingState, updateGoToSleepState } from './restingSleepState';
+export { updateRestingState, updateSleepState, updateGoToSleepState } from './restingSleepState';
