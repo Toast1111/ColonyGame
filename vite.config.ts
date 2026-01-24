@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 // If deploying to GitHub Pages, set BASE_PATH to the repo name
 // Example: const BASE_PATH = '/ColonyGame/';
@@ -8,6 +9,7 @@ const BASE_PATH = process.env.BASE_PATH || './';
 
 export default defineConfig({
   base: BASE_PATH,
+  plugins: [react()],
   worker: {
     format: 'es',
   },

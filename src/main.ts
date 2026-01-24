@@ -2,6 +2,7 @@ import { Game } from "./game/Game";
 import { BUILD_TYPES } from "./game/buildings";
 import { ImageAssets } from "./assets/images";
 import { initializeUI, linkGameToUI } from "./game/ui/bootstrap";
+import "./react/main";
 
 // Initialize game and load assets
 async function initGame() {
