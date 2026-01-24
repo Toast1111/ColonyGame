@@ -31,8 +31,8 @@ export function drawTopBar(
   data: TopBarData,
   game: any
 ) {
-  const PAD = game.scale(game.isTouch ? 16 : 12);
-  const BARH = game.scale(game.isTouch ? 60 : 46);
+  const PAD = game.scale(game.isTouch ? 18 : 14);
+  const BARH = game.scale(game.isTouch ? 70 : 54);
   const W = canvas.width;
 
   const gradient = ctx.createLinearGradient(0, 0, 0, BARH);
@@ -46,17 +46,17 @@ export function drawTopBar(
   ctx.strokeRect(0.5, 0.5, W - 1, BARH - 1);
 
   ctx.save();
-  ctx.font = game.getScaledFont(game.isTouch ? 18 : 15, '600');
+  ctx.font = game.getScaledFont(game.isTouch ? 21 : 18, '600');
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
 
   const pillHeight = getPillHeight(game);
   const baseY = (BARH - pillHeight) / 2;
-  const gap = game.scale(game.isTouch ? 12 : 10);
-  const resourceWidth = game.scale(game.isTouch ? 150 : 128);
-  const storageWidth = game.scale(game.isTouch ? 190 : 168);
-  const populationWidth = game.scale(game.isTouch ? 210 : 182);
-  const timeWidth = game.scale(game.isTouch ? 220 : 190);
+  const gap = game.scale(game.isTouch ? 14 : 12);
+  const resourceWidth = game.scale(game.isTouch ? 170 : 150);
+  const storageWidth = game.scale(game.isTouch ? 220 : 190);
+  const populationWidth = game.scale(game.isTouch ? 240 : 210);
+  const timeWidth = game.scale(game.isTouch ? 250 : 220);
 
   const leftItems: PillRenderOptions[] = [];
 
@@ -131,7 +131,7 @@ interface PillRenderOptions {
 }
 
 function getPillHeight(game: any): number {
-  return game.scale(game.isTouch ? 36 : 28);
+  return game.scale(game.isTouch ? 42 : 34);
 }
 
 function measurePillWidth(
@@ -139,9 +139,9 @@ function measurePillWidth(
   options: PillRenderOptions,
   game: any
 ): number {
-  const padX = game.scale(game.isTouch ? 16 : 14);
-  const colorBarWidth = game.scale(game.isTouch ? 10 : 8);
-  const barGap = game.scale(game.isTouch ? 8 : 6);
+  const padX = game.scale(game.isTouch ? 18 : 16);
+  const colorBarWidth = game.scale(game.isTouch ? 11 : 9);
+  const barGap = game.scale(game.isTouch ? 9 : 7);
   const baseWidth = ctx.measureText(options.text).width + padX * 2 + colorBarWidth + barGap;
   return Math.max(options.minWidth ?? 0, Math.ceil(baseWidth));
 }
@@ -168,15 +168,15 @@ function drawPill(
   options: PillRenderOptions,
   game: any
 ): number {
-  const padX = game.scale(game.isTouch ? 16 : 14);
-  const colorBarWidth = game.scale(game.isTouch ? 10 : 8);
-  const barGap = game.scale(game.isTouch ? 8 : 6);
+  const padX = game.scale(game.isTouch ? 18 : 16);
+  const colorBarWidth = game.scale(game.isTouch ? 11 : 9);
+  const barGap = game.scale(game.isTouch ? 9 : 7);
   const height = getPillHeight(game);
   const width = measurePillWidth(ctx, options, game);
   const rectX = x;
   const rectY = y;
 
-  const radius = Math.min(height / 2, game.scale(game.isTouch ? 12 : 10));
+  const radius = Math.min(height / 2, game.scale(game.isTouch ? 14 : 12));
   drawRoundedRect(ctx, rectX, rectY, width, height, radius);
   ctx.fillStyle = '#0f172acc';
   ctx.fill();

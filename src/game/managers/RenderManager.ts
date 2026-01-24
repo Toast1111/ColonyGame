@@ -16,8 +16,6 @@ import { drawMobilePlacementUI } from '../ui/mobilePlacement';
 import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
 import { drawWorkPriorityPanel } from '../ui/panels/workPriorityPanel';
 import { drawBuildingInventoryPanel } from '../ui/panels/buildingInventoryPanel';
-import { drawModernHotbar, type HotbarTabRect } from '../ui/hud/modernHotbar';
-import { drawModernBuildMenu, type BuildMenuRects } from '../ui/hud/modernBuildMenu';
 import { drawControlPanel, type ControlPanelRect } from '../ui/hud/controlPanel';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
@@ -27,6 +25,7 @@ import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/panels/performanceHUD';
 import type { Colonist, Building, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
+import { setHotbarState } from '../../react';
 
 export class RenderManager {
   // Performance optimization flags
@@ -1125,22 +1124,24 @@ export class RenderManager {
       storage: { used: storageUsed, max: storageMax }
     }, game);
 
-    // Modern Hotbar (replaces old building selection hotbar)
-    const hotbarRects = drawModernHotbar(ctx, canvas, game.uiManager.activeHotbarTab, game);
-    
-    // Store hotbar click regions for the new system
-    game.modernHotbarRects = hotbarRects;
+    // Modern Hotbar/Build Menu now rendered via React
+    setHotbarState({
+      activeTab: game.uiManager.activeHotbarTab,
+      selectedBuildCategory: game.uiManager.selectedBuildCategory,
+      selectedBuild: game.selectedBuild ?? null,
+      isTouch: !!game.isTouch,
+      canvasWidth: canvas.width / game.DPR,
+      canvasHeight: canvas.height / game.DPR
+    });
+    game.modernHotbarRects = [];
+    (game as any).modernBuildMenuRects = null;
 
     // Control Panel (speed, pause, zoom, delete) - always visible
     const controlPanelRects = drawControlPanel(ctx, canvas, game);
     game.controlPanelRects = controlPanelRects;
 
     // Show panel based on active tab
-    if (game.uiManager.activeHotbarTab === 'build') {
-      // Build menu - two-panel category system
-      const buildMenuRects = drawModernBuildMenu(ctx, canvas, game.uiManager.selectedBuildCategory, game);
-      game.modernBuildMenuRects = buildMenuRects;
-    } else if (game.uiManager.activeHotbarTab === 'work') {
+    if (game.uiManager.activeHotbarTab === 'work') {
       // Work priority panel - modal overlay, no container needed
       drawWorkPriorityPanel(ctx, game.colonists, canvas, game);
     }

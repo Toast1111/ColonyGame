@@ -8,8 +8,8 @@
 import { ErrorOverlay } from './dom/errorOverlay';
 import { ToastManager } from './dom/toast';
 import { HelpPanel } from './dom/helpPanel';
-import { MobileControls, type MobileControlsCallbacks } from './dom/mobileControls';
-import { Header, type HeaderCallbacks } from './dom/header';
+import { type MobileControlsCallbacks, type MobileControlsHandle } from './dom/mobileControls';
+import { createMobileControlsBridge } from '../../react';
 import { ChangelogModal } from './dom/changelogModal';
 import type { Game } from '../Game';
 
@@ -17,8 +17,7 @@ export interface UIComponents {
   errorOverlay: ErrorOverlay;
   toast: ToastManager;
   helpPanel: HelpPanel;
-  mobileControls: MobileControls;
-  header: Header;
+  mobileControls: MobileControlsHandle;
   changelogModal: ChangelogModal;
   canvas: HTMLCanvasElement;
   wrap: HTMLDivElement;
@@ -41,36 +40,6 @@ export function initializeUI(game: Game | null = null): UIComponents {
   
   // Use a game reference object that can be updated later
   const gameRef = { current: game };
-  
-  // Setup header callbacks
-  const headerCallbacks: HeaderCallbacks = {
-    onNewGame: () => {
-      if (gameRef.current) {
-        gameRef.current.newGame();
-      }
-    },
-    onHelp: () => {
-      helpPanel.toggle();
-    },
-    onBuildMenu: () => {
-      if (gameRef.current) {
-        gameRef.current.showBuildMenu = !gameRef.current.showBuildMenu;
-      }
-    },
-    onToggleMobile: () => {
-      if (gameRef.current) {
-        const next = !gameRef.current.touchUIEnabled;
-        gameRef.current.setTouchUIEnabled(next, true);
-        gameRef.current.toast('Mobile mode: ' + (next ? 'ON' : 'OFF'));
-      }
-    },
-    onChangelog: () => {
-      changelogModal.show();
-    }
-  };
-  
-  // Create header
-  const header = new Header(headerCallbacks);
   
   // Create help panel
   const helpPanel = new HelpPanel();
@@ -117,14 +86,13 @@ export function initializeUI(game: Game | null = null): UIComponents {
   };
   
   // Create mobile controls
-  const mobileControls = new MobileControls(mobileCallbacks);
+  const mobileControls = createMobileControlsBridge();
   mobileControls.hide();
   
   // Create toast manager
   const toast = new ToastManager();
   
   // Assemble the UI structure
-  wrap.appendChild(header.getElement());
   wrap.appendChild(canvas);
   
   // Add wrapper to root
@@ -147,7 +115,6 @@ export function initializeUI(game: Game | null = null): UIComponents {
     toast,
     helpPanel,
     mobileControls,
-    header,
     changelogModal,
     canvas,
     wrap,

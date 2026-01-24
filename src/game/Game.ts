@@ -78,7 +78,7 @@ import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/Audi
 import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
 import { ResourceSpawnManager } from './managers/ResourceSpawnManager';
 import { MusicManager } from './managers/MusicManager';
-import type { MobileControls } from './ui/dom/mobileControls';
+import type { MobileControlsHandle } from './ui/dom/mobileControls';
 
 export class Game {
   canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D;
@@ -838,8 +838,8 @@ export class Game {
     console.log(`UI Scale calculated: ${scale.toFixed(2)} for ${currentWidth}x${currentHeight}`);
   }
 
-  private getMobileControlsInstance(): MobileControls | null {
-    const mc = (this as any).mobileControls as MobileControls | undefined;
+  private getMobileControlsInstance(): MobileControlsHandle | null {
+    const mc = (this as any).mobileControls as MobileControlsHandle | undefined;
     return mc ?? null;
   }
 

@@ -1,11 +1,11 @@
-:root{--bg:#0b0f14;--fg:#e6f0ff;--accent:#6ee7ff;--muted:#9fb3c8;--good:#7CFC00;--bad:#ff6b6b;--warn:#ffd166}
+:root{--bg:#0b0f14;--fg:#e6f0ff;--accent:#6ee7ff;--muted:#9fb3c8;--good:#7CFC00;--bad:#ff6b6b;--warn:#ffd166;--header-height:32px;--resource-bar-height:48px}
 html,body{height:100%;margin:0;background:linear-gradient(180deg,#0b0f14 0%, #0e121a 60%, #0b0f14 100%);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif;-webkit-text-size-adjust:100%;overscroll-behavior:none}
 #wrap,body,header,#game{user-select:none;-webkit-user-select:none;-ms-user-select:none}
 #mobileControls, header, #headerDropdown, button { user-select: none; -webkit-user-select: none; }
 #game{touch-action:none}
 #wrap{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr}
-header{display:flex;gap:.75rem;align-items:center;padding:.5rem .75rem;border-bottom:1px solid #18202c;background:#0d131b88;backdrop-filter:blur(6px)}
-header h1{font-size:clamp(14px,2.0vw,20px);font-weight:600;margin:0;letter-spacing:.4px;color:var(--muted)}
+header{display:flex;gap:.5rem;align-items:center;padding:.25rem .6rem;border-bottom:1px solid #18202c;background:#0d131b88;backdrop-filter:blur(6px);min-height:var(--header-height)}
+header h1{font-size:clamp(11px,1.3vw,14px);font-weight:600;margin:0;letter-spacing:.4px;color:var(--muted)}
 header h1 #ver{font-size:.82em;opacity:.9}
 header .spacer{flex:1}
 header button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);padding:.5rem .8rem;border-radius:.75rem;cursor:pointer;font-size:clamp(13px,1.8vw,18px);line-height:1;min-height:44px;min-width:44px;outline:none}
@@ -21,8 +21,9 @@ header button:focus{outline:none;border-color:#2b3d59}
 .loading-bar{height:10px;border-radius:999px;background:#111827;overflow:hidden;border:1px solid #1f2a3a}
 .loading-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#38bdf8,#3b82f6);transition:width .25s ease}
 .loading-detail{font-size:clamp(12px,1.6vw,14px);color:#94a3b8}
-#react-root{position:fixed;inset:0;pointer-events:none;z-index:50}
-.gameover-overlay{position:absolute;inset:0;pointer-events:none;font-family:"Press Start 2P", monospace;color:#ffffff}
+#react-root{display:contents;pointer-events:none;z-index:50}
+header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-events:auto}
+.gameover-overlay{position:fixed;inset:0;pointer-events:auto;font-family:"Press Start 2P", monospace;color:#ffffff;z-index:100}
 .gameover-fade{position:absolute;inset:0;background:#000000}
 .gameover-guilt{position:absolute;inset:0}
 .gameover-message{position:absolute;left:50%;transform:translate(-50%,-50%);text-align:center;line-height:1.1;z-index:3}
@@ -42,7 +43,41 @@ header button:focus{outline:none;border-color:#2b3d59}
 .credits-name{color:#ffffff;text-shadow:0 0 12px rgba(255,255,255,0.35)}
 .credits-line{position:absolute;left:50%;transform:translateX(-50%);width:30%;border-top:1px solid rgba(255,255,255,0.15)}
 .credits-end{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#ffff00}
-#headerDropdown{position:fixed;top:56px;right:12px;background:#0f1621;border:1px solid #1e293b;border-radius:.75rem;box-shadow:0 12px 28px #0008;padding:8px;z-index:20}
+.resource-bar{position:fixed;top:var(--header-height);left:0;right:0;height:var(--resource-bar-height);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 12px;background:linear-gradient(180deg,rgba(15,23,42,0.95) 0%,rgba(11,18,31,0.82) 100%);border-bottom:1px solid #1e293b;z-index:60;pointer-events:none}
+.resource-bar-left,.resource-bar-right{display:flex;align-items:center;gap:10px;overflow:hidden}
+.resource-bar-left{flex:1;min-width:0}
+.resource-bar-right{flex-shrink:0}
+.resource-pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:#0f172acc;border:1px solid #1f2937;color:#e2e8f0;font-size:13px;white-space:nowrap}
+.resource-pill-bar{display:inline-block;width:8px;height:18px;border-radius:6px}
+.resource-pill-text{line-height:1}
+.resource-menu-button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);border-radius:.6rem;cursor:pointer;font-size:16px;line-height:1;min-height:34px;min-width:34px;box-shadow:0 6px 14px #0006;transition:all .2s ease;pointer-events:auto}
+.resource-menu-button:hover{border-color:#2b3d59;background:#1a2332}
+.resource-menu-button:active{transform:scale(0.96)}
+#headerDropdown{position:fixed;top:calc(var(--header-height) + var(--resource-bar-height) + 8px);right:12px;background:#0f1621;border:1px solid #1e293b;border-radius:.75rem;box-shadow:0 12px 28px #0008;padding:8px;z-index:70}
+#headerDropdown button{display:block;width:100%;text-align:left;margin:4px 0;outline:none}
+#headerDropdown button:focus{outline:none}
+
+.hotbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:0 12px;background:rgba(11,18,40,0.92);border-top:1px solid rgba(30,41,59,0.8);z-index:60;pointer-events:auto}
+.hotbar-tab{flex:1;display:flex;align-items:center;justify-content:center;border:1px solid rgba(30,41,59,0.4);background:rgba(15,23,42,0.1);color:rgba(159,179,200,0.9);font-size:12px;padding:6px 4px;cursor:pointer}
+.hotbar-tab.active{background:rgba(59,130,246,0.15);color:rgba(219,234,254,1);border-top:3px solid rgba(59,130,246,0.9)}
+.hotbar-tab.disabled{color:rgba(148,163,184,0.4);background:rgba(15,23,42,0.3);cursor:default}
+
+.build-menu{position:fixed;display:flex;background:rgba(15,23,42,0.96);border:2px solid rgba(30,41,59,0.8);z-index:65;pointer-events:auto}
+.build-menu-panel{background:rgba(11,18,32,0.7);border:1px solid rgba(30,41,59,0.6);display:flex;flex-direction:column;overflow:hidden}
+.build-menu-header{background:rgba(30,41,59,0.5);padding:8px 10px;color:rgba(148,163,184,1);font-size:13px;text-align:center}
+.build-menu-list{display:flex;flex-direction:column;gap:6px;overflow:auto;padding:8px}
+.build-menu-item{border:1px solid rgba(30,41,59,0.4);background:rgba(15,23,42,0.3);color:rgba(159,179,200,0.9);text-align:left;padding:8px 12px;cursor:pointer;transition:background .15s ease,border-color .15s ease,transform .15s ease}
+.build-menu-item:hover{background:rgba(26,31,46,0.8);border-color:rgba(59,130,246,0.5)}
+.build-menu-item.selected{border-color:rgba(59,130,246,0.7);background:rgba(59,130,246,0.2);color:rgba(219,234,254,1)}
+.build-menu-building{display:flex;flex-direction:column;gap:4px}
+.build-menu-building-name{color:rgba(219,234,254,1);font-weight:600;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.build-menu-building-cost{color:rgba(159,179,200,0.9);font-size:12px;text-align:right;white-space:nowrap}
+.build-menu-building-desc{color:rgba(148,163,184,0.8);font-size:12px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.build-menu-empty{color:rgba(148,163,184,0.6);text-align:center;padding:20px 10px}
+.build-menu-tooltip{position:fixed;max-width:280px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:10px 12px;box-shadow:0 12px 28px rgba(0,0,0,0.6);z-index:80;color:#e2e8f0;pointer-events:none}
+.build-menu-tooltip-title{font-weight:700;margin-bottom:4px}
+.build-menu-tooltip-cost{font-size:12px;color:#94a3b8;margin-bottom:6px;text-align:right}
+.build-menu-tooltip-desc{font-size:12px;color:#cbd5e1;line-height:1.3}
 #headerDropdown[hidden]{display:none}
 #headerDropdown button{display:block;width:100%;text-align:left;margin:4px 0;outline:none}
 #headerDropdown button:focus{outline:none}
@@ -111,7 +146,10 @@ button:focus{outline:none}
 body:not(.touch-ui) #mobileControls{display:none!important}
 body.touch-ui #mobileControls{display:flex;right:max(10px,calc(env(safe-area-inset-right,0px) + 10px));bottom:max(88px,calc(env(safe-area-inset-bottom,0px) + 68px))}
 body.touch-ui #mobileControls button{min-height:52px;min-width:52px;font-size:clamp(18px,4.2vw,22px);padding:.8rem}
-body.touch-ui header button{min-height:52px;min-width:52px;font-size:clamp(16px,3.8vw,20px);padding:.75rem 1rem}
+body.touch-ui header button{min-height:38px;min-width:38px;font-size:clamp(14px,3.4vw,18px);padding:.5rem .7rem}
+body.touch-ui .resource-bar{height:56px}
+body.touch-ui .resource-pill{font-size:15px;padding:8px 14px}
+body.touch-ui .resource-pill-bar{height:20px}
 body.touch-ui #headerDropdown{right:max(12px,calc(env(safe-area-inset-right,0px) + 12px));padding:12px;border-radius:1rem}
 body.touch-ui #headerDropdown button{padding:.85rem 1rem;font-size:clamp(15px,3.6vw,18px)}
 body.touch-ui #toast{bottom:max(16px,calc(env(safe-area-inset-bottom,0px) + 20px))}

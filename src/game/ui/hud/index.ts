@@ -8,7 +8,7 @@
  */
 
 import type { Message } from '../../types';
-import { drawTopBar, type TopBarData } from './topBar';
+import { setResourceBarState } from '../../../react';
 import { drawHotbar, type HotbarItem, type HotbarRect } from './hotbar';
 import { drawMessages } from './messages';
 
@@ -44,8 +44,7 @@ export function drawHUD(
   data: HUDData,
   game: any
 ): HotbarRect[] {
-  // Draw top bar (resources, time, colonists)
-  drawTopBar(ctx, canvas, {
+  setResourceBarState({
     res: data.res,
     colonists: data.colonists,
     cap: data.cap,
@@ -53,8 +52,9 @@ export function drawHUD(
     day: data.day,
     tDay: data.tDay,
     isNight: data.isNight,
-    storage: data.storage
-  }, game);
+    storage: data.storage,
+    isTouch: !!game?.isTouch
+  });
   
   // Draw bottom hotbar (building shortcuts) and get click regions
   const hotbarRects = drawHotbar(ctx, canvas, data.hotbar, game);
