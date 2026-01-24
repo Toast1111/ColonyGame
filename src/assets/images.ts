@@ -195,7 +195,7 @@ export class ImageAssets {
     return ImageAssets.instance;
   }
 
-  async loadAssets(): Promise<void> {
+  async loadAssets(onProgress?: (info: { loaded: number; total: number; name: string; status: 'loaded' | 'failed' }) => void): Promise<void> {
     const buildingAssets = [
       { name: 'house', path: BuildingHouseImg },
       { name: 'wheat_stage_1', path: WheatStage1Img },
@@ -386,15 +386,28 @@ export class ImageAssets {
     ];
 
     const allAssets = [...buildingAssets, ...colonistAssets, ...weaponAssets];
-    const loadPromises = allAssets.map(asset => this.loadImage(asset.name, asset.path));
+    let loadedCount = 0;
+    const total = allAssets.length;
+    const report = (name: string, status: 'loaded' | 'failed') => {
+      loadedCount += 1;
+      onProgress?.({ loaded: loadedCount, total, name, status });
+    };
+
+    const loadPromises = allAssets.map(asset =>
+      this.loadImage(asset.name, asset.path)
+        .then(() => report(asset.name, 'loaded'))
+        .catch((error) => {
+          report(asset.name, 'failed');
+          throw error;
+        })
+    );
     
-    try {
-      await Promise.all(loadPromises);
-      this.loaded = true;
-    } catch (error) {
+    const results = await Promise.allSettled(loadPromises);
+    const failed = results.some(result => result.status === 'rejected');
+    if (failed) {
       console.warn('Some assets failed to load, continuing with fallbacks');
-      this.loaded = true; // Still mark as loaded to prevent blocking
     }
+    this.loaded = true; // Still mark as loaded to prevent blocking
   }
 
   private loadImage(name: string, path: string): Promise<void> {

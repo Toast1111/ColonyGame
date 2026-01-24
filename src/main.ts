@@ -8,6 +8,8 @@ import "./react/main";
 async function initGame() {
   // Initialize all UI components first
   const ui = initializeUI();
+  const loadingOverlay = createLoadingOverlay();
+  const updateLoading = createLoadingUpdater(loadingOverlay);
   
   const canvas = ui.canvas;
   if (!canvas) {
@@ -16,25 +18,16 @@ async function initGame() {
     throw new Error(msg);
   }
   
-  // Show loading message
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.fillStyle = '#0a0e14';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#dbeafe';
-    ctx.font = '24px system-ui';
-    ctx.textAlign = 'center';
-    ctx.fillText('Loading assets...', canvas.width / 2, canvas.height / 2);
-  }
-
   // Load image assets
   try {
-    await ImageAssets.getInstance().loadAssets();
+    await ImageAssets.getInstance().loadAssets(updateLoading);
     console.log('Assets loaded successfully');
     console.log('House image loaded:', !!ImageAssets.getInstance().getImage('house'));
   } catch (error) {
     console.warn('Some assets failed to load:', error);
     ui.errorOverlay.show('Warning: some assets failed to load. See console for details.');
+  } finally {
+    loadingOverlay.root.remove();
   }
 
   // Create game instance
@@ -52,6 +45,66 @@ async function initGame() {
   }));
 
   console.log('Game initialized successfully');
+}
+
+type LoadingOverlayElements = {
+  root: HTMLDivElement;
+  status: HTMLDivElement;
+  barFill: HTMLDivElement;
+  detail: HTMLDivElement;
+};
+
+function createLoadingOverlay(): LoadingOverlayElements {
+  const root = document.createElement('div');
+  root.id = 'loadingOverlay';
+  root.className = 'loading-overlay';
+
+  const card = document.createElement('div');
+  card.className = 'loading-card';
+
+  const title = document.createElement('div');
+  title.className = 'loading-title';
+  title.textContent = 'Loading Colony';
+
+  const status = document.createElement('div');
+  status.className = 'loading-status';
+  status.textContent = 'Preparing assets…';
+
+  const bar = document.createElement('div');
+  bar.className = 'loading-bar';
+  const barFill = document.createElement('div');
+  barFill.className = 'loading-bar-fill';
+  bar.appendChild(barFill);
+
+  const detail = document.createElement('div');
+  detail.className = 'loading-detail';
+  detail.textContent = '0 / 0';
+
+  card.appendChild(title);
+  card.appendChild(status);
+  card.appendChild(bar);
+  card.appendChild(detail);
+  root.appendChild(card);
+
+  document.body.appendChild(root);
+
+  return { root, status, barFill, detail };
+}
+
+function createLoadingUpdater(overlay: LoadingOverlayElements) {
+  return (info: { loaded: number; total: number; name: string; status: 'loaded' | 'failed' }) => {
+    const pct = info.total > 0 ? Math.round((info.loaded / info.total) * 100) : 0;
+    overlay.barFill.style.width = `${pct}%`;
+    const label = formatAssetLabel(info.name);
+    overlay.status.textContent = `${info.status === 'loaded' ? 'Loading' : 'Skipping'} ${label}`;
+    overlay.detail.textContent = `${info.loaded} / ${info.total}`;
+  };
+}
+
+function formatAssetLabel(name: string): string {
+  return name
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 // Start the game
