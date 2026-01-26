@@ -9,6 +9,7 @@ import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloor
 import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/panels/colonistProfile';
+import { setColonistProfileState } from '../../react';
 import { drawLongPressProgress } from '../ui/contextMenu';
 import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
@@ -1154,9 +1155,11 @@ export class RenderManager {
         console.error('[RenderUI] Failed to draw colonist profile:', err);
         game.selColonist = null;
         game.colonistPanelRect = game.colonistPanelCloseRect = null;
+        setColonistProfileState({ visible: false });
       }
     } else {
       game.colonistPanelRect = game.colonistPanelCloseRect = null;
+      setColonistProfileState({ visible: false });
     }
 
     // Placement UI

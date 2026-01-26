@@ -1,8 +1,6 @@
-import { drawColonistAvatar } from "../../render/index";
-import { drawHealthTab as drawHealthTabNew } from "./healthTab";
+import { setColonistProfileState } from "../../../react";
 
 export function drawColonistProfile(game: any, c: any) {
-  const ctx = game.ctx as CanvasRenderingContext2D;
   const cw = game.canvas.width; 
   const ch = game.canvas.height; 
 
@@ -28,20 +26,13 @@ export function drawColonistProfile(game: any, c: any) {
   const W = Math.max(minW, Math.min(game.scale(baseW * scale), maxW));
   const H = Math.max(minH, Math.min(game.scale(baseH * scale), maxH));
   const X = PAD; // Always anchor left (like mobile) to free the center view
-  const Y = isTouchUI ? PAD + game.scale(28) : game.scale(54);
+  const headerEl = typeof document !== 'undefined' ? document.querySelector('header') as HTMLElement | null : null;
+  const resourceEl = typeof document !== 'undefined' ? document.querySelector('.resource-bar') as HTMLElement | null : null;
+  const headerH = headerEl ? Math.ceil(headerEl.getBoundingClientRect().height) : 0;
+  const resourceH = resourceEl ? Math.ceil(resourceEl.getBoundingClientRect().height) : 0;
+  const uiTopOffset = (headerH + resourceH) * (game.DPR || 1);
+  const Y = Math.max(PAD + uiTopOffset, isTouchUI ? PAD + game.scale(28) : game.scale(54));
   const finalY = Math.max(PAD, Math.min(Y, ch - H - PAD));
-
-  ctx.save();
-  ctx.fillStyle = '#0b1220cc'; 
-  ctx.fillRect(X, finalY, W, H);
-  ctx.strokeStyle = '#1e293b'; 
-  ctx.strokeRect(X + .5, finalY + .5, W - 1, H - 1);
-
-  // Close button will now be rendered at the bottom-right after the content so it layers above tabs/content.
-  let closeSize: number; // declared here, assigned later before drawing
-  let closePad: number;
-  let closeX: number;
-  let closeY: number;
 
   const tabHeight = game.scale(32);
   const tabY = finalY + game.scale(12);
@@ -54,101 +45,242 @@ export function drawColonistProfile(game: any, c: any) {
     { id: 'log', label: 'Log', icon: '📜' }
   ];
 
-  game.colonistTabRects = [];
   const tabWidth = (W - game.scale(32)) / tabs.length;
-  for (let i = 0; i < tabs.length; i++) {
-    const tab = tabs[i];
+  const tabRects = tabs.map((tab: any, i: number) => {
     const tabX = X + game.scale(16) + i * tabWidth;
-    const isActive = game.colonistProfileTab === tab.id;
-    
-    // Enhanced tab styling with better visual hierarchy
-    ctx.fillStyle = isActive ? '#1e293b' : '#0f172a';
-    ctx.fillRect(tabX, tabY, tabWidth, tabHeight);
-    
-    // Active tab gets brighter border and slight elevation effect
-    if (isActive) {
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
-      // Add subtle glow effect for active tab
-      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
-      ctx.fillRect(tabX + 2, tabY + 2, tabWidth - 4, tabHeight - 4);
-    } else {
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(tabX + .5, tabY + .5, tabWidth - 1, tabHeight - 1);
-    }
-    
-    // Tab text with better contrast
-    ctx.fillStyle = isActive ? '#60a5fa' : '#9ca3af';
-    ctx.font = game.getScaledFont(isActive ? 11 : 10, isActive ? '700' : '600');
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const textY = tabY + tabHeight / 2;
-    ctx.fillText(`${tab.icon} ${tab.label}`, tabX + tabWidth / 2, textY);
-    game.colonistTabRects.push({ tab: tab.id, x: tabX, y: tabY, w: tabWidth, h: tabHeight });
-  }
+    return { ...tab, x: tabX, y: tabY, w: tabWidth, h: tabHeight };
+  });
 
   const contentY = tabY + tabHeight + game.scale(8);
   const contentH = H - (contentY - finalY) - game.scale(16);
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(X + game.scale(8), contentY, W - game.scale(16), contentH);
-  ctx.clip();
-
-  switch (game.colonistProfileTab) {
-    case 'bio':
-      drawBioTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
-      break;
-    case 'health':
-      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
-      drawHealthTabNew(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
-      break;
-    case 'gear':
-      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
-      drawGearTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
-      break;
-    case 'social':
-      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
-      drawSocialTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
-      break;
-    case 'skills':
-      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
-      drawSkillsTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
-      break;
-    case 'log':
-      game.colonistAvatarRect = null; // Clear avatar rect when not on bio tab
-      drawLogTab(game, c, X + game.scale(16), contentY, W - game.scale(32), contentH);
-      break;
-  }
-  ctx.restore();
-
-  // Draw close button (moved from top-right to bottom-right) AFTER restoring clip for proper z-order
-  closeSize = game.scale(26);
-  closePad = game.scale(8);
-  closeX = X + W - closePad - closeSize;
-  closeY = finalY + H - closePad - closeSize;
-  ctx.fillStyle = '#0f172a';
-  ctx.fillRect(closeX, closeY, closeSize, closeSize);
-  ctx.strokeStyle = '#1e293b';
-  ctx.strokeRect(closeX + .5, closeY + .5, closeSize - 1, closeSize - 1);
-  ctx.fillStyle = '#dbeafe';
-  ctx.font = game.getScaledFont(16, '700');
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('✕', closeX + closeSize / 2, closeY + closeSize / 2 + game.scale(1));
-
-  // Follow status text (bottom-left) - keep after close button for clarity
-  ctx.fillStyle = '#4b5563';
-  ctx.font = game.getScaledFont(9);
-  ctx.textAlign = 'left';
-  const followText = game.follow
-    ? (isTouchUI ? 'Following (tap portrait to stop)' : 'Following (Esc to stop)')
-    : (isTouchUI ? 'Tap portrait to follow' : 'Click to follow');
-  ctx.fillText(followText, X + game.scale(16), finalY + H - game.scale(8));
+  const closeSize = game.scale(26);
+  const closePad = game.scale(8);
+  const closeX = X + W - closePad - closeSize;
+  const closeY = finalY + H - closePad - closeSize;
 
   game.colonistPanelRect = { x: X, y: finalY, w: W, h: H };
   game.colonistPanelCloseRect = { x: closeX, y: closeY, w: closeSize, h: closeSize };
-  ctx.restore();
+  game.colonistTabRects = [];
+
+  syncColonistProfilePanel(game, c, game.colonistProfileTab, {
+    panel: { x: X, y: finalY, w: W, h: H },
+    content: { x: X + game.scale(16), y: contentY, w: W - game.scale(32), h: contentH },
+    close: { x: closeX, y: closeY, w: closeSize, h: closeSize },
+    tabs: tabRects
+  });
+}
+
+function syncColonistProfilePanel(
+  game: any,
+  colonist: any,
+  activeTab: 'bio' | 'health' | 'gear' | 'social' | 'skills' | 'log',
+  layout: {
+    panel: { x: number; y: number; w: number; h: number };
+    content: { x: number; y: number; w: number; h: number };
+    close: { x: number; y: number; w: number; h: number };
+    tabs: Array<{ id: string; label: string; icon: string; x: number; y: number; w: number; h: number }>;
+  }
+) {
+  const profile = colonist?.profile;
+  const detailedInfo = profile?.detailedInfo;
+  if (!game.colonistHealthSubTab) {
+    game.colonistHealthSubTab = 'overview';
+  }
+  const avatarSize = game.scale(64);
+  const avatarX = layout.content.x + game.scale(8);
+  const avatarY = layout.content.y + game.scale(8);
+
+  if (activeTab === 'bio') {
+    game.colonistAvatarRect = { x: avatarX, y: avatarY, w: avatarSize, h: avatarSize };
+  } else {
+    game.colonistAvatarRect = null;
+  }
+
+  const cssScale = 1 / (game.DPR || 1);
+  const panelRect = {
+    x: layout.panel.x * cssScale,
+    y: layout.panel.y * cssScale,
+    w: layout.panel.w * cssScale,
+    h: layout.panel.h * cssScale
+  };
+  const contentRect = {
+    x: layout.content.x * cssScale,
+    y: layout.content.y * cssScale,
+    w: layout.content.w * cssScale,
+    h: layout.content.h * cssScale
+  };
+  const avatarRect = {
+    x: avatarX * cssScale,
+    y: avatarY * cssScale,
+    w: avatarSize * cssScale,
+    h: avatarSize * cssScale
+  };
+  const closeRect = {
+    x: layout.close.x * cssScale,
+    y: layout.close.y * cssScale,
+    w: layout.close.w * cssScale,
+    h: layout.close.h * cssScale
+  };
+  const tabRects = layout.tabs.map((tab) => ({
+    ...tab,
+    x: tab.x * cssScale,
+    y: tab.y * cssScale,
+    w: tab.w * cssScale,
+    h: tab.h * cssScale
+  }));
+
+  const baseProfile = profile
+    ? {
+        name: profile.name || 'Colonist',
+        background: profile.background || 'Unknown',
+        age: profile.age ?? 25,
+        birthplace: detailedInfo?.birthplace,
+        favoriteFood: profile.favoriteFood,
+        personality: Array.isArray(profile.personality) ? profile.personality : [],
+        family: detailedInfo?.family
+          ? {
+              parents: detailedInfo.family.parents || [],
+              siblings: detailedInfo.family.siblings || [],
+              spouse: detailedInfo.family.spouse,
+              children: detailedInfo.family.children || []
+            }
+          : undefined,
+        skills: Array.isArray(detailedInfo?.skills) ? detailedInfo.skills : undefined,
+        backstory: profile.backstory
+      }
+    : {
+        name: 'Colonist',
+        background: 'Unknown',
+        age: 25,
+        personality: []
+      };
+
+  const skills = activeTab === 'skills' && colonist?.skills
+    ? (Object.values(colonist.skills.byName) as any[])
+        .slice()
+        .sort((a, b) => b.level - a.level)
+        .map((s) => {
+          const needed = 100 + Math.pow(s.level + 1, 1.6) * 40;
+          const pct = Math.max(0, Math.min(1, s.xp / needed));
+          const now = game.t || 0;
+          const recentWindow = 3;
+          let recent = 0;
+          if (s.xpDeltas && s.xpDeltas.length) {
+            for (let i = s.xpDeltas.length - 1; i >= 0; i--) {
+              const d = s.xpDeltas[i];
+              if (d.t >= now - recentWindow) recent += d.amount;
+              else break;
+            }
+          }
+          return {
+            name: s.name,
+            level: s.level,
+            passion: s.passion,
+            xp: s.xp,
+            needed,
+            pct,
+            recentGain: recent,
+            workSpeed: (0.6 + Math.pow(s.level, 0.9) * 0.06) * 100
+          };
+        })
+    : undefined;
+
+  const gear = activeTab === 'gear'
+    ? (() => {
+        const inventory = colonist?.inventory;
+        if (!inventory) {
+          return { equipment: [], items: [], carrying: [], hasInventory: false };
+        }
+        const equipmentSlots = ['helmet', 'armor', 'weapon', 'tool', 'shield', 'accessory'];
+        const equipment = equipmentSlots.map((slot) => {
+          const item = inventory.equipment?.[slot as any];
+          return {
+            slot: slot.charAt(0).toUpperCase() + slot.slice(1),
+            name: item?.name,
+            quality: item?.quality,
+            durability: item?.durability
+          };
+        });
+        const items = (inventory.items || []).map((item: any) => ({
+          name: item.name,
+          quantity: item.quantity,
+          quality: item.quality,
+          durability: item.durability
+        }));
+
+        const carrying: { name: string; qty: number }[] = [];
+        const payload = (colonist as any).carryingItem;
+        if (payload && payload.qty > 0) {
+          const pretty = (payload.type || 'Item').toString();
+          const name = pretty.charAt(0).toUpperCase() + pretty.slice(1);
+          carrying.push({ name, qty: payload.qty });
+        }
+        if (colonist.carryingWheat && colonist.carryingWheat > 0) carrying.push({ name: 'Wheat', qty: colonist.carryingWheat });
+        if (colonist.carryingBread && colonist.carryingBread > 0) carrying.push({ name: 'Bread', qty: colonist.carryingBread });
+
+        return { equipment, items, carrying, hasInventory: true };
+      })()
+    : undefined;
+
+  const social = activeTab === 'social'
+    ? (() => {
+        const otherColonists = (game.colonists as any[]).filter((col) => col !== colonist && col.alive);
+        if (otherColonists.length === 0) return [];
+        return otherColonists.slice(0, 3).map((other) => {
+          let relationship = 'Neutral';
+          if (profile?.detailedInfo?.relationships) {
+            const rel = profile.detailedInfo.relationships.find((r: any) => r.name === other.profile?.name);
+            if (rel?.type) relationship = rel.type;
+          }
+          const relationshipColor = relationship === 'Friend' || relationship === 'Good friend'
+            ? '#22c55e'
+            : relationship === 'Rival'
+              ? '#ef4444'
+              : '#94a3b8';
+          return {
+            name: other.profile?.name || 'Colonist',
+            relationship,
+            color: relationshipColor
+          };
+        });
+      })()
+    : undefined;
+
+  const log = activeTab === 'log'
+    ? (() => {
+        const entries = (colonist.activityLog || []) as any[];
+        const rowH = game.scale(16);
+        const textStart = layout.content.y + game.scale(8) + game.scale(24);
+        const maxVisible = Math.max(0, Math.floor((layout.content.y + layout.content.h - textStart - game.scale(8)) / rowH));
+        const visibleEntries = maxVisible > 0 ? entries.slice(Math.max(0, entries.length - maxVisible)) : [];
+        return visibleEntries.map((entry) => ({
+          stamp: formatLogTime(game, entry),
+          label: entry.label || '—',
+          type: entry.type
+        }));
+      })()
+    : undefined;
+
+  setColonistProfileState({
+    visible: true,
+    activeTab,
+    healthSubTab: game.colonistHealthSubTab || 'overview',
+    rect: panelRect,
+    contentRect,
+    avatarRect,
+    closeRect,
+    tabRects,
+    uiScale: game.uiScale || 1,
+    dpr: game.DPR || 1,
+    isTouch: !!game.isTouch,
+    follow: !!game.follow,
+    colonist,
+    profile: baseProfile,
+    skills,
+    gear,
+    social,
+    log
+  });
 }
 
 function drawBioTab(game: any, c: any, x: number, y: number, w: number, h: number) {
@@ -247,7 +379,7 @@ function drawBioTab(game: any, c: any, x: number, y: number, w: number, h: numbe
 
 // Old drawHealthTab function removed - now using healthTab.ts module
 
-function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: number) {
+export function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   ctx.save();
   let rowY = y + game.scale(4);
@@ -336,7 +468,7 @@ function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: nu
   ctx.restore();
 }
 
-function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: number) {
+export function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   let textY = y + game.scale(8);
   ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left';
@@ -399,7 +531,7 @@ function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: numb
   }
 }
 
-function drawSocialTab(game: any, c: any, x: number, y: number, w: number, h: number) {
+export function drawSocialTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D; let textY = y + game.scale(8);
   ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left'; ctx.fillText('Social Relationships', x, textY); textY += game.scale(24);
   ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('Social skill: Novice', x, textY); textY += game.scale(16);
@@ -429,7 +561,7 @@ type ActivityLogEntry = {
   at?: number; // absolute timestamp in seconds (fallback)
 };
 
-function drawLogTab(game: any, c: any, x: number, y: number, w: number, h: number) {
+export function drawLogTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   let textY = y + game.scale(8);
 
@@ -503,4 +635,66 @@ function getItemQualityColor(game: any, quality: string): string {
     case 'awful': return '#991b1b';
     default: return '#6b7280';
   }
+}
+
+export function measureSkillsTabHeight(game: any, c: any, y: number, h: number): number {
+  let rowY = y + game.scale(4);
+  rowY += game.scale(22);
+  if (!c.skills) {
+    return Math.max(h, rowY + game.scale(16));
+  }
+  const skills = Object.values(c.skills.byName) as any[];
+  const barHeight = game.scale(14);
+  const rowH = barHeight + game.scale(6);
+  rowY += skills.length * rowH;
+  return Math.max(h, rowY + game.scale(8));
+}
+
+export function measureGearTabHeight(game: any, c: any, y: number, h: number): number {
+  let textY = y + game.scale(8);
+  textY += game.scale(24);
+  if (!c.inventory) {
+    return Math.max(h, textY + game.scale(16));
+  }
+  textY += game.scale(18);
+  const equipmentSlots = 6;
+  textY += equipmentSlots * game.scale(16);
+  textY += game.scale(12);
+  textY += game.scale(18);
+  const itemsCount = c.inventory.items.length || 0;
+  textY += Math.max(1, itemsCount) * game.scale(16);
+  const payload = (c as any).carryingItem;
+  const carryingCount = (payload && payload.qty > 0 ? 1 : 0)
+    + (c.carryingWheat && c.carryingWheat > 0 ? 1 : 0)
+    + (c.carryingBread && c.carryingBread > 0 ? 1 : 0);
+  if (carryingCount > 0) {
+    textY += game.scale(12);
+    textY += game.scale(18);
+    textY += carryingCount * game.scale(16);
+  }
+  return Math.max(h, textY + game.scale(8));
+}
+
+export function measureSocialTabHeight(game: any, c: any, y: number, h: number): number {
+  let textY = y + game.scale(8);
+  textY += game.scale(24);
+  textY += game.scale(16);
+  textY += game.scale(16);
+  textY += game.scale(18);
+  const otherColonists = (game.colonists as any[]).filter((col) => col !== c && col.alive);
+  const count = Math.min(otherColonists.length, 3);
+  textY += (count > 0 ? count : 1) * game.scale(16);
+  return Math.max(h, textY + game.scale(8));
+}
+
+export function measureLogTabHeight(game: any, c: any, y: number, h: number): number {
+  let textY = y + game.scale(8);
+  textY += game.scale(24);
+  const rowH = game.scale(16);
+  const entries = c.activityLog || [];
+  if (entries.length === 0) {
+    return Math.max(h, textY + rowH);
+  }
+  textY += entries.length * rowH;
+  return Math.max(h, textY + game.scale(8));
 }

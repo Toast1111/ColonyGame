@@ -11,6 +11,7 @@ import type { Message } from '../../types';
 import { setResourceBarState } from '../../../react';
 import { drawHotbar, type HotbarItem, type HotbarRect } from './hotbar';
 import { drawMessages } from './messages';
+import type { TopBarData } from './topBar';
 
 export interface HUDData {
   res: { 

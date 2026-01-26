@@ -5,6 +5,7 @@ import { MobileControls } from './ui/MobileControls';
 import { ResourceBar } from './ui/ResourceBar';
 import { Hotbar } from './ui/Hotbar';
 import { BuildMenu } from './ui/BuildMenu';
+import { ColonistProfilePanel } from './ui/ColonistBioPanel';
 
 const rootId = 'react-root';
 let container = document.getElementById(rootId);
@@ -45,6 +46,7 @@ createRoot(container).render(
     <TopBar />
     <ResourceBar />
     <BuildMenu />
+    <ColonistProfilePanel />
     <Hotbar />
     <MobileControls />
     <GameOverOverlay />

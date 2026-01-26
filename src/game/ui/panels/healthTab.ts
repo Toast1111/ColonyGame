@@ -126,6 +126,107 @@ export function drawHealthTab(game: any, c: Colonist, x: number, y: number, w: n
   }
 }
 
+export function measureHealthTabHeight(game: any, c: Colonist, x: number, y: number, w: number, h: number): number {
+  if (!c.health) {
+    initializeColonistHealth(c);
+  }
+  if (!game.colonistHealthSubTab) {
+    game.colonistHealthSubTab = 'overview';
+  }
+
+  const subTabY = y + game.scale(4);
+  const subTabHeight = game.scale(26);
+  const contentY = subTabY + subTabHeight + game.scale(8);
+
+  let contentHeight = h;
+  switch (game.colonistHealthSubTab) {
+    case 'overview':
+      contentHeight = measureOverviewHeight(game, c, contentY, w, h);
+      break;
+    case 'operations':
+      contentHeight = measureOperationsHeight(game, c, contentY, w, h);
+      break;
+    case 'injuries':
+      contentHeight = measureInjuriesHeight(game, c, contentY, w, h);
+      break;
+  }
+
+  return Math.max(h, (contentY - y) + (contentHeight - contentY));
+}
+
+function measureOverviewHeight(game: any, colonist: Colonist, contentY: number, w: number, h: number): number {
+  let textY = contentY;
+  textY += game.scale(18); // Creature Info title
+  textY += game.scale(14) * 3; // Type, Gender, Age
+  textY += game.scale(20); // hover hint
+  textY += game.scale(22); // self-tend row
+  textY += game.scale(18); // Needs title
+  textY += game.scale(16); // hunger row
+  textY += game.scale(20); // energy row
+  textY += game.scale(18); // Bodily Systems title
+
+  const isMechanical = false;
+  const relevantSystems = BODY_SYSTEMS.filter((s) => (isMechanical ? s.mechanicalColonist : s.biologicalColonist));
+  textY += relevantSystems.length * game.scale(16);
+
+  return Math.max(h, textY + game.scale(8));
+}
+
+function measureOperationsHeight(game: any, colonist: Colonist, contentY: number, w: number, h: number): number {
+  let textY = contentY;
+  textY += game.scale(20); // title
+
+  const isColonist = (colonist as any).alive !== undefined;
+  if (!isColonist) {
+    return Math.max(h, textY + game.scale(16));
+  }
+
+  const health = colonist.health;
+  const queuedOps = health?.queuedOperations || [];
+  if (queuedOps.length > 0) {
+    textY += game.scale(18); // queued title
+    for (let i = 0; i < queuedOps.length; i++) {
+      textY += game.scale(60) + game.scale(6);
+    }
+    textY += game.scale(10);
+  } else {
+    textY += game.scale(24);
+  }
+
+  textY += game.scale(18); // available title
+  const availableOps = getAvailableOperations(colonist);
+  for (const _ of availableOps) {
+    textY += game.scale(50) + game.scale(6);
+  }
+  return Math.max(h, textY + game.scale(8));
+}
+
+function measureInjuriesHeight(game: any, colonist: Colonist, contentY: number, w: number, h: number): number {
+  let textY = contentY;
+  textY += game.scale(20); // title
+
+  const health = colonist.health;
+  if (!health || !health.injuries || health.injuries.length === 0) {
+    textY += game.scale(20);
+    if (health?.implants && health.implants.length > 0) {
+      textY += game.scale(18);
+      textY += health.implants.length * game.scale(16);
+    }
+    return Math.max(h, textY + game.scale(8));
+  }
+
+  const totalBleeding = health.injuries.reduce((sum, inj) => sum + (inj.bleeding || 0), 0);
+  if (totalBleeding > 0) {
+    textY += game.scale(20);
+  }
+
+  for (let i = 0; i < health.injuries.length; i++) {
+    textY += game.scale(50) + game.scale(6);
+  }
+
+  return Math.max(h, textY + game.scale(8));
+}
+
 /**
  * Overview Tab: Creature info, self-tend, bodily systems
  */
