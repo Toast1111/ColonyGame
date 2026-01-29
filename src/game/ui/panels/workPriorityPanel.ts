@@ -1,8 +1,8 @@
 /**
  * Work Priority Panel - RimWorld-style job assignment UI
  * 
- * DEPRECATED: This file now delegates to the React implementation.
- * The React component handles all rendering and interaction.
+ * This file now delegates to the React implementation.
+ * See: src/react/ui/WorkPriorityPanel.tsx
  */
 
 import { toggleWorkPriorityPanel as reactToggle, setWorkPriorityVisible, getWorkPriorityState } from '../../../react/stores/workPriorityStore';
@@ -52,69 +52,4 @@ export function closeWorkPriorityPanel(clearHotbarTab = true): void {
   if (mobileControls) {
     mobileControls.style.display = '';
   }
-}
-
-/**
- * DEPRECATED: Drawing now handled by React component
- */
-export function drawWorkPriorityPanel(
-  ctx?: CanvasRenderingContext2D,
-  colonists?: any[],
-  canvas?: HTMLCanvasElement,
-  game?: any
-): void {
-  // No-op: React component handles rendering
-}
-
-/**
- * DEPRECATED: Clicking now handled by React component
- */
-export function handleWorkPriorityPanelClick(
-  mouseX?: number,
-  mouseY?: number,
-  colonists?: any[],
-  canvas?: HTMLCanvasElement,
-  game?: any
-): boolean {
-  // Return false to allow other handlers to process
-  return false;
-}
-
-/**
- * DEPRECATED: Scrolling now handled by React component
- */
-export function handleWorkPriorityPanelScroll(
-  deltaY?: number,
-  colonists?: any[],
-  canvas?: HTMLCanvasElement,
-  game?: any
-): void {
-  // No-op: React component handles scrolling
-}
-
-/**
- * DEPRECATED: Hover now handled by React component
- */
-export function handleWorkPriorityPanelHover(
-  mouseX?: number,
-  mouseY?: number,
-  colonists?: any[],
-  canvas?: HTMLCanvasElement,
-  game?: any
-): void {
-  // No-op: React component handles hover
-}
-
-/**
- * Check if mouse is hovering over the work priority panel
- */
-export function isMouseOverWorkPanel(
-  mouseX?: number,
-  mouseY?: number,
-  colonists?: any[],
-  canvas?: HTMLCanvasElement,
-  game?: any
-): boolean {
-  // Let the React component handle mouse events
-  return getWorkPriorityState().visible;
 }

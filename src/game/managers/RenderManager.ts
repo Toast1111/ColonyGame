@@ -15,7 +15,7 @@ import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
 import { drawMobilePlacementUI } from '../ui/mobilePlacement';
 import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
-import { drawWorkPriorityPanel } from '../ui/panels/workPriorityPanel';
+// Work priority panel now rendered by React component
 import { drawBuildingInventoryPanel } from '../ui/panels/buildingInventoryPanel';
 import { drawControlPanel, type ControlPanelRect } from '../ui/hud/controlPanel';
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
@@ -1141,11 +1141,7 @@ export class RenderManager {
     const controlPanelRects = drawControlPanel(ctx, canvas, game);
     game.controlPanelRects = controlPanelRects;
 
-    // Show panel based on active tab
-    if (game.uiManager.activeHotbarTab === 'work') {
-      // Work priority panel - modal overlay, no container needed
-      drawWorkPriorityPanel(ctx, game.colonists, canvas, game);
-    }
+    // Work priority panel is now rendered by React component (see WorkPriorityPanel.tsx)
 
     // Colonist profile panel (protected to avoid hard UI lock if a bad colonist payload sneaks in)
     if (game.selColonist) {

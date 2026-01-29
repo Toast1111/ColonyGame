@@ -52,7 +52,7 @@ import { itemDatabase } from '../data/itemDatabase';
 import { initializeWorkPriorities, DEFAULT_WORK_PRIORITIES, getWorkTypeForTask } from './systems/workPriority';
 import { AdaptiveTickRateManager } from '../core/AdaptiveTickRate';
 import { snapToTileCenter } from './utils/tileAlignment';
-import { drawWorkPriorityPanel, handleWorkPriorityPanelClick, handleWorkPriorityPanelScroll, handleWorkPriorityPanelHover, toggleWorkPriorityPanel, isWorkPriorityPanelOpen, isMouseOverWorkPanel } from './ui/panels/workPriorityPanel';
+import { toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/panels/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/panels/buildingInventoryPanel';
 // import { getInventoryItemCount } from './systems/buildingInventory';
 import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
@@ -1041,15 +1041,8 @@ export class Game {
       const wpt = this.screenToWorld(this.mouse.x, this.mouse.y);
       this.mouse.wx = wpt.x; this.mouse.wy = wpt.y;
       
-      // PRIORITY PANEL IS MODAL - Block world interactions when open, but allow hover for tooltips
+      // PRIORITY PANEL IS MODAL - Block world interactions when open
       if (isWorkPriorityPanelOpen()) {
-        handleWorkPriorityPanelHover(
-          this.mouse.x * this.DPR,
-          this.mouse.y * this.DPR,
-          this.colonists,
-          this.canvas,
-          this
-        );
         return;
       }
       
@@ -1129,18 +1122,8 @@ export class Game {
         }
       }
 
-      // PRIORITY PANEL IS MODAL - Check first and block all other interactions
+      // PRIORITY PANEL IS MODAL - Block all other interactions when open
       if (isWorkPriorityPanelOpen()) {
-        if (handleWorkPriorityPanelClick(
-          e.offsetX * this.DPR,
-          e.offsetY * this.DPR,
-          this.colonists,
-          this.canvas,
-          this
-        )) {
-          return; // Panel handled the click (including closing via X or outside click)
-        }
-        // If panel is open but click wasn't handled, still block everything else
         return;
       }
       
@@ -1468,10 +1451,9 @@ export class Game {
       const cx = e.clientX - rect.left;
       const cy = e.clientY - rect.top;
       
-      // If work priority panel is open and mouse is over it, scroll the panel (and prevent zoom)
-      if (isWorkPriorityPanelOpen() && isMouseOverWorkPanel(cx, cy, this.colonists, this.canvas, this)) {
-        handleWorkPriorityPanelScroll(e.deltaY, this.colonists, this.canvas, this);
-        return; // Don't zoom when scrolling the panel
+      // If work priority panel is open, prevent zoom (React handles panel scrolling)
+      if (isWorkPriorityPanelOpen()) {
+        return;
       }
       
       // Otherwise, zoom around cursor position
@@ -1829,20 +1811,9 @@ export class Game {
     const wasJustUnlocked = this.justUnlockedFollow;
     this.justUnlockedFollow = false;
 
-    // PRIORITY PANEL IS MODAL - Check first and block all other interactions
+    // PRIORITY PANEL IS MODAL - Block all other interactions when open
     if (isWorkPriorityPanelOpen()) {
-      if (
-        handleWorkPriorityPanelClick(
-          sx * this.DPR,
-          sy * this.DPR,
-          this.colonists,
-          this.canvas,
-          this
-        )
-      ) {
-        return; // Panel handled the click (including closing via X or outside click)
-      }
-      // If panel is open but click wasn't handled, still block everything else
+      // React component handles all panel interactions
       return;
     }
 
