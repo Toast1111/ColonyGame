@@ -85,20 +85,96 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 /* Colonist Profile Panel (React overlay) */
 .colonist-profile-overlay{position:fixed;inset:0;z-index:66;pointer-events:auto}
 .colonist-profile-backdrop{position:fixed;inset:0;background:transparent}
-.colonist-profile-panel{position:fixed;background:#0b1220cc;border:1px solid #1e293b;box-shadow:0 18px 40px rgba(0,0,0,0.45);pointer-events:auto}
-.colonist-profile-tab{position:absolute;border:1px solid #1e293b;background:#0f172a;color:#9ca3af;font-size:calc(var(--ui-scale, 1) * 10px);font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;line-height:1;z-index:2}
-.colonist-profile-tab.active{background:#1e293b;border-color:#3b82f6;color:#60a5fa;box-shadow:0 0 0 1px rgba(59,130,246,0.25)}
-.colonist-profile-content{position:absolute;overflow:auto;pointer-events:auto;scrollbar-width:thin;scrollbar-color:#334155 transparent;padding-bottom:calc(var(--ui-scale, 1) * 36px)}
-.colonist-profile-content::-webkit-scrollbar{width:8px}
-.colonist-profile-content::-webkit-scrollbar-thumb{background:#334155;border-radius:999px}
+.colonist-profile-panel{
+	position:fixed;
+	background:linear-gradient(180deg,rgba(11,18,32,0.96) 0%,rgba(15,23,42,0.94) 100%);
+	border:1px solid #334155;
+	box-shadow:0 20px 50px rgba(0,0,0,0.5);
+	backdrop-filter:blur(8px);
+	border-radius:12px;
+	pointer-events:auto;
+	overflow:hidden;
+}
+.colonist-profile-tab{
+	position:absolute;
+	border:1px solid #1e293b;
+	background:rgba(15,23,42,0.8);
+	color:#9ca3af;
+	font-size:calc(var(--ui-scale, 1) * 11px);
+	font-weight:600;
+	cursor:pointer;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	gap:calc(var(--ui-scale, 1) * 6px);
+	line-height:1;
+	z-index:2;
+	transition:all 0.2s ease;
+	border-radius:8px 8px 0 0;
+}
+.colonist-profile-tab:hover{
+	background:rgba(30,41,59,0.9);
+	color:#cbd5e1;
+}
+.colonist-profile-tab.active{
+	background:linear-gradient(180deg,#1e293b 0%,#0f172a 100%);
+	border-color:#3b82f6;
+	color:#7dd3fc;
+	box-shadow:0 -2px 8px rgba(59,130,246,0.15);
+}
+.colonist-profile-content{
+	position:absolute;
+	overflow-y:auto;
+	overflow-x:hidden;
+	pointer-events:auto;
+	scrollbar-width:thin;
+	scrollbar-color:#475569 transparent;
+	padding-bottom:calc(var(--ui-scale, 1) * 36px);
+}
+.colonist-profile-content::-webkit-scrollbar{width:10px}
+.colonist-profile-content::-webkit-scrollbar-thumb{
+	background:#475569;
+	border-radius:999px;
+	border:2px solid transparent;
+	background-clip:padding-box;
+}
+.colonist-profile-content::-webkit-scrollbar-thumb:hover{background:#64748b}
 .colonist-profile-content::-webkit-scrollbar-track{background:transparent}
-.colonist-profile-close{position:absolute;border:1px solid #1e293b;background:#0f172a;color:#dbeafe;font-size:calc(var(--ui-scale, 1) * 14px);font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:3}
-.colonist-profile-follow{position:absolute;left:calc(var(--ui-scale, 1) * 16px);bottom:calc(var(--ui-scale, 1) * 8px);font-size:calc(var(--ui-scale, 1) * 9px);color:#4b5563}
+.colonist-profile-close{
+	position:absolute;
+	border:1px solid #334155;
+	background:rgba(15,23,42,0.9);
+	color:#dbeafe;
+	font-size:calc(var(--ui-scale, 1) * 15px);
+	font-weight:700;
+	cursor:pointer;
+	display:flex;
+	align-items:center;
+	justify-content:center;
+	z-index:3;
+	border-radius:6px;
+	transition:all 0.2s ease;
+}
+.colonist-profile-close:hover{
+	background:#ef4444;
+	border-color:#dc2626;
+	color:#ffffff;
+	transform:scale(1.05);
+}
+.colonist-profile-follow{
+	position:absolute;
+	left:calc(var(--ui-scale, 1) * 16px);
+	bottom:calc(var(--ui-scale, 1) * 10px);
+	font-size:calc(var(--ui-scale, 1) * 10px);
+	color:#64748b;
+	font-style:italic;
+	opacity:0.9;
+}
 
 
 .colonist-bio-panel{
-	position:absolute;
-	left:0;top:0;right:0;bottom:0;
+	width:100%;
+	height:100%;
 	pointer-events:auto;
 	color:#dbeafe;
 	font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Noto Sans",sans-serif;
@@ -107,57 +183,102 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 	gap:0;
 	padding:0;
 	box-sizing:border-box;
-	overflow:hidden;
 }
-.colonist-bio-panel--text{gap:calc(var(--ui-scale, 1) * 10px);padding:calc(var(--ui-scale, 1) * 12px)}
+.colonist-bio-panel--text{
+	gap:calc(var(--ui-scale, 1) * 12px);
+	padding:calc(var(--ui-scale, 1) * 14px) calc(var(--ui-scale, 1) * 16px);
+	overflow-y:auto;
+}
 .colonist-bio-panel--health{padding:0}
-.colonist-bio-panel--text{gap:calc(var(--ui-scale, 1) * 10px);padding:calc(var(--ui-scale, 1) * 12px)}
 .colonist-bio-panel--canvas{padding:0}
-.colonist-bio-avatar{pointer-events:auto;cursor:pointer}
 .colonist-bio-header{
 	display:flex;
-	gap:calc(var(--ui-scale, 1) * 12px);
+	gap:calc(var(--ui-scale, 1) * 14px);
 	align-items:flex-start;
+	padding-bottom:calc(var(--ui-scale, 1) * 12px);
+	border-bottom:1px solid rgba(30,41,59,0.5);
 }
 .colonist-bio-avatar{
+	pointer-events:auto;
+	cursor:pointer;
 	background:#0f172a;
-	border:1px solid #1e293b;
-	border-radius:6px;
+	border:1px solid #334155;
+	border-radius:8px;
 	box-sizing:border-box;
 	display:flex;
 	align-items:center;
 	justify-content:center;
 	flex-shrink:0;
+	transition:border-color 0.2s ease,transform 0.15s ease;
 }
-.colonist-bio-summary{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 6px)}
+.colonist-bio-avatar:hover{
+	border-color:#3b82f6;
+	transform:scale(1.02);
+}
+.colonist-bio-summary{
+	display:flex;
+	flex-direction:column;
+	gap:calc(var(--ui-scale, 1) * 7px);
+	flex:1;
+	min-width:0;
+}
 .colonist-bio-name{
-	font-size:calc(var(--ui-scale, 1) * 18px);
+	font-size:calc(var(--ui-scale, 1) * 19px);
 	font-weight:700;
-	color:#dbeafe;
+	color:#e0f2fe;
+	line-height:1.2;
+	margin-bottom:calc(var(--ui-scale, 1) * 2px);
 }
 .colonist-bio-info{
 	font-size:calc(var(--ui-scale, 1) * 12px);
 	color:#60a5fa;
 	display:flex;
-	gap:6px;
+	gap:calc(var(--ui-scale, 1) * 6px);
+	line-height:1.4;
 }
-.colonist-bio-info--muted{color:#94a3b8}
-.colonist-bio-info--accent{color:#a78bfa}
+.colonist-bio-info--muted{color:#9ca3af}
+.colonist-bio-info--accent{color:#c4b5fd}
 .colonist-bio-info--gold{color:#fbbf24}
-.colonist-bio-info-label{color:#94a3b8}
-.colonist-bio-section{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 6px)}
+.colonist-bio-info-label{color:#9ca3af;font-weight:500}
+.colonist-bio-section{
+	display:flex;
+	flex-direction:column;
+	gap:calc(var(--ui-scale, 1) * 8px);
+	padding:calc(var(--ui-scale, 1) * 8px) 0;
+}
 .colonist-bio-section-title{
 	font-size:calc(var(--ui-scale, 1) * 14px);
 	font-weight:600;
 	color:#f1f5f9;
+	margin-bottom:calc(var(--ui-scale, 1) * 2px);
+	letter-spacing:0.3px;
 }
-.colonist-bio-section-body{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 4px)}
-.colonist-bio-line{font-size:calc(var(--ui-scale, 1) * 12px);color:#94a3b8;line-height:1.25}
-.colonist-bio-line--trait{color:#60a5fa}
-.colonist-bio-line--family{color:#10b981}
-.colonist-bio-line--skills{color:#f59e0b}
-.colonist-bio-backstory{font-size:calc(var(--ui-scale, 1) * 11px);color:#94a3b8;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}
-.colonist-bio-line{overflow-wrap:anywhere}
+.colonist-bio-section-body{
+	display:flex;
+	flex-direction:column;
+	gap:calc(var(--ui-scale, 1) * 6px);
+	padding-left:calc(var(--ui-scale, 1) * 4px);
+}
+.colonist-bio-line{
+	font-size:calc(var(--ui-scale, 1) * 12px);
+	color:#94a3b8;
+	line-height:1.4;
+	overflow-wrap:anywhere;
+}
+.colonist-bio-line--trait{color:#7dd3fc}
+.colonist-bio-line--family{color:#34d399}
+.colonist-bio-line--skills{color:#fbbf24}
+.colonist-bio-backstory{
+	font-size:calc(var(--ui-scale, 1) * 12px);
+	color:#9ca3af;
+	line-height:1.5;
+	white-space:pre-wrap;
+	overflow-wrap:anywhere;
+	padding:calc(var(--ui-scale, 1) * 8px);
+	background:rgba(15,23,42,0.5);
+	border-left:2px solid #334155;
+	border-radius:4px;
+}
 .colonist-bio-empty{font-size:calc(var(--ui-scale, 1) * 12px);color:#6b7280}
 .colonist-section-title{font-size:calc(var(--ui-scale, 1) * 16px);font-weight:600;color:#f1f5f9;margin:0 0 calc(var(--ui-scale, 1) * 6px) 0}
 
