@@ -1,4 +1,5 @@
 import { setColonistProfileState } from "../../../react";
+import { drawColonistAvatar } from "../../render";
 
 export function drawColonistProfile(game: any, c: any) {
   const cw = game.canvas.width; 
