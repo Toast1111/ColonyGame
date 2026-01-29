@@ -57,14 +57,25 @@ export function closeWorkPriorityPanel(clearHotbarTab = true): void {
 /**
  * DEPRECATED: Drawing now handled by React component
  */
-export function drawWorkPriorityPanel(): void {
+export function drawWorkPriorityPanel(
+  ctx?: CanvasRenderingContext2D,
+  colonists?: any[],
+  canvas?: HTMLCanvasElement,
+  game?: any
+): void {
   // No-op: React component handles rendering
 }
 
 /**
  * DEPRECATED: Clicking now handled by React component
  */
-export function handleWorkPriorityPanelClick(): boolean {
+export function handleWorkPriorityPanelClick(
+  mouseX?: number,
+  mouseY?: number,
+  colonists?: any[],
+  canvas?: HTMLCanvasElement,
+  game?: any
+): boolean {
   // Return false to allow other handlers to process
   return false;
 }
@@ -72,21 +83,38 @@ export function handleWorkPriorityPanelClick(): boolean {
 /**
  * DEPRECATED: Scrolling now handled by React component
  */
-export function handleWorkPriorityPanelScroll(): void {
+export function handleWorkPriorityPanelScroll(
+  deltaY?: number,
+  colonists?: any[],
+  canvas?: HTMLCanvasElement,
+  game?: any
+): void {
   // No-op: React component handles scrolling
 }
 
 /**
  * DEPRECATED: Hover now handled by React component
  */
-export function handleWorkPriorityPanelHover(): void {
+export function handleWorkPriorityPanelHover(
+  mouseX?: number,
+  mouseY?: number,
+  colonists?: any[],
+  canvas?: HTMLCanvasElement,
+  game?: any
+): void {
   // No-op: React component handles hover
 }
 
 /**
  * Check if mouse is hovering over the work priority panel
  */
-export function isMouseOverWorkPanel(): boolean {
+export function isMouseOverWorkPanel(
+  mouseX?: number,
+  mouseY?: number,
+  colonists?: any[],
+  canvas?: HTMLCanvasElement,
+  game?: any
+): boolean {
   // Let the React component handle mouse events
   return getWorkPriorityState().visible;
 }
