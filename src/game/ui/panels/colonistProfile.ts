@@ -383,16 +383,18 @@ function drawBioTab(game: any, c: any, x: number, y: number, w: number, h: numbe
 export function drawSkillsTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   ctx.save();
-  let rowY = y + game.scale(4);
+  const padX = game.scale(14); // Left padding
+  const padTop = game.scale(12); // Top padding
+  let rowY = y + padTop;
   ctx.fillStyle = '#f1f5f9';
   ctx.font = game.getScaledFont(16, '600');
   ctx.textAlign = 'left';
-  ctx.fillText('Skills', x, rowY); rowY += game.scale(22);
+  ctx.fillText('Skills', x + padX, rowY); rowY += game.scale(22);
 
   if (!c.skills) {
     ctx.fillStyle = '#94a3b8';
     ctx.font = game.getScaledFont(12, '400');
-    ctx.fillText('No skills data', x, rowY);
+    ctx.fillText('No skills data', x + padX, rowY);
     ctx.restore();
     return;
   }
@@ -400,21 +402,21 @@ export function drawSkillsTab(game: any, c: any, x: number, y: number, w: number
   const skills = Object.values(c.skills.byName) as any[];
   skills.sort((a,b)=> b.level - a.level);
   const barHeight = game.scale(14);
-  const barWidth = w - game.scale(180);
+  const barWidth = w - game.scale(180) - padX * 2;
   ctx.font = game.getScaledFont(11, '400');
   const hoverRects: any[] = [];
   for (const s of skills) {
     if (rowY + barHeight > y + h - game.scale(8)) break;
     ctx.fillStyle = '#e2e8f0';
-    ctx.fillText(s.name, x, rowY + barHeight * 0.8);
+    ctx.fillText(s.name, x + padX, rowY + barHeight * 0.8);
     ctx.fillStyle = '#60a5fa';
-    ctx.fillText(String(s.level).padStart(2,' '), x + game.scale(110), rowY + barHeight * 0.8);
+    ctx.fillText(String(s.level).padStart(2,' '), x + padX + game.scale(110), rowY + barHeight * 0.8);
     let passionColor = '#475569';
     let passionGlyph = '';
     if (s.passion === 'interested') { passionColor = '#fbbf24'; passionGlyph = '★'; }
     else if (s.passion === 'burning') { passionColor = '#f97316'; passionGlyph = '★★'; }
-    if (passionGlyph) { ctx.fillStyle = passionColor; ctx.fillText(passionGlyph, x + game.scale(140), rowY + barHeight * 0.8); }
-    const bx = x + game.scale(170);
+    if (passionGlyph) { ctx.fillStyle = passionColor; ctx.fillText(passionGlyph, x + padX + game.scale(140), rowY + barHeight * 0.8); }
+    const bx = x + padX + game.scale(170);
     const by = rowY + game.scale(2);
     ctx.fillStyle = '#1e293b'; ctx.fillRect(bx, by, barWidth, barHeight - game.scale(4));
     ctx.fillStyle = '#0f172a'; ctx.fillRect(bx+1, by+1, barWidth-2, barHeight - game.scale(6));
@@ -471,43 +473,45 @@ export function drawSkillsTab(game: any, c: any, x: number, y: number, w: number
 
 export function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
-  let textY = y + game.scale(8);
+  const padX = game.scale(14); // Left padding
+  const padTop = game.scale(12); // Top padding
+  let textY = y + padTop;
   ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left';
-  ctx.fillText('Equipment & Inventory', x, textY); textY += game.scale(24);
-  if (!c.inventory) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No inventory data available', x, textY); return; }
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Equipment', x, textY); textY += game.scale(18);
+  ctx.fillText('Equipment & Inventory', x + padX, textY); textY += game.scale(24);
+  if (!c.inventory) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No inventory data available', x + padX, textY); return; }
+  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Equipment', x + padX, textY); textY += game.scale(18);
   const equipmentSlots = ['helmet', 'armor', 'weapon', 'tool', 'shield', 'accessory'];
   for (const slot of equipmentSlots) {
     const item = c.inventory.equipment[slot as any];
     ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(12, '500');
     const slotName = slot.charAt(0).toUpperCase() + slot.slice(1);
-    ctx.fillText(`${slotName}:`, x, textY);
+    ctx.fillText(`${slotName}:`, x + padX, textY);
     if (item) {
       ctx.fillStyle = getItemQualityColor(game, item.quality || 'normal');
       ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText(item.name, x + game.scale(80), textY);
+      ctx.fillText(item.name, x + padX + game.scale(80), textY);
       ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400');
-      ctx.fillText(`(${item.quality || 'normal'})`, x + game.scale(180), textY);
+      ctx.fillText(`(${item.quality || 'normal'})`, x + padX + game.scale(180), textY);
     } else {
       ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText('None', x + game.scale(80), textY);
+      ctx.fillText('None', x + padX + game.scale(80), textY);
     }
     textY += game.scale(16);
   }
   textY += game.scale(12);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Inventory Items', x, textY); textY += game.scale(18);
+  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Inventory Items', x + padX, textY); textY += game.scale(18);
   if (c.inventory.items.length === 0) {
-    ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No items in inventory', x + game.scale(8), textY);
+    ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No items in inventory', x + padX + game.scale(8), textY);
   } else {
     for (const item of c.inventory.items) {
       ctx.fillStyle = getItemQualityColor(game, item.quality || 'normal'); ctx.font = game.getScaledFont(12, '400');
       const displayText = `${item.name} (${item.quantity})`;
-      ctx.fillText(displayText, x + game.scale(8), textY);
+      ctx.fillText(displayText, x + padX + game.scale(8), textY);
       ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400');
-      ctx.fillText(`${item.quality || 'normal'}`, x + game.scale(150), textY);
-      if (item.durability !== undefined) ctx.fillText(`${Math.round(item.durability)}%`, x + game.scale(200), textY);
+      ctx.fillText(`${item.quality || 'normal'}`, x + padX + game.scale(150), textY);
+      if (item.durability !== undefined) ctx.fillText(`${Math.round(item.durability)}%`, x + padX + game.scale(200), textY);
       textY += game.scale(16);
-      if (textY > y + h - game.scale(20)) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400'); ctx.fillText('...more items', x + game.scale(8), textY); break; }
+      if (textY > y + h - game.scale(20)) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400'); ctx.fillText('...more items', x + padX + game.scale(8), textY); break; }
     }
   }
   // Show transient hauling payloads so players can see what the pawn is carrying right now
@@ -522,10 +526,10 @@ export function drawGearTab(game: any, c: any, x: number, y: number, w: number, 
   if (c.carryingBread && c.carryingBread > 0) carriedList.push({ name: 'Bread', qty: c.carryingBread });
   if (carriedList.length > 0) {
     textY += game.scale(12);
-    ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Currently Carrying', x, textY); textY += game.scale(18);
+    ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Currently Carrying', x + padX, textY); textY += game.scale(18);
     for (const it of carriedList) {
       ctx.fillStyle = '#22c55e'; ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText(`${it.name} (${it.qty})`, x + game.scale(8), textY);
+      ctx.fillText(`${it.name} (${it.qty})`, x + padX + game.scale(8), textY);
       textY += game.scale(16);
       if (textY > y + h - game.scale(20)) break;
     }
@@ -533,22 +537,25 @@ export function drawGearTab(game: any, c: any, x: number, y: number, w: number, 
 }
 
 export function drawSocialTab(game: any, c: any, x: number, y: number, w: number, h: number) {
-  const ctx = game.ctx as CanvasRenderingContext2D; let textY = y + game.scale(8);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left'; ctx.fillText('Social Relationships', x, textY); textY += game.scale(24);
-  ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('Social skill: Novice', x, textY); textY += game.scale(16);
+  const ctx = game.ctx as CanvasRenderingContext2D;
+  const padX = game.scale(14); // Left padding
+  const padTop = game.scale(12); // Top padding
+  let textY = y + padTop;
+  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left'; ctx.fillText('Social Relationships', x + padX, textY); textY += game.scale(24);
+  ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('Social skill: Novice', x + padX, textY); textY += game.scale(16);
   textY += game.scale(16);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Colony Relationships', x, textY); textY += game.scale(18);
+  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Colony Relationships', x + padX, textY); textY += game.scale(18);
   const otherColonists = (game.colonists as any[]).filter(col => col !== c && col.alive);
   if (otherColonists.length > 0) {
     for (let i = 0; i < Math.min(otherColonists.length, 3); i++) {
       const other = otherColonists[i];
       const relationship = ['Neutral', 'Friend', 'Good friend', 'Rival'][Math.floor(Math.random() * 4)];
       const relationshipColor = relationship === 'Friend' || relationship === 'Good friend' ? '#22c55e' : relationship === 'Rival' ? '#ef4444' : '#94a3b8';
-      ctx.fillStyle = '#dbeafe'; ctx.font = game.getScaledFont(11, '500'); ctx.fillText(other.profile?.name || 'Colonist', x + game.scale(8), textY);
-      ctx.fillStyle = relationshipColor; ctx.font = game.getScaledFont(11, '400'); ctx.fillText(relationship, x + game.scale(120), textY);
+      ctx.fillStyle = '#dbeafe'; ctx.font = game.getScaledFont(11, '500'); ctx.fillText(other.profile?.name || 'Colonist', x + padX + game.scale(8), textY);
+      ctx.fillStyle = relationshipColor; ctx.font = game.getScaledFont(11, '400'); ctx.fillText(relationship, x + padX + game.scale(120), textY);
       textY += game.scale(16);
     }
-  } else { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(11, '400'); ctx.fillText('No other colonists in colony', x + game.scale(8), textY); }
+  } else { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(11, '400'); ctx.fillText('No other colonists in colony', x + padX + game.scale(8), textY); }
 }
 
 // Stats tab removed
@@ -564,12 +571,14 @@ type ActivityLogEntry = {
 
 export function drawLogTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
-  let textY = y + game.scale(8);
+  const padX = game.scale(14); // Left padding
+  const padTop = game.scale(12); // Top padding
+  let textY = y + padTop;
 
   ctx.fillStyle = '#f1f5f9';
   ctx.font = game.getScaledFont(16, '600');
   ctx.textAlign = 'left';
-  ctx.fillText('Activity Log', x, textY);
+  ctx.fillText('Activity Log', x + padX, textY);
   textY += game.scale(24);
 
   const entries: ActivityLogEntry[] = c.activityLog || [];
@@ -584,7 +593,7 @@ export function drawLogTab(game: any, c: any, x: number, y: number, w: number, h
   if (entries.length === 0) {
     ctx.fillStyle = '#6b7280';
     ctx.font = game.getScaledFont(12, '400');
-    ctx.fillText('No activity recorded yet.', x, textY);
+    ctx.fillText('No activity recorded yet.', x + padX, textY);
     return;
   }
 
@@ -594,11 +603,11 @@ export function drawLogTab(game: any, c: any, x: number, y: number, w: number, h
 
     ctx.fillStyle = '#6b7280';
     ctx.font = game.getScaledFont(10, '400');
-    ctx.fillText(stamp, x, textY);
+    ctx.fillText(stamp, x + padX, textY);
 
     ctx.fillStyle = color;
     ctx.font = game.getScaledFont(11, '400');
-    ctx.fillText(entry.label || '—', x + game.scale(108), textY);
+    ctx.fillText(entry.label || '—', x + padX + game.scale(108), textY);
 
     textY += rowH;
     if (textY > y + h - game.scale(4)) break;

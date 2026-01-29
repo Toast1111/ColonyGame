@@ -221,8 +221,8 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 	padding:calc(var(--ui-scale, 1) * 14px) calc(var(--ui-scale, 1) * 16px);
 	overflow-y:auto;
 }
-.colonist-bio-panel--health{padding:0}
-.colonist-bio-panel--canvas{padding:0}
+.colonist-bio-panel--health{padding:0;overflow-y:auto}
+.colonist-bio-panel--canvas{padding:0;overflow-y:auto}
 .colonist-bio-header{
 	display:flex;
 	gap:calc(var(--ui-scale, 1) * 14px);
@@ -314,6 +314,13 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 .colonist-bio-empty{font-size:calc(var(--ui-scale, 1) * 12px);color:#6b7280}
 .colonist-section-title{font-size:calc(var(--ui-scale, 1) * 16px);font-weight:600;color:#f1f5f9;margin:0 0 calc(var(--ui-scale, 1) * 6px) 0}
 
+/* Health tab section separators */
+.health-section-separator{
+	height:1px;
+	background:linear-gradient(90deg,transparent 0%,#334155 20%,#334155 80%,transparent 100%);
+	margin:calc(var(--ui-scale, 1) * 16px) 0 calc(var(--ui-scale, 1) * 12px) 0;
+}
+
 .colonist-skills{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 6px)}
 .colonist-skill-row{display:grid;grid-template-columns:minmax(120px,1fr) 30px 32px minmax(140px,2fr);gap:calc(var(--ui-scale, 1) * 8px);align-items:center;padding:calc(var(--ui-scale, 1) * 4px) 0;border-bottom:1px solid rgba(30,41,59,0.5)}
 .colonist-skill-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -357,6 +364,41 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 .colonist-log-label[data-type="rest"]{color:#a78bfa}
 .colonist-log-label[data-type="combat"]{color:#f87171}
 .colonist-log-label[data-type="social"]{color:#fbbf24}
+
+/* Health Tab Styles */
+.colonist-health-tab{display:flex;flex-direction:column;height:100%}
+.health-subtabs{display:flex;gap:calc(var(--ui-scale, 1) * 4px);padding:calc(var(--ui-scale, 1) * 8px);background:rgba(15,23,42,0.5);border-bottom:1px solid #334155;flex-shrink:0}
+.health-subtab{padding:calc(var(--ui-scale, 1) * 6px) calc(var(--ui-scale, 1) * 12px);background:rgba(30,41,59,0.5);border:1px solid #334155;color:#94a3b8;font-size:calc(var(--ui-scale, 1) * 12px);border-radius:6px;cursor:pointer;transition:all 0.2s;flex:1;text-align:center}
+.health-subtab:hover{background:rgba(51,65,85,0.8);border-color:#475569}
+.health-subtab.active{background:rgba(59,130,246,0.2);border-color:#3b82f6;color:#60a5fa}
+.health-content{flex:1;overflow-y:auto;padding:calc(var(--ui-scale, 1) * 14px) calc(var(--ui-scale, 1) * 16px)}
+.health-overview,.health-operations,.health-injuries{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 12px)}
+.health-section{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 8px)}
+.health-section--separated{padding-top:calc(var(--ui-scale, 1) * 12px);border-top:1px solid rgba(51,65,85,0.5)}
+.health-section-header{display:flex;justify-content:space-between;align-items:center}
+.health-info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:calc(var(--ui-scale, 1) * 8px);font-size:calc(var(--ui-scale, 1) * 12px);color:#94a3b8}
+.health-toggle{padding:calc(var(--ui-scale, 1) * 4px) calc(var(--ui-scale, 1) * 12px);background:#334155;border:1px solid #475569;color:#94a3b8;font-size:calc(var(--ui-scale, 1) * 11px);border-radius:4px;cursor:pointer;transition:all 0.2s;min-width:calc(var(--ui-scale, 1) * 50px)}
+.health-toggle:hover{background:#475569}
+.health-toggle.active{background:#10b981;border-color:#059669;color:#fff}
+.health-needs,.health-systems{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 8px)}
+.health-need-row,.health-system-row{display:grid;grid-template-columns:minmax(100px,0.4fr) 1fr minmax(50px,0.2fr) auto;gap:calc(var(--ui-scale, 1) * 8px);align-items:center;font-size:calc(var(--ui-scale, 1) * 12px)}
+.health-need-label,.health-system-label{color:#cbd5e1}
+.health-need-bar,.health-system-bar{height:calc(var(--ui-scale, 1) * 14px);background:#0f172a;border:1px solid #1e293b;border-radius:999px;overflow:hidden;position:relative}
+.health-need-bar-fill,.health-system-bar-fill{position:absolute;left:0;top:0;bottom:0;transition:width 0.3s ease}
+.health-need-value,.health-system-value{color:#94a3b8;text-align:right;min-width:calc(var(--ui-scale, 1) * 40px)}
+.health-need-warning,.health-system-critical{color:#f87171;font-size:calc(var(--ui-scale, 1) * 10px);font-weight:600;text-transform:uppercase}
+.health-injury-list{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 6px)}
+.health-injury-row{display:grid;grid-template-columns:1.2fr 1fr 0.5fr;gap:calc(var(--ui-scale, 1) * 8px);padding:calc(var(--ui-scale, 1) * 6px);background:rgba(15,23,42,0.5);border:1px solid #334155;border-radius:4px;font-size:calc(var(--ui-scale, 1) * 12px)}
+.health-injury-part{color:#60a5fa;font-weight:600}
+.health-injury-type{color:#cbd5e1}
+.health-injury-severity{color:#f59e0b;text-align:right}
+
+/* Skill tooltip */
+.colonist-skill-row{position:relative}
+.colonist-skill-tooltip{position:absolute;top:100%;left:0;z-index:100;margin-top:calc(var(--ui-scale, 1) * 4px);padding:calc(var(--ui-scale, 1) * 8px) calc(var(--ui-scale, 1) * 10px);background:rgba(15,23,42,0.98);border:1px solid #334155;border-radius:6px;font-size:calc(var(--ui-scale, 1) * 11px);color:#cbd5e1;line-height:1.4;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.5);pointer-events:none}
+.colonist-skill-tooltip div{margin-bottom:calc(var(--ui-scale, 1) * 2px)}
+.colonist-skill-tooltip div:last-child{margin-bottom:0}
+
 .colonist-health-canvas{display:block}
 button{outline:none;touch-action:manipulation}
 button:focus{outline:none}

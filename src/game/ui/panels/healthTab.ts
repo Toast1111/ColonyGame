@@ -233,13 +233,15 @@ function measureInjuriesHeight(game: any, colonist: Colonist, contentY: number, 
 function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: number): void {
   const { game, colonist, x, w } = ctx;
   const canvasCtx = game.ctx as CanvasRenderingContext2D;
-  let textY = contentY;
+  const padX = game.scale(14); // Left padding
+  const padTop = game.scale(12); // Top padding
+  let textY = contentY + padTop;
   
   // Creature info section
   canvasCtx.fillStyle = '#f1f5f9';
   canvasCtx.font = game.getScaledFont(14, '600');
   canvasCtx.textAlign = 'left';
-  canvasCtx.fillText('Creature Info', x, textY);
+  canvasCtx.fillText('Creature Info', x + padX, textY);
   textY += game.scale(18);
   
   const profile = colonist.profile;
@@ -249,26 +251,26 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
   
   canvasCtx.fillStyle = '#94a3b8';
   canvasCtx.font = game.getScaledFont(11, '400');
-  canvasCtx.fillText(`Type: ${creatureType}`, x + game.scale(8), textY);
+  canvasCtx.fillText(`Type: ${creatureType}`, x + padX + game.scale(8), textY);
   textY += game.scale(14);
-  canvasCtx.fillText(`Gender: ${gender}`, x + game.scale(8), textY);
+  canvasCtx.fillText(`Gender: ${gender}`, x + padX + game.scale(8), textY);
   textY += game.scale(14);
-  canvasCtx.fillText(`Age: ${age} years`, x + game.scale(8), textY);
+  canvasCtx.fillText(`Age: ${age} years`, x + padX + game.scale(8), textY);
   textY += game.scale(14);
   
   // Hover for detailed age info (placeholder)
   canvasCtx.fillStyle = '#6b7280';
   canvasCtx.font = game.getScaledFont(9, '400');
-  canvasCtx.fillText('(hover for exact age and birth date)', x + game.scale(8), textY);
+  canvasCtx.fillText('(hover for exact age and birth date)', x + padX + game.scale(8), textY);
   textY += game.scale(20);
   
   // Self-tend toggle
   canvasCtx.fillStyle = '#f1f5f9';
   canvasCtx.font = game.getScaledFont(13, '600');
-  canvasCtx.fillText('Self-tend', x, textY);
+  canvasCtx.fillText('Self-tend', x + padX, textY);
   
   const selfTendEnabled = (colonist as any).selfTend || false;
-  const toggleX = x + game.scale(90);
+  const toggleX = x + padX + game.scale(90);
   const toggleY = textY - game.scale(6);
   const toggleW = game.scale(40);
   const toggleH = game.scale(18);
@@ -305,7 +307,7 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
   // Needs section (Hunger and Fatigue)
   canvasCtx.fillStyle = '#f1f5f9';
   canvasCtx.font = game.getScaledFont(14, '600');
-  canvasCtx.fillText('Needs', x, textY);
+  canvasCtx.fillText('Needs', x + padX, textY);
   textY += game.scale(18);
   
   // Hunger bar
@@ -315,11 +317,11 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
   
   canvasCtx.fillStyle = '#cbd5e1';
   canvasCtx.font = game.getScaledFont(11, '500');
-  canvasCtx.fillText('Hunger', x + game.scale(8), textY);
+  canvasCtx.fillText('Hunger', x + padX + game.scale(8), textY);
   
-  const barWidth = Math.min(game.scale(100), w * 0.3);
+  const barWidth = Math.min(game.scale(80), w * 0.25);
   const barHeight = game.scale(8);
-  const barX = x + game.scale(140);
+  const barX = x + padX + game.scale(140);
   
   canvasCtx.fillStyle = '#374151';
   canvasCtx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
@@ -348,7 +350,7 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
   
   canvasCtx.fillStyle = '#cbd5e1';
   canvasCtx.font = game.getScaledFont(11, '500');
-  canvasCtx.fillText('Energy', x + game.scale(8), textY);
+  canvasCtx.fillText('Energy', x + padX + game.scale(8), textY);
   
   canvasCtx.fillStyle = '#374151';
   canvasCtx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
@@ -367,12 +369,23 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
     canvasCtx.font = game.getScaledFont(9, '700');
     canvasCtx.fillText('EXHAUSTED', barX + barWidth + game.scale(35), textY);
   }
-  textY += game.scale(20);
+  textY += game.scale(24); // Add extra spacing before separator
+  
+  // Section separator
+  const separatorY = textY - game.scale(8);
+  const gradient = canvasCtx.createLinearGradient(x, separatorY, x + w, separatorY);
+  gradient.addColorStop(0, 'rgba(51, 65, 85, 0)');
+  gradient.addColorStop(0.2, 'rgba(51, 65, 85, 0.8)');
+  gradient.addColorStop(0.8, 'rgba(51, 65, 85, 0.8)');
+  gradient.addColorStop(1, 'rgba(51, 65, 85, 0)');
+  canvasCtx.fillStyle = gradient;
+  canvasCtx.fillRect(x, separatorY, w - game.scale(28), 1);
+  textY += game.scale(12);
   
   // Bodily Systems section
   canvasCtx.fillStyle = '#f1f5f9';
   canvasCtx.font = game.getScaledFont(14, '600');
-  canvasCtx.fillText('Bodily Systems', x, textY);
+  canvasCtx.fillText('Bodily Systems', x + padX, textY);
   textY += game.scale(18);
   
   // Filter systems for biological colonists (default)
@@ -389,12 +402,12 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
     
     canvasCtx.fillStyle = '#cbd5e1';
     canvasCtx.font = game.getScaledFont(11, '500');
-    canvasCtx.fillText(system.name, x + game.scale(8), textY);
+    canvasCtx.fillText(system.name, x + padX + game.scale(8), textY);
     
-    // Capacity bar
-    const barWidth = Math.min(game.scale(100), w * 0.3);
+    // Capacity bar - reduced width to prevent overflow
+    const barWidth = Math.min(game.scale(80), w * 0.25);
     const barHeight = game.scale(8);
-    const barX = x + game.scale(140);
+    const barX = x + padX + game.scale(140);
     
     canvasCtx.fillStyle = '#374151';
     canvasCtx.fillRect(barX, textY - game.scale(6), barWidth, barHeight);
@@ -421,7 +434,7 @@ function drawOverviewTab(ctx: HealthTabContext, contentY: number, contentH: numb
     if (textY > contentY + contentH - game.scale(20)) {
       canvasCtx.fillStyle = '#6b7280';
       canvasCtx.font = game.getScaledFont(9, '400');
-      canvasCtx.fillText('...more systems', x + game.scale(8), textY);
+      canvasCtx.fillText('...more systems', x + padX + game.scale(8), textY);
       break;
     }
   }

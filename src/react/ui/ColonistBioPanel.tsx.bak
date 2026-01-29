@@ -1,0 +1,4 @@
+// This file has been replaced by ColonistBioPanel_CLEAN.tsx
+// Keeping as backup only
+
+export {}; // Empty export to make TypeScript happy
