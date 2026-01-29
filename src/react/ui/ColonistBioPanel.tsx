@@ -55,35 +55,23 @@ export function ColonistProfilePanel() {
           ['--ui-scale' as any]: uiScale
         }}
       >
-        {tabRects.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`colonist-profile-tab${state.activeTab === tab.id ? ' active' : ''}`}
-            style={{
-              left: `${tab.x - panelRect.x}px`,
-              top: `${tab.y - panelRect.y}px`,
-              width: `${tab.w}px`,
-              height: `${tab.h}px`
-            }}
-            onPointerDown={(event) => {
-              event.stopPropagation();
-              handleTabClick(tab.id);
-            }}
-          >
-            {tab.icon} {tab.label}
-          </button>
-        ))}
+        <div className="colonist-profile-tabs">
+          {tabRects.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`colonist-profile-tab${state.activeTab === tab.id ? ' active' : ''}`}
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                handleTabClick(tab.id);
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-        <div
-          className="colonist-profile-content"
-          style={{
-            left: `${contentRect.x - panelRect.x}px`,
-            top: `${contentRect.y - panelRect.y}px`,
-            width: `${contentRect.w}px`,
-            height: `${contentRect.h}px`
-          }}
-        >
+        <div className="colonist-profile-content">
           <div
             className={`colonist-bio-panel ${
               state.activeTab === 'health'
@@ -164,12 +152,6 @@ export function ColonistProfilePanel() {
           <button
             type="button"
             className="colonist-profile-close"
-            style={{
-              left: `${closeRect.x - panelRect.x}px`,
-              top: `${closeRect.y - panelRect.y}px`,
-              width: `${closeRect.w}px`,
-              height: `${closeRect.h}px`
-            }}
             onPointerDown={(event) => {
               event.stopPropagation();
               handleClose();
@@ -216,8 +198,10 @@ function BioHeader({
     ctx.clearRect(0, 0, avatarSize, avatarSize);
     ctx.save();
     ctx.translate(avatarSize / 2, avatarSize / 2);
-    ctx.scale(uiScale * 2, uiScale * 2);
-    drawColonistAvatar(ctx as any, 0, 0, colonist, 16, true);
+    // Force south-facing (front) direction and full body scale
+    const avatarColonist = { ...colonist, direction: Math.PI / 2 }; // South facing
+    ctx.scale(uiScale * 1.8, uiScale * 1.8); // Reduced scale to show full body
+    drawColonistAvatar(ctx as any, 0, 0, avatarColonist, 18, true);
     ctx.restore();
   }, [avatarSize, dpr, uiScale, colonist]);
 

@@ -94,10 +94,22 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 	border-radius:12px;
 	pointer-events:auto;
 	overflow:hidden;
+	display:flex;
+	flex-direction:column;
+}
+.colonist-profile-tabs{
+	display:flex;
+	gap:0;
+	width:100%;
+	border-bottom:1px solid #1e293b;
+	background:rgba(15,23,42,0.6);
+	flex-shrink:0;
 }
 .colonist-profile-tab{
-	position:absolute;
-	border:1px solid #1e293b;
+	flex:1;
+	min-width:0;
+	border:none;
+	border-right:1px solid #1e293b;
 	background:rgba(15,23,42,0.8);
 	color:#9ca3af;
 	font-size:calc(var(--ui-scale, 1) * 11px);
@@ -106,11 +118,15 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 	display:flex;
 	align-items:center;
 	justify-content:center;
-	gap:calc(var(--ui-scale, 1) * 6px);
-	line-height:1;
-	z-index:2;
+	padding:calc(var(--ui-scale, 1) * 10px) calc(var(--ui-scale, 1) * 8px);
+	line-height:1.2;
 	transition:all 0.2s ease;
-	border-radius:8px 8px 0 0;
+	white-space:nowrap;
+	overflow:hidden;
+	text-overflow:ellipsis;
+}
+.colonist-profile-tab:last-child{
+	border-right:none;
 }
 .colonist-profile-tab:hover{
 	background:rgba(30,41,59,0.9);
@@ -118,18 +134,30 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 }
 .colonist-profile-tab.active{
 	background:linear-gradient(180deg,#1e293b 0%,#0f172a 100%);
-	border-color:#3b82f6;
+	border-bottom:2px solid #3b82f6;
 	color:#7dd3fc;
-	box-shadow:0 -2px 8px rgba(59,130,246,0.15);
+	box-shadow:inset 0 -2px 8px rgba(59,130,246,0.15);
 }
 .colonist-profile-content{
-	position:absolute;
+	flex:1;
 	overflow-y:auto;
 	overflow-x:hidden;
 	pointer-events:auto;
 	scrollbar-width:thin;
 	scrollbar-color:#475569 transparent;
-	padding-bottom:calc(var(--ui-scale, 1) * 36px);
+	padding-bottom:calc(var(--ui-scale, 1) * 40px);
+	position:relative;
+}
+.colonist-profile-content::after{
+	content:'';
+	position:sticky;
+	bottom:0;
+	left:0;
+	right:0;
+	height:calc(var(--ui-scale, 1) * 40px);
+	background:linear-gradient(180deg,transparent 0%,rgba(11,18,32,0.9) 70%);
+	pointer-events:none;
+	z-index:1;
 }
 .colonist-profile-content::-webkit-scrollbar{width:10px}
 .colonist-profile-content::-webkit-scrollbar-thumb{
@@ -142,6 +170,10 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 .colonist-profile-content::-webkit-scrollbar-track{background:transparent}
 .colonist-profile-close{
 	position:absolute;
+	right:calc(var(--ui-scale, 1) * 8px);
+	bottom:calc(var(--ui-scale, 1) * 8px);
+	width:calc(var(--ui-scale, 1) * 28px);
+	height:calc(var(--ui-scale, 1) * 28px);
 	border:1px solid #334155;
 	background:rgba(15,23,42,0.9);
 	color:#dbeafe;
