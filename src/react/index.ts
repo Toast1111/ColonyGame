@@ -5,11 +5,13 @@ export { ResourceBar } from './ui/ResourceBar';
 export { Hotbar } from './ui/Hotbar';
 export { BuildMenu } from './ui/BuildMenu';
 export { ColonistProfilePanel } from './ui/ColonistBioPanel';
+export { WorkPriorityPanel } from './ui/WorkPriorityPanel';
 export { createMobileControlsBridge, type MobileControlsHandle } from './ui/mobileControlsBridge';
 export { getMobileControlsState, subscribeMobileControls, setMobileControlsState } from './stores/mobileControlsStore';
 export { getResourceBarState, subscribeResourceBar, setResourceBarState } from './stores/resourceBarStore';
 export { getHotbarState, subscribeHotbar, setHotbarState } from './stores/hotbarStore';
 export { getColonistProfileState, subscribeColonistProfile, setColonistProfileState } from './stores/colonistBioStore';
+export { getWorkPriorityState, subscribeWorkPriority, setWorkPriorityVisible, toggleWorkPriorityPanel } from './stores/workPriorityStore';
 export {
   getGameOverOverlayState,
   subscribeGameOverOverlay,

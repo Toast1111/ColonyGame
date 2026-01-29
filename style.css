@@ -48,6 +48,36 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 .resource-bar-left{flex:1;min-width:0}
 .resource-bar-right{flex-shrink:0}
 .resource-pill{display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:#0f172acc;border:1px solid #1f2937;color:#e2e8f0;font-size:13px;white-space:nowrap}
+
+/* Work Priority Panel */
+.work-priority-overlay{position:fixed;inset:0;display:flex;align-items:flex-end;justify-content:flex-start;padding:2%;z-index:90;pointer-events:auto}
+.work-priority-panel{width:70%;max-width:1200px;max-height:70vh;background:rgba(15,23,42,0.96);border:2px solid rgba(30,41,59,0.8);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);display:flex;flex-direction:column;margin-bottom:80px}
+.work-priority-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:rgba(30,41,59,0.5);border-bottom:1px solid rgba(30,41,59,0.8)}
+.work-priority-header h2{margin:0;font-size:16px;font-weight:600;color:rgba(148,163,184,1)}
+.work-priority-close{background:transparent;border:none;color:#94a3b8;font-size:24px;cursor:pointer;padding:4px 8px;line-height:1;transition:color 0.2s}
+.work-priority-close:hover{color:#fff}
+.work-priority-table-container{flex:1;overflow:auto;padding:8px}
+.work-priority-table{width:100%;border-collapse:collapse;font-size:13px}
+.work-priority-table thead{position:sticky;top:0;z-index:1;background:#2a4a6a}
+.work-priority-table th{padding:8px 4px;text-align:center;font-weight:bold;border:1px solid #1a2a3a;color:#e0e0e0;white-space:nowrap}
+.colonist-name-header{text-align:left;padding-left:8px;min-width:120px}
+.work-type-header{position:relative;font-size:11px;min-width:40px;cursor:help}
+.work-type-tooltip{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:4px;padding:6px 10px;background:rgba(40,40,40,0.95);border:2px solid #4a6fa5;border-radius:4px;white-space:nowrap;font-size:12px;color:#fff;pointer-events:none;z-index:10}
+.work-priority-table tbody tr.even-row{background:#252525}
+.work-priority-table tbody tr.odd-row{background:#2a2a2a}
+.work-priority-table td{padding:8px 4px;text-align:center;border:1px solid #1a1a1a}
+.colonist-name-cell{background:#353535;text-align:left;padding-left:8px;display:flex;align-items:center;gap:8px}
+.colonist-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff}
+.health-indicator{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.priority-cell{cursor:pointer;font-weight:bold;font-size:14px;transition:all 0.15s;user-select:none}
+.priority-cell:hover{opacity:0.8;transform:scale(1.05)}
+.priority-1{background:#4CAF50;color:#fff}
+.priority-2{background:#8BC34A;color:#fff}
+.priority-3{background:#FFC107;color:#000}
+.priority-4{background:#FF9800;color:#fff}
+.priority-disabled{background:#424242;color:#666}
+.work-priority-footer{padding:10px 16px;background:#1a1a1a;border-top:1px solid #2a2a2a;font-size:11px;color:#aaa;text-align:center;line-height:1.6}
+.work-priority-footer p{margin:2px 0}
 .resource-pill-bar{display:inline-block;width:8px;height:18px;border-radius:6px}
 .resource-pill-text{line-height:1}
 .resource-menu-button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);border-radius:.6rem;cursor:pointer;font-size:16px;line-height:1;min-height:34px;min-width:34px;box-shadow:0 6px 14px #0006;transition:all .2s ease;pointer-events:auto}
