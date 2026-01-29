@@ -13,11 +13,13 @@ import type { Colonist } from '../../game/types';
 export function WorkPriorityPanel() {
   const state = useSyncExternalStore(subscribeWorkPriority, getWorkPriorityState, getWorkPriorityState);
   const [hoveredWorkType, setHoveredWorkType] = useState<WorkType | null>(null);
+  const [updateCounter, setUpdateCounter] = useState(0);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
   const game = (window as any).game;
   const colonists = useMemo(() => {
     return (game?.state?.colonists || []).filter((c: Colonist) => c.alive);
-  }, [game?.state?.colonists]);
+  }, [game?.state?.colonists, updateCounter]);
 
   if (!state.visible || !colonists.length) {
     return null;
@@ -42,6 +44,7 @@ export function WorkPriorityPanel() {
   const handleCellClick = (colonist: Colonist, workType: WorkType) => {
     cycleWorkPriority(colonist, workType);
     game?.audioManager?.play('ui.click.primary');
+    setUpdateCounter(prev => prev + 1); // Force re-render to show new priority
   };
 
   const getPriorityClass = (priority: WorkPriority): string => {
@@ -66,6 +69,10 @@ export function WorkPriorityPanel() {
     return '#f44336';
   };
 
+  const handleMouseMove = (e: React.MouseEvent) => {
+    setMousePos({ x: e.clientX, y: e.clientY });
+  };
+
   return (
     <div className="work-priority-overlay" onClick={handleBackdropClick}>
       <div className="work-priority-panel">
@@ -80,7 +87,7 @@ export function WorkPriorityPanel() {
           </button>
         </div>
 
-        <div className="work-priority-table-container">
+        <div className="work-priority-table-container" onMouseMove={handleMouseMove}>
           <table className="work-priority-table">
             <thead>
               <tr>
@@ -97,11 +104,6 @@ export function WorkPriorityPanel() {
                       title={info.label}
                     >
                       {abbrev}
-                      {hoveredWorkType === workType && (
-                        <div className="work-type-tooltip">
-                          {info.label}
-                        </div>
-                      )}
                     </th>
                   );
                 })}
@@ -145,6 +147,17 @@ export function WorkPriorityPanel() {
           <p>Press P to close • Hover over column headers for full names</p>
         </div>
       </div>
+      {hoveredWorkType && (
+        <div 
+          className="work-type-tooltip-cursor"
+          style={{
+            left: `${mousePos.x + 12}px`,
+            top: `${mousePos.y + 12}px`
+          }}
+        >
+          {WORK_TYPE_INFO[hoveredWorkType].label}
+        </div>
+      )}
     </div>
   );
 }
