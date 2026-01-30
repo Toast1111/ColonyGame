@@ -1,0 +1,41 @@
+/**
+ * Secrets and hidden truths for colonist backstories
+ */
+
+export const SECRETS = [
+  "killed someone in self-defense but told no one",
+  "is fleeing from a vengeful ex-lover",
+  "witnessed a murder and never reported it",
+  "stole a large sum of money years ago",
+  "has a child they abandoned",
+  "is addicted to a rare substance",
+  "is actually nobility in hiding",
+  "deserted from the military",
+  "was part of a dark cult",
+  "knows the location of hidden treasure",
+  "has a terminal illness they're hiding",
+  "was in prison for a crime they did commit",
+  "is being blackmailed by someone from their past",
+  "has a twin they've never mentioned",
+  "once practiced forbidden magic",
+  "can't read but has memorized hundreds of books by listening",
+  "stole the identity of someone who died",
+  "once betrayed their best friend for money",
+  "is slowly losing their memory",
+  "hears voices that sometimes predict disasters",
+  "was present at a famous historical event but under a different name",
+  "burned down their family home and let everyone think it was an accident",
+  "knows a cure for a rare disease but keeps it hidden",
+  "was once married to three people simultaneously",
+  "witnessed a murder by someone powerful and never spoke up",
+  "has a twin who committed crimes in their name",
+  "can communicate with animals but thinks they're going mad",
+  "once worked as an executioner",
+  "is being hunted by a vengeful crime family",
+  "faked their own death twice",
+  "has a treasure map tattooed on their body",
+  "poisoned someone years ago and was never caught",
+  "can't feel physical pain",
+  "is immortal, or at least hasn't aged in decades",
+  "knows the true name of an ancient demon"
+];

@@ -47,6 +47,7 @@ export const SKIN_TONES: ColorVariant[] = [
   { name: 'Medium', hex: '#E0AC69', rgb: [224, 172, 105], rarity: 'common' },
   { name: 'Olive', hex: '#C68642', rgb: [198, 134, 66], rarity: 'common' },
   { name: 'Tan', hex: '#8D5524', rgb: [141, 85, 36], rarity: 'common' },
+  { name: 'Brown', hex: '#8B4513', rgb: [139, 69, 19], rarity: 'common' },
   { name: 'Dark', hex: '#5C4033', rgb: [92, 64, 51], rarity: 'common' },
   { name: 'Deep', hex: '#3C2415', rgb: [60, 36, 21], rarity: 'common' }
 ];
@@ -100,7 +101,6 @@ export const CLOTHING_COLORS: ColorVariant[] = [
   // Uncommon Colors
   { name: 'Purple', hex: '#800080', rgb: [128, 0, 128], rarity: 'uncommon' },
   { name: 'Orange', hex: '#FF8C00', rgb: [255, 140, 0], rarity: 'uncommon' },
-  { name: 'Yellow', hex: '#FFD700', rgb: [255, 215, 0], rarity: 'uncommon' },
   
   // Rare Colors
   { name: 'Gold', hex: '#FFD700', rgb: [255, 215, 0], rarity: 'rare' },

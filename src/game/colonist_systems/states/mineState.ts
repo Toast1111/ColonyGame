@@ -62,7 +62,8 @@ export function updateMineState(
       const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Mining') : 1;
       const miningLvl = c.skills ? skillLevel(c, 'Mining') : 0;
       const skillMult = skillWorkSpeedMultiplier(miningLvl);
-      const workMult = equipMult * skillMult;
+      const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
+      const workMult = equipMult * skillMult * traitMult;
 
       if (!r.hp) {
         const idx = gy * game.terrainGrid.cols + gx;

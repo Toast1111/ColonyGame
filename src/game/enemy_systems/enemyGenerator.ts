@@ -13,7 +13,8 @@
 
 import { ImageAssets } from '../../assets/images';
 import { itemDatabase } from '../../data/itemDatabase';
-import { randomChoice, getRandomColor, CLOTHING_COLORS } from '../colonist_systems/traits';
+import { randomChoice } from '../colonist_systems/colonistData';
+import { getRandomColor, CLOTHING_COLORS } from '../colonist_systems/traits';
 import type { Enemy } from '../types';
 import type { InventoryItem, Equipment } from '../types';
 

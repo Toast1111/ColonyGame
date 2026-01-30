@@ -261,7 +261,8 @@ function handleSmithing(
   // Calculate smithing speed based on crafting skill
   const craftingLvl = c.skills ? skillLevel(c, 'Crafting') : 0;
   const skillMult = skillWorkSpeedMultiplier(craftingLvl);
-  const smithingSpeed = (1.0 / recipe.craftTime) * skillMult; // Progress per second
+  const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
+  const smithingSpeed = (1.0 / recipe.craftTime) * skillMult * traitMult; // Progress per second
   
   smithingBench.smithingProgress = (smithingBench.smithingProgress || 0) + smithingSpeed * dt;
   

@@ -130,7 +130,8 @@ function handleStonecutting(
   // Calculate cutting speed based on crafting skill
   const craftingLvl = c.skills ? skillLevel(c, 'Crafting') : 0;
   const skillMult = skillWorkSpeedMultiplier(craftingLvl);
-  const cuttingSpeed = 0.15 * skillMult; // Base ~7 seconds to cut
+  const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
+  const cuttingSpeed = 0.15 * skillMult * traitMult; // Base ~7 seconds to cut
   
   table.cuttingProgress = (table.cuttingProgress || 0) + cuttingSpeed * dt;
   

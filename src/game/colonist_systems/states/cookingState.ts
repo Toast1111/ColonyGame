@@ -130,7 +130,8 @@ function handleCooking(
   // Calculate cooking speed based on skill
   const cookingLvl = c.skills ? skillLevel(c, 'Cooking') : 0;
   const skillMult = skillWorkSpeedMultiplier(cookingLvl);
-  const cookSpeed = 0.1 * skillMult; // Base 10 seconds to cook
+  const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
+  const cookSpeed = 0.1 * skillMult * traitMult; // Base 10 seconds to cook
   
   stove.cookingProgress = (stove.cookingProgress || 0) + cookSpeed * dt;
   

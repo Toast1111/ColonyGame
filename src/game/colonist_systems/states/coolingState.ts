@@ -134,8 +134,9 @@ function handleCooling(
   // Apply skill-based work speed (use any available skill property)
   const craftingSkill = (c.skills as any)?.Crafting || 0;
   const skillMult = skillWorkSpeedMultiplier(craftingSkill);
+  const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
   const baseSpeed = 0.08; // Base cooling speed (slower than cutting, ~12-15 seconds)
-  const speed = baseSpeed * skillMult;
+  const speed = baseSpeed * skillMult * traitMult;
   
   // Progress cooling
   rack.coolingProgress += speed * dt;

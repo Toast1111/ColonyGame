@@ -1,16 +1,16 @@
 // Colonist personality and background generator
 import { ImageAssets } from '../../assets/images';
 import { itemDatabase } from '../../data/itemDatabase';
+import { NAMES, FAVORITE_FOODS, randomChoice } from './colonistData';
 import { 
-  generateCompleteTraitSet,
-  NAMES,
-  FAVORITE_FOODS,
-  APPEARANCE_OPTIONS,
   CLOTHING_COLORS,
   getRandomColor,
-  randomChoice,
-  type ColonistTraits
+  getRandomBackground,
+  generateAppearanceTraits
 } from './traits';
+import { ALL_PASSIVE_TRAITS, type PassiveTrait } from './traits/passiveTraits';
+import type { Background } from './traits/backgrounds';
+import { BIRTHPLACES, LIFE_EVENTS, SKILLS, FEARS, SECRETS, type LifeEvent } from './narrative';
 import { createDefaultSkillSet, addStartingSkillVariance } from '../skills/skills';
 import type { InventoryItem, Equipment, ColonistInventory } from '../types';
 
@@ -56,51 +56,8 @@ export interface ColonistProfile {
     fatigueRate: number;
   };
   startingInventory: ColonistInventory; // New field for starting equipment and items
-  passiveTraits?: import('./traits/passiveTraits').PassiveTrait[]; // Passive gameplay traits
+  passiveTraits?: PassiveTrait[]; // Passive gameplay traits
 }
-
-// Extended data for Prison Architect-style generation
-const BIRTHPLACES = [
-  'Millhaven', 'Riverside', 'Oakwood', 'Stonecrest', 'Greenfield', 'Ashford',
-  'Fairview', 'Brookside', 'Clearwater', 'Redwood', 'Silverdale', 'Goldcrest',
-  'Ironport', 'Copper Hills', 'Crystal Lake', 'Shadowvale', 'Brightwater', 'Darkwood'
-];
-
-const LIFE_EVENTS = [
-  { event: "Lost a parent at a young age", impact: 'negative' as const },
-  { event: "Won a local competition", impact: 'positive' as const },
-  { event: "Survived a natural disaster", impact: 'neutral' as const },
-  { event: "Fell in love and got heartbroken", impact: 'negative' as const },
-  { event: "Started their own small business", impact: 'positive' as const },
-  { event: "Served in the local militia", impact: 'neutral' as const },
-  { event: "Lost everything in a fire", impact: 'negative' as const },
-  { event: "Saved someone's life", impact: 'positive' as const },
-  { event: "Was betrayed by a close friend", impact: 'negative' as const },
-  { event: "Discovered a hidden talent", impact: 'positive' as const },
-  { event: "Moved frequently as a child", impact: 'neutral' as const },
-  { event: "Inherited property from a relative", impact: 'positive' as const }
-];
-
-const SKILLS = [
-  'Cooking', 'Carpentry', 'Gardening', 'Mechanics', 'First Aid', 'Hunting',
-  'Fishing', 'Sewing', 'Music', 'Art', 'Writing', 'Leadership', 'Animal Care'
-];
-
-const FEARS = [
-  'heights', 'darkness', 'water', 'crowds', 'spiders', 'failure', 'abandonment',
-  'confined spaces', 'loud noises', 'authority figures'
-];
-
-const SECRETS = [
-  "once stole food to feed a starving family",
-  "has a photographic memory but hides it",
-  "is secretly afraid of butterflies",
-  "wrote anonymous love letters for years",
-  "saved someone's life and never told anyone",
-  "knows the location of hidden treasure",
-  "can't read but has never admitted it",
-  "has recurring dreams about flying"
-];
 
 // Seeded random generator for consistent results
 class SeededRandom {
@@ -149,6 +106,273 @@ function generateStats(): ColonistProfile['stats'] {
     hungerRate: Math.round(baseVariation() * 100) / 100,
     fatigueRate: Math.round(baseVariation() * 100) / 100
   };
+}
+
+// Generate traits that make contextual sense with the colonist's backstory
+function generateContextualTraits(
+  rng: SeededRandom,
+  detailedInfo: ColonistProfile['detailedInfo'],
+  background: Background,
+  age: number
+): PassiveTrait[] {
+  const contextualTraits: PassiveTrait[] = [];
+  const usedTraits = new Set<string>();
+  
+  // Map backstory elements to potential traits
+  const traitCandidates: Array<{ trait: PassiveTrait; reason: string; priority: number }> = [];
+  
+  // SKILLS-BASED TRAITS
+  if (detailedInfo.skills.includes('Hunting') || detailedInfo.skills.includes('Tracking')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'nimble');
+    if (trait) traitCandidates.push({ trait, reason: 'years of hunting in the wild', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('Mechanics') || detailedInfo.skills.includes('Carpentry')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'focused');
+    if (trait) traitCandidates.push({ trait, reason: 'meticulous craftwork', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('Leadership') || detailedInfo.skills.includes('Storytelling')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'charismatic');
+    if (trait) traitCandidates.push({ trait, reason: 'natural leadership ability', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('First Aid') || detailedInfo.skills.includes('Herbalism')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'empathetic');
+    if (trait) traitCandidates.push({ trait, reason: 'healing the wounded', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('Wilderness survival') || detailedInfo.skills.includes('Gardening')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'green_thumb');
+    if (trait) traitCandidates.push({ trait, reason: 'working with living things', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('Animal Care') || detailedInfo.skills.includes('Taming wild beasts')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'animal_whisperer');
+    if (trait) traitCandidates.push({ trait, reason: 'a bond with animals', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('Sleight of hand') || detailedInfo.skills.includes('Lockpicking')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'nimble');
+    if (trait) traitCandidates.push({ trait, reason: 'dexterous fingers and quick reflexes', priority: 3 });
+  }
+  if (detailedInfo.skills.includes('Deep meditation') || detailedInfo.skills.includes('Fortune-telling')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'focused');
+    if (trait) traitCandidates.push({ trait, reason: 'meditative practice', priority: 2 });
+  }
+  
+  // LIFE EVENT-BASED TRAITS
+  for (const event of detailedInfo.lifeEvents) {
+    if (event.event.includes('survived') || event.event.includes('shipwreck') || event.event.includes('wilderness') || event.event.includes('weeks')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'tough' || t.id === 'hardy');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 4 });
+      }
+    }
+    if (event.event.includes('lost their voice') || event.event.includes('slowly lose their mind') || event.event.includes('traumatic')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'antisocial' || t.id === 'slow_learner');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 4 });
+      }
+    }
+    if (event.event.includes('library') || event.event.includes('decoded') || event.event.includes('artifact')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'quick_learner' || t.id === 'photographic_memory');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 4 });
+      }
+    }
+    if (event.event.includes('lightning') || event.event.includes('dreams') || event.event.includes('visions') || event.event.includes('prophetic')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'lucky' || t.id === 'night_owl');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 5 });
+      }
+    }
+    if (event.event.includes('betrayed') || event.event.includes('framed') || event.event.includes('abandoned') || event.event.includes('sole witness')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'antisocial');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 3 });
+      }
+    }
+    if (event.event.includes('saved') || event.event.includes('village') || event.event.includes('noble') || event.event.includes('life')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'empathetic' || t.id === 'charismatic');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 3 });
+      }
+    }
+    if (event.event.includes('infected') || event.event.includes('parasite') || event.event.includes('disease') || event.event.includes('barely recovered')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'weak_immunity' || t.id === 'slow_healer');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 4 });
+      }
+      // Or opposite - developed strong immunity
+      const immuneTrait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'super_immune' || t.id === 'good_immunity');
+      if (immuneTrait && !usedTraits.has(immuneTrait.id) && rng.next() > 0.5) {
+        traitCandidates.push({ trait: immuneTrait, reason: event.event + ' (developed immunity)', priority: 4 });
+      }
+    }
+    if (event.event.includes('invented') || event.event.includes('revolutionized')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'quick_learner' || t.id === 'focused');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 4 });
+      }
+    }
+    if (event.event.includes('dead for') || event.event.includes('revived')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'very_fast_healer' || t.id === 'super_immune');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: event.event, priority: 5 });
+      }
+    }
+  }
+  
+  // FEAR-BASED TRAITS (negative traits)
+  if (detailedInfo.fears.includes('confined spaces') || detailedInfo.fears.includes('darkness')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'claustrophobic');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'traumatic experience', priority: 4 });
+    }
+  }
+  if (detailedInfo.fears.includes('blood') || detailedInfo.fears.includes('needles')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'squeamish');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'sensitive nature', priority: 3 });
+    }
+  }
+  if (detailedInfo.fears.includes('fire')) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'pyromaniac');
+    if (trait && !usedTraits.has(trait.id) && rng.next() > 0.7) { // Opposite reaction sometimes
+      traitCandidates.push({ trait, reason: 'fascination with fire', priority: 2 });
+    }
+  }
+  
+  // SECRET-BASED TRAITS
+  for (const secret of detailedInfo.secrets) {
+    if (secret.includes('killed') || secret.includes('executioner') || secret.includes('poisoned')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'tough' || t.id === 'antisocial');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'a dark secret', priority: 5 });
+      }
+    }
+    if (secret.includes('memory') || secret.includes('photographic') || secret.includes('memorized')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'photographic_memory');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'an extraordinary gift', priority: 5 });
+      }
+    }
+    if (secret.includes('immortal') || secret.includes('died and come back') || secret.includes("hasn't aged")) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'very_fast_healer' || t.id === 'super_immune');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'supernatural resilience', priority: 5 });
+      }
+    }
+    if (secret.includes('spy') || secret.includes('double life') || secret.includes('identity')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'nimble' || t.id === 'focused');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'years of deception', priority: 4 });
+      }
+    }
+    if (secret.includes('communicate with animals') || secret.includes('animal')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'animal_whisperer');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'a mysterious connection to beasts', priority: 5 });
+      }
+    }
+    if (secret.includes('prophetic') || secret.includes('predict') || secret.includes('visions') || secret.includes('future')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'lucky' || t.id === 'night_owl');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'glimpses of what is to come', priority: 5 });
+      }
+    }
+    if (secret.includes('slowly losing their memory')) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'absent_minded' || t.id === 'slow_learner');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'fading memories', priority: 5 });
+      }
+    }
+    if (secret.includes("can't feel physical pain")) {
+      const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'tough');
+      if (trait && !usedTraits.has(trait.id)) {
+        traitCandidates.push({ trait, reason: 'an unusual condition', priority: 5 });
+      }
+    }
+  }
+  
+  // BACKGROUND-BASED TRAITS
+  if (background.name === 'Farmer' || background.name === 'Herbalist') {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'green_thumb');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'years of farming', priority: 2 });
+    }
+  }
+  if (background.name === 'Soldier' || background.name === 'Guard') {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'tough' || t.id === 'brawler');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'military training', priority: 3 });
+    }
+  }
+  if (background.name === 'Scholar' || background.name === 'Engineer') {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'quick_learner' || t.id === 'photographic_memory');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'academic background', priority: 3 });
+    }
+  }
+  if (background.name === 'Noble' || background.name === 'Merchant') {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'beautiful' || t.id === 'pretty');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'privileged upbringing', priority: 2 });
+    }
+  }
+  
+  // AGE-BASED TRAITS
+  if (age < 25) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'quick_learner' || t.id === 'nimble');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'youth and vitality', priority: 1 });
+    }
+  } else if (age > 45) {
+    const trait = ALL_PASSIVE_TRAITS.find((t: any) => t.id === 'wise' || t.id === 'careful');
+    if (trait && !usedTraits.has(trait.id)) {
+      traitCandidates.push({ trait, reason: 'life experience', priority: 1 });
+    }
+  }
+  
+  // Sort by priority (higher priority first)
+  traitCandidates.sort((a, b) => b.priority - a.priority);
+  
+  // Select 1-3 traits based on priority and randomness
+  const numTraits = rng.range(1, 3);
+  let attempts = 0;
+  
+  for (const candidate of traitCandidates) {
+    if (contextualTraits.length >= numTraits) break;
+    if (attempts++ > 50) break;
+    
+    const trait = candidate.trait;
+    if (!trait || usedTraits.has(trait.id)) continue;
+    
+    // Check conflicts
+    const hasConflict = trait.conflictsWith?.some((id: string) => usedTraits.has(id));
+    if (hasConflict) continue;
+    
+    // Higher priority = higher chance, but still some randomness
+    const chance = Math.min(0.9, 0.3 + (candidate.priority * 0.15));
+    if (rng.next() < chance) {
+      contextualTraits.push(trait);
+      usedTraits.add(trait.id);
+      // Store the reason for the trait (will be used in backstory)
+      (trait as any).__backstoryReason = candidate.reason;
+    }
+  }
+  
+  // If we still don't have enough traits, fill with random appropriate ones
+  if (contextualTraits.length < numTraits) {
+    const availableTraits = ALL_PASSIVE_TRAITS.filter((t: PassiveTrait) => 
+      !usedTraits.has(t.id) && 
+      !t.conflictsWith?.some((id: string) => usedTraits.has(id))
+    );
+    
+    while (contextualTraits.length < numTraits && availableTraits.length > 0) {
+      const randomTrait = rng.choice(availableTraits) as PassiveTrait;
+      contextualTraits.push(randomTrait);
+      usedTraits.add(randomTrait.id);
+      availableTraits.splice(availableTraits.indexOf(randomTrait), 1);
+    }
+  }
+  
+  return contextualTraits;
 }
 
 function generateDetailedInfo(rng: SeededRandom, age: number, name: string): ColonistProfile['detailedInfo'] {
@@ -221,52 +445,234 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
   const { name, age, detailedInfo, background } = profile;
   if (!detailedInfo) return "A mysterious person with an unknown past.";
   
-  let story = `${name} is ${age} years old and was born in ${detailedInfo.birthplace}. `;
+  // Use a random narrative structure instead of a template
+  const seed = hashStringToNumber(name!);
+  const rng = new SeededRandom(seed + 1000); // Different seed for story variation
+  const narrativeStyle = rng.range(0, 6);
   
-  // Family background
-  if (detailedInfo.family.parents.length > 0) {
-    story += `Raised by ${detailedInfo.family.parents.join(' and ')}, `;
-  } else {
-    story += `Growing up without parents, `;
+  let story = '';
+  
+  switch (narrativeStyle) {
+    case 0: // Event-focused opening
+      if (detailedInfo.lifeEvents.length > 0) {
+        const pivotalEvent = detailedInfo.lifeEvents[rng.range(0, detailedInfo.lifeEvents.length - 1)];
+        story += `Everything changed for ${name} when they were ${pivotalEvent.age}. That was when ${pivotalEvent.event}. `;
+      }
+      story += `Born ${detailedInfo.birthplace}, `;
+      if (detailedInfo.family.parents.length === 0) {
+        story += `they never knew their parents. `;
+      } else {
+        story += `their early years were shaped by ${detailedInfo.family.parents[0].split(' (')[0]}. `;
+      }
+      break;
+      
+    case 1: // Skill/talent focused opening
+      if (detailedInfo.skills.length > 0) {
+        story += `${name} discovered their gift for ${detailedInfo.skills[0].toLowerCase()} at a young age. `;
+      }
+      story += `Growing up ${detailedInfo.birthplace}, they learned early that survival meant `;
+      story += rng.choice(['adapting quickly', 'trusting no one completely', 'keeping secrets', 'staying sharp']);
+      story += '. ';
+      break;
+      
+    case 2: // Fear/psychology focused opening
+      if (detailedInfo.fears.length > 0) {
+        story += `Some say ${name}'s fear of ${detailedInfo.fears[0]} stems from their childhood ${detailedInfo.birthplace}. `;
+      }
+      story += `Now ${age}, they've lived through `;
+      if (detailedInfo.lifeEvents.length > 0) {
+        story += `more than most: ${detailedInfo.lifeEvents[0].event.toLowerCase()}`;
+        if (detailedInfo.lifeEvents.length > 1) {
+          story += `, and later, ${detailedInfo.lifeEvents[1].event.toLowerCase()}`;
+        }
+        story += '. ';
+      } else {
+        story += 'enough to change anyone. ';
+      }
+      break;
+      
+    case 3: // Mystery/secret focused opening
+      if (detailedInfo.secrets.length > 0) {
+        story += `${name} carries a burden few could imagine: they ${detailedInfo.secrets[0]}. `;
+        story += `This secret has shaped their ${age} years more than their birthplace of ${detailedInfo.birthplace} ever could. `;
+      } else {
+        story += `${name}, ${age}, came from ${detailedInfo.birthplace} with ghosts in their past. `;
+      }
+      break;
+      
+    case 4: // Relationship focused opening
+      if (detailedInfo.relationships.length > 0) {
+        const rel = detailedInfo.relationships[0];
+        story += `${name} still thinks about ${rel.name}, their ${rel.type.toLowerCase()}. `;
+        story += `That relationship ended ${rel.status === 'bad' ? 'badly' : rel.status === 'good' ? 'on good terms' : 'ambiguously'}, but it taught them `;
+        story += rng.choice(['who to trust', 'the cost of loyalty', 'that nothing lasts forever', 'the value of bonds']);
+        story += '. ';
+      }
+      if (detailedInfo.family.spouse) {
+        story += `These days, they share their life with ${detailedInfo.family.spouse}. `;
+      }
+      story += `Originally from ${detailedInfo.birthplace}, `;
+      break;
+      
+    case 5: // Career/background focused opening
+      story += `As a ${background?.toLowerCase()}, ${name} has seen ${detailedInfo.birthplace} and beyond. `;
+      story += `${age} years of life have taught them `;
+      if (detailedInfo.skills.length >= 2) {
+        story += `${detailedInfo.skills[0].toLowerCase()} and ${detailedInfo.skills[1].toLowerCase()}, `;
+      }
+      story += `but more importantly, they've learned `;
+      story += rng.choice(['when to fight', 'when to run', 'who deserves trust', 'that survival isn\'t everything']);
+      story += '. ';
+      break;
+      
+    case 6: // Philosophical/reflective opening
+      story += `At ${age}, ${name} has learned that life rarely goes as planned. `;
+      if (detailedInfo.family.parents.length > 0) {
+        story += `Their parents, ${detailedInfo.family.parents.map(p => p.split(' (')[0]).join(' and ')}, `;
+        story += `raised them ${detailedInfo.birthplace}, `;
+      } else {
+        story += `Orphaned young and raised ${detailedInfo.birthplace}, `;
+      }
+      story += 'but that was just the beginning. ';
+      break;
   }
   
-  if (detailedInfo.family.siblings.length > 0) {
-    story += `they have ${detailedInfo.family.siblings.length} sibling${detailedInfo.family.siblings.length > 1 ? 's' : ''}. `;
-  } else {
-    story += `they were an only child. `;
+  // Add middle section with varied structure
+  const middleStyle = rng.range(0, 3);
+  
+  switch (middleStyle) {
+    case 0: // Chronicle events
+      const chronEvents = detailedInfo.lifeEvents.filter(e => !story.includes(e.event)).slice(0, 2);
+      if (chronEvents.length > 0) {
+        story += chronEvents.map(e => {
+          const details = rng.choice([
+            `At ${e.age}, ${e.event}`,
+            `When they were ${e.age}, ${e.event}`,
+            `Age ${e.age} brought change: ${e.event}`,
+            `${e.age} was a turning point when ${e.event}`
+          ]);
+          return details;
+        }).join('. ') + '. ';
+      }
+      break;
+      
+    case 1: // Describe relationships and family
+      if (detailedInfo.family.siblings.length > 0) {
+        const sibCount = detailedInfo.family.siblings.length;
+        story += `${sibCount === 1 ? 'Their sibling' : `Their ${sibCount} siblings`} `;
+        story += rng.choice([
+          'scattered to the winds years ago',
+          'remain back home, unaware of their current life',
+          'may not even know they\'re alive',
+          'were lost to the same events that brought them here'
+        ]) + '. ';
+      }
+      if (detailedInfo.family.children.length > 0) {
+        story += `They have ${detailedInfo.family.children.length} child${detailedInfo.family.children.length > 1 ? 'ren' : ''} `;
+        story += rng.choice([
+          'somewhere out there',
+          'they hope to see again someday',
+          'they left behind for their own safety',
+          'who may never forgive them'
+        ]) + '. ';
+      }
+      break;
+      
+    case 2: // Highlight skills and quirks
+      if (detailedInfo.skills.length > 1) {
+        const skills = detailedInfo.skills.slice(0, 3);
+        story += `Over the years, they\'ve picked up `;
+        story += skills.slice(0, -1).map(s => s.toLowerCase()).join(', ');
+        story += ` and ${skills[skills.length - 1].toLowerCase()}. `;
+      }
+      break;
+      
+    case 3: // Add mystery or personality depth
+      if (detailedInfo.secrets.length > 0 && !story.includes(detailedInfo.secrets[0])) {
+        story += rng.choice([
+          `There are things they don\'t talk about. Things like how they ${detailedInfo.secrets[0]}. `,
+          `They keep quiet about certain matters, particularly that they ${detailedInfo.secrets[0]}. `,
+          `Some truths are better left unsaid, such as the fact that they ${detailedInfo.secrets[0]}. `
+        ]);
+      }
+      break;
   }
   
-  // Major life events
-  if (detailedInfo.lifeEvents.length > 0) {
-    const majorEvents = detailedInfo.lifeEvents.filter(e => e.impact !== 'neutral').slice(0, 2);
-    if (majorEvents.length > 0) {
-      story += `Key moments in their life include: `;
-      story += majorEvents.map(e => `at age ${e.age}, ${e.event.toLowerCase()}`).join('; ') + '. ';
+  // Add a section that explicitly connects traits to backstory
+  if (profile.passiveTraits && profile.passiveTraits.length > 0) {
+    story += '\n\n';
+    const traitDescriptions: string[] = [];
+    
+    for (const trait of profile.passiveTraits) {
+      const reason = (trait as any).__backstoryReason;
+      if (reason && rng.next() > 0.3) { // 70% chance to explain each trait
+        const traitName = trait.name;
+        const connections = [
+          `Their ${traitName.toLowerCase()} nature stems from ${reason}.`,
+          `${reason} - this left them ${traitName.toLowerCase()}.`,
+          `People often notice they're ${traitName.toLowerCase()}, a quality developed through ${reason}.`,
+          `The ${reason} made them ${traitName.toLowerCase()}.`
+        ];
+        traitDescriptions.push(rng.choice(connections));
+      }
+    }
+    
+    if (traitDescriptions.length > 0) {
+      story += traitDescriptions.slice(0, 2).join(' ');
     }
   }
   
-  // Current family situation
-  if (detailedInfo.family.spouse) {
-    story += `They are married to ${detailedInfo.family.spouse}`;
-    if (detailedInfo.family.children.length > 0) {
-      story += ` and have ${detailedInfo.family.children.length} child${detailedInfo.family.children.length > 1 ? 'ren' : ''}: ${detailedInfo.family.children.join(', ')}`;
-    }
-    story += '. ';
-  }
+  // Add closing with variety
+  const closingStyle = rng.range(0, 4);
   
-  // Skills and personality
-  if (detailedInfo.skills.length > 0) {
-    story += `They are skilled in ${detailedInfo.skills.slice(0, 2).join(' and ')}. `;
-  }
-  
-  // Fears
-  if (detailedInfo.fears.length > 0) {
-    story += `Despite their strengths, they have a deep fear of ${detailedInfo.fears[0]}. `;
-  }
-  
-  // Secrets
-  if (detailedInfo.secrets.length > 0) {
-    story += `What few know is that they ${detailedInfo.secrets[0]}.`;
+  switch (closingStyle) {
+    case 0: // Forward-looking
+      story += rng.choice([
+        'Now they seek a fresh start, though the past is never truly behind anyone.',
+        'They came here hoping to leave their old life behind, but some things follow you.',
+        'This colony represents a new chapter, though they know better than to expect peace.',
+        'Whatever comes next, they\'re ready to face it. They have to be.'
+      ]);
+      break;
+      
+    case 1: // Reflective on fears/weaknesses
+      if (detailedInfo.fears.length > 0 && !story.includes(detailedInfo.fears[0])) {
+        story += rng.choice([
+          `Despite everything, they\'ve never overcome their fear of ${detailedInfo.fears[0]}.`,
+          `Their fear of ${detailedInfo.fears[0]} remains, a reminder that even survivors have limits.`,
+          `${detailedInfo.fears[0]} still troubles them, though they\'d never admit it.`
+        ]);
+      } else {
+        story += 'Some scars never fully heal, but they\'ve learned to keep moving forward.';
+      }
+      break;
+      
+    case 2: // Mysterious/ominous
+      story += rng.choice([
+        'Whether they\'re running from something or toward something, even they might not know.',
+        'They rarely speak of what drove them here. Perhaps it\'s better that way.',
+        'Some questions are better left unasked. They certainly won\'t offer answers.',
+        'The full truth of their past may never be known. Perhaps that\'s for the best.'
+      ]);
+      break;
+      
+    case 3: // Skills/capability focused
+      story += rng.choice([
+        'Whatever happens, their skills will prove useful to the colony.',
+        'They\'ve survived worse than this. Probably.',
+        'Their past has prepared them for hardship, if nothing else.',
+        'They know how to survive. Everything else is negotiable.'
+      ]);
+      break;
+      
+    case 4: // Philosophical
+      story += rng.choice([
+        'In the end, everyone\'s past is a collection of choices and chances. Theirs is no different.',
+        'They believe that where you come from matters less than where you\'re going.',
+        'The past made them who they are. Whether that\'s good or bad remains to be seen.',
+        'Life, they\'ve learned, is what happens between the disasters.'
+      ]);
+      break;
   }
   
   return story;
@@ -392,25 +798,32 @@ export function generateColonistProfile(): ColonistProfile {
   const rng = new SeededRandom(seed);
   const age = rng.range(20, 55);
   
-  // Generate traits using the new modular system
-  const traits = generateCompleteTraitSet();
-  console.log('DEBUG: Generated traits:', traits);
-  
-  // Generate detailed personal information
+  // STEP 1: Generate detailed personal information FIRST
   const detailedInfo = generateDetailedInfo(rng, age, name);
+  
+  // STEP 2: Generate background
+  const background = getRandomBackground();
+  
+  // STEP 3: Generate traits that make sense with the backstory
+  const contextualTraits = generateContextualTraits(rng, detailedInfo, background, age);
+  
+  // STEP 4: Generate appearance traits
+  const appearance = generateAppearanceTraits();
+  
+  console.log('DEBUG: Generated contextual traits:', contextualTraits.map(t => t.name));
   
   const favoriteFood = randomChoice(FAVORITE_FOODS);
   
   const avatar = {
-    skinTone: traits.appearance.skinTone.hex,
-    hairColor: traits.appearance.hairColor.hex,
-    eyeColor: traits.appearance.eyeColor.hex,
+    skinTone: appearance.skinTone.hex,
+    hairColor: appearance.hairColor.hex,
+    eyeColor: appearance.eyeColor.hex,
     // Use weighted clothing color selection from appearance traits
     clothing: getRandomColor(CLOTHING_COLORS).hex,
     sprites: {
       headType: randomChoice(ImageAssets.getInstance().getAvailableHeadTypes()),
-      bodyType: traits.appearance.bodyType,
-      hairStyle: traits.appearance.hairStyle,
+      bodyType: appearance.bodyType,
+      hairStyle: appearance.hairStyle,
       apparelType: randomChoice(ImageAssets.getInstance().getAvailableApparelTypes())
     }
   };
@@ -421,14 +834,15 @@ export function generateColonistProfile(): ColonistProfile {
     name,
     age,
     seed,
-    background: traits.background.name,
-    personality: traits.passiveTraits.map(trait => trait.name),
+    background: background.name,
+    personality: contextualTraits.map(trait => trait.name),
     favoriteFood,
     backstory: '', // Will be generated next
     detailedInfo,
     avatar,
     stats,
-    startingInventory: generateStartingInventory(rng, traits.background.name, detailedInfo.skills)
+    startingInventory: generateStartingInventory(rng, background.name, detailedInfo.skills),
+    passiveTraits: contextualTraits // Store the full trait objects
   };
   
   // Generate rich backstory using all the detailed information

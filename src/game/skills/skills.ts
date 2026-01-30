@@ -48,6 +48,9 @@ export function grantSkillXP(colonist: Colonist, name: SkillName, baseAmount: nu
   // Passion multipliers
   if (skill.passion === 'interested') amount *= 1.5;
   else if (skill.passion === 'burning') amount *= 2.0;
+  // Trait modifier for experience gain (from passive traits like Quick Learner)
+  const traitExpMult = (colonist as any).traitModifiers?.experienceGain || 1.0;
+  amount *= traitExpMult;
   // Global multiplier
   if (colonist.skills.xpMultiplier) amount *= colonist.skills.xpMultiplier;
   skill.xp += amount;

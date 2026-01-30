@@ -2356,16 +2356,55 @@ export class Game {
 
   spawnColonist(pos: { x: number; y: number }) {
     const profile = generateColonistProfile();
+    
+    // Apply passive trait effects to base stats
+    const baseStats = {
+      hp: 100,
+      maxHp: 100,
+      speed: 50,
+      workSpeed: profile.stats.workSpeed,
+      movementSpeed: 1.0,
+      carryCapacity: 50,
+      experienceGain: 1.0,
+      hungerRate: profile.stats.hungerRate,
+      fatigueRate: profile.stats.fatigueRate
+    };
+    
+    // Apply trait effects if passive traits exist
+    if (profile.passiveTraits) {
+      for (const trait of profile.passiveTraits) {
+        for (const effect of trait.effects) {
+          if (baseStats[effect.stat as keyof typeof baseStats] !== undefined) {
+            if (effect.type === 'additive') {
+              (baseStats as any)[effect.stat] += effect.modifier;
+            } else if (effect.type === 'multiplicative') {
+              (baseStats as any)[effect.stat] *= effect.modifier;
+            }
+          }
+        }
+      }
+    }
+    
     const c: Colonist = { 
-      x: pos.x, y: pos.y, r: 8, hp: 100, 
-      speed: 50 * profile.stats.workSpeed, // Apply work speed modifier
+      x: pos.x, y: pos.y, r: 8, 
+      hp: baseStats.hp,
+      maxHp: baseStats.maxHp, // Store max HP for trait effects
+      speed: baseStats.speed * baseStats.movementSpeed * baseStats.workSpeed,
       task: null, target: null, carrying: null, 
       hunger: 0, alive: true, color: profile.avatar.clothing, 
       t: rand(0, 1),
       direction: 0, // Initialize facing direction (0 = facing right)
       profile: profile,
-      inventory: JSON.parse(JSON.stringify(profile.startingInventory)) // Deep copy the starting inventory
-    };
+      inventory: JSON.parse(JSON.stringify(profile.startingInventory)), // Deep copy the starting inventory
+      traitModifiers: { // Store trait modifiers for ongoing effects
+        workSpeed: baseStats.workSpeed,
+        movementSpeed: baseStats.movementSpeed,
+        experienceGain: baseStats.experienceGain,
+        hungerRate: baseStats.hungerRate,
+        fatigueRate: baseStats.fatigueRate,
+        carryCapacity: baseStats.carryCapacity
+      }
+    } as any;
 
     // Attach skills from profile.initialSkills if present
     if ((profile as any).initialSkills) {

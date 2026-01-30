@@ -312,17 +312,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   // Hunger increases faster when working; slower when resting (rebalanced for realistic meal frequency)
   const working = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' || c.state === 'flee' || c.state === 'move';
   
-  // Apply personality stats to hunger and fatigue rates
-  const hungerMultiplier = c.profile?.stats.hungerRate || 1.0;
-  const fatigueMultiplier = c.profile?.stats.fatigueRate || 1.0;
+  // Apply trait modifiers to hunger and fatigue rates (from passive traits)
+  const hungerMultiplier = (c as any).traitModifiers?.hungerRate || c.profile?.stats.hungerRate || 1.0;
+  const fatigueMultiplier = (c as any).traitModifiers?.fatigueRate || c.profile?.stats.fatigueRate || 1.0;
   
   // Skip hunger/fatigue if godmode is enabled
   if (!(c as any).godmode) {
-    const hungerRate = (working ? 0.25 : c.inside ? 0.1 : 0.15) * hungerMultiplier; // Apply personality modifier
+    const hungerRate = (working ? 0.25 : c.inside ? 0.1 : 0.15) * hungerMultiplier; // Apply trait modifier
     c.hunger = Math.max(0, Math.min(100, (c.hunger || 0) + dt * hungerRate));
     
     // Fatigue rises when active, falls when inside/resting (adjusted for balanced gameplay)
-    const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply personality modifier
+    const fatigueRise = (working ? 0.8 : 0.3) * fatigueMultiplier; // Apply trait modifier
     // Only reduce fatigue when actually inside a building or in a sleep/rest state, NOT when just seeking sleep
     if (c.inside || c.state === 'resting' || c.state === 'sleep') c.fatigue = Math.max(0, (c.fatigue || 0) - dt * 8); // Slightly slower recovery too
     else c.fatigue = Math.min(100, (c.fatigue || 0) + dt * fatigueRise);
@@ -1744,7 +1744,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           const equipMult = (game as any).getWorkSpeedMultiplier ? (game as any).getWorkSpeedMultiplier(c, 'Woodcutting') : 1;
           const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
           const skillMult = skillWorkSpeedMultiplier(plantsLvl);
-          const workMult = equipMult * skillMult;
+          const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
+          const workMult = equipMult * skillMult * traitMult;
           
           t.hp -= 18 * dt * workMult;
           if (c.skills) grantSkillXP(c, 'Plants', 4 * dt, c.t || 0);
@@ -1794,9 +1795,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Plants skill influences planting speed
         const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
         const skillMult = skillWorkSpeedMultiplier(plantsLvl);
+        const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
         
         // Planting takes about 3 seconds base time
-        const plantingTime = 3.0 / skillMult;
+        const plantingTime = 3.0 / (skillMult * traitMult);
         
         if (c.stateSince >= plantingTime) {
           // Plant the tree using the tree growing manager
@@ -1831,10 +1833,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // Plants skill influences harvest speed and yield
         const plantsLvl = c.skills ? skillLevel(c, 'Plants') : 0;
         const skillMult = skillWorkSpeedMultiplier(plantsLvl);
+        const traitMult = (c as any).traitModifiers?.workSpeed || 1.0; // Trait modifier from passive traits
         const yieldMult = 1 + Math.min(0.5, plantsLvl * 0.02);
         
         // Harvesting takes about 2 seconds base time
-        const harvestTime = 2.0 / skillMult;
+        const harvestTime = 2.0 / (skillMult * traitMult);
         
         if (c.stateSince >= harvestTime) {
           // Harvest the tree using the tree growing manager
