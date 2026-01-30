@@ -448,6 +448,68 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 .health-toggle{padding:calc(var(--ui-scale, 1) * 4px) calc(var(--ui-scale, 1) * 12px);background:#334155;border:1px solid #475569;color:#94a3b8;font-size:calc(var(--ui-scale, 1) * 11px);border-radius:4px;cursor:pointer;transition:all 0.2s;min-width:calc(var(--ui-scale, 1) * 50px)}
 .health-toggle:hover{background:#475569}
 .health-toggle.active{background:#10b981;border-color:#059669;color:#fff}
+.health-info-item{font-size:calc(var(--ui-scale, 1) * 12px);color:#94a3b8}
+.health-info-note{font-size:calc(var(--ui-scale, 1) * 10px);color:#6b7280;font-style:italic}
+
+/* Health Needs */
+.health-needs{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 10px)}
+.health-need-row{display:flex;align-items:center;gap:calc(var(--ui-scale, 1) * 10px)}
+.health-need-label{font-size:calc(var(--ui-scale, 1) * 12px);color:#cbd5e1;min-width:calc(var(--ui-scale, 1) * 60px)}
+.health-need-bar{flex:1;height:calc(var(--ui-scale, 1) * 14px);background:#1e293b;border:1px solid #334155;border-radius:4px;overflow:hidden;position:relative}
+.health-need-bar-fill{height:100%;transition:width 0.3s}
+.health-need-value{font-size:calc(var(--ui-scale, 1) * 11px);color:#94a3b8;min-width:calc(var(--ui-scale, 1) * 35px);text-align:right}
+.health-need-warning{font-size:calc(var(--ui-scale, 1) * 10px);color:#dc2626;font-weight:700}
+
+/* Bodily Systems */
+.health-systems{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 8px)}
+.health-system-row{display:flex;align-items:center;gap:calc(var(--ui-scale, 1) * 10px)}
+.health-system-label{font-size:calc(var(--ui-scale, 1) * 11px);color:#cbd5e1;min-width:calc(var(--ui-scale, 1) * 110px)}
+.health-system-bar{flex:1;height:calc(var(--ui-scale, 1) * 12px);background:#1e293b;border:1px solid #334155;border-radius:999px;overflow:hidden;position:relative}
+.health-system-bar-fill{height:100%;transition:width 0.3s,background-color 0.3s}
+.health-system-value{font-size:calc(var(--ui-scale, 1) * 11px);color:#94a3b8;min-width:calc(var(--ui-scale, 1) * 38px);text-align:right}
+.health-system-critical{font-size:calc(var(--ui-scale, 1) * 9px);color:#dc2626;font-weight:700}
+
+/* Operations Tab */
+.health-operations-section{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 10px)}
+.health-subsection-title{font-size:calc(var(--ui-scale, 1) * 13px);font-weight:600;color:#f1f5f9;margin-bottom:calc(var(--ui-scale, 1) * 4px)}
+.health-operations-list{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 8px)}
+.health-operation-card{display:flex;background:rgba(30,41,59,0.6);border:1px solid #475569;border-radius:6px;overflow:hidden;transition:border-color 0.2s}
+.health-operation-card:hover{border-color:#60a5fa}
+.health-operation-priority{width:calc(var(--ui-scale, 1) * 4px);flex-shrink:0}
+.health-operation-content{flex:1;padding:calc(var(--ui-scale, 1) * 10px)}
+.health-operation-label{font-size:calc(var(--ui-scale, 1) * 12px);font-weight:600;color:#f1f5f9;margin-bottom:calc(var(--ui-scale, 1) * 4px)}
+.health-operation-desc{font-size:calc(var(--ui-scale, 1) * 11px);color:#94a3b8;margin-bottom:calc(var(--ui-scale, 1) * 6px)}
+.health-operation-target{font-size:calc(var(--ui-scale, 1) * 10px);color:#60a5fa;margin-bottom:calc(var(--ui-scale, 1) * 4px)}
+.health-operation-priority-label{font-size:calc(var(--ui-scale, 1) * 10px);color:#6b7280}
+
+/* Injuries Tab */
+.health-bleeding-alert{padding:calc(var(--ui-scale, 1) * 10px);background:rgba(220,38,38,0.15);border:1px solid #dc2626;border-radius:6px;color:#fca5a5;font-size:calc(var(--ui-scale, 1) * 12px);font-weight:600}
+.health-injury-list{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 10px)}
+.health-injury-card{background:rgba(30,41,59,0.6);border:1px solid #475569;border-radius:6px;padding:calc(var(--ui-scale, 1) * 12px);transition:border-color 0.2s}
+.health-injury-card:hover{border-color:#60a5fa}
+.health-injury-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:calc(var(--ui-scale, 1) * 8px)}
+.health-injury-part{font-size:calc(var(--ui-scale, 1) * 13px);font-weight:600;color:#f1f5f9}
+.health-injury-type{font-size:calc(var(--ui-scale, 1) * 11px);color:#94a3b8;text-transform:capitalize}
+.health-injury-stats{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 6px);margin-bottom:calc(var(--ui-scale, 1) * 8px)}
+.health-injury-stat{display:flex;align-items:center;gap:calc(var(--ui-scale, 1) * 8px)}
+.health-injury-stat.health-injury-bleeding{color:#ef4444}
+.health-injury-stat-label{font-size:calc(var(--ui-scale, 1) * 11px);color:#cbd5e1;min-width:calc(var(--ui-scale, 1) * 70px)}
+.health-injury-stat-value{font-size:calc(var(--ui-scale, 1) * 11px);color:#94a3b8;min-width:calc(var(--ui-scale, 1) * 50px)}
+.health-injury-severity-bar{flex:1;height:calc(var(--ui-scale, 1) * 10px);background:#1e293b;border:1px solid #334155;border-radius:4px;overflow:hidden}
+.health-injury-severity-fill{height:100%;transition:width 0.3s,background-color 0.3s}
+.health-injury-status{display:flex;gap:calc(var(--ui-scale, 1) * 6px);flex-wrap:wrap;margin-bottom:calc(var(--ui-scale, 1) * 6px)}
+.health-injury-badge{padding:calc(var(--ui-scale, 1) * 3px) calc(var(--ui-scale, 1) * 8px);border-radius:999px;font-size:calc(var(--ui-scale, 1) * 9px);font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.health-injury-badge--treated{background:rgba(34,197,94,0.2);color:#22c55e;border:1px solid rgba(34,197,94,0.4)}
+.health-injury-badge--infected{background:rgba(220,38,38,0.2);color:#dc2626;border:1px solid rgba(220,38,38,0.4)}
+.health-injury-badge--permanent{background:rgba(167,139,250,0.2);color:#a78bfa;border:1px solid rgba(167,139,250,0.4)}
+.health-injury-treatment{font-size:calc(var(--ui-scale, 1) * 10px);color:#6b7280;font-style:italic}
+
+/* Implants Section */
+.health-implants-section{margin-top:calc(var(--ui-scale, 1) * 12px);padding-top:calc(var(--ui-scale, 1) * 12px);border-top:1px solid rgba(51,65,85,0.5)}
+.health-implants-list{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 6px)}
+.health-implant-row{display:flex;justify-content:space-between;align-items:center;padding:calc(var(--ui-scale, 1) * 6px);background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:4px}
+.health-implant-label{font-size:calc(var(--ui-scale, 1) * 11px);color:#60a5fa}
+.health-implant-quality{font-size:calc(var(--ui-scale, 1) * 10px);color:#10b981}
 .health-needs,.health-systems{display:flex;flex-direction:column;gap:calc(var(--ui-scale, 1) * 8px)}
 .health-need-row,.health-system-row{display:grid;grid-template-columns:minmax(100px,0.4fr) 1fr minmax(50px,0.2fr) auto;gap:calc(var(--ui-scale, 1) * 8px);align-items:center;font-size:calc(var(--ui-scale, 1) * 12px)}
 .health-need-label,.health-system-label{color:#cbd5e1}

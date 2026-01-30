@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 // ==================== SKILLS TAB ====================
 export function SkillsTab({ skills, uiScale }: { skills: any[]; uiScale: number }) {
@@ -188,6 +188,16 @@ export function HealthTab({ colonist, uiScale }: { colonist: any; uiScale: numbe
   const [subTab, setSubTab] = useState<'overview' | 'operations' | 'injuries'>(
     game?.colonistHealthSubTab || 'overview'
   );
+  const [, forceUpdate] = useState(0);
+
+  // Force re-render every 500ms to update real-time health data
+  useEffect(() => {
+    const interval = setInterval(() => {
+      forceUpdate(prev => prev + 1);
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSubTabChange = (tab: 'overview' | 'operations' | 'injuries') => {
     setSubTab(tab);
@@ -232,6 +242,7 @@ function HealthOverviewTab({ colonist, uiScale }: { colonist: any; uiScale: numb
   const age = profile?.age || 25;
   const gender = profile?.gender || 'Unknown';
   const selfTend = colonist.selfTend || false;
+  const health = colonist.health || {};
 
   const toggleSelfTend = () => {
     if (game?.selColonist) {
@@ -244,22 +255,52 @@ function HealthOverviewTab({ colonist, uiScale }: { colonist: any; uiScale: numb
   const fatigue = colonist.fatigue || 0;
   const energy = 100 - fatigue;
 
-  // Simplified bodily systems for now
-  const systems = [
-    { name: 'Consciousness', capacity: 100, fatal: true },
-    { name: 'Sight', capacity: 100, fatal: false },
-    { name: 'Hearing', capacity: 100, fatal: false },
-    { name: 'Moving', capacity: 100, fatal: false },
-    { name: 'Manipulation', capacity: 100, fatal: false },
-    { name: 'Breathing', capacity: 100, fatal: true },
-    { name: 'Blood Pumping', capacity: 100, fatal: true },
-  ];
+  const getSystemCapacity = (systemName: string) => {
+    switch (systemName) {
+      case 'Pain':
+        return Math.max(0, Math.min(100, 100 - (health.totalPain || 0) * 100));
+      case 'Consciousness':
+        return Math.round((health.consciousness || 1) * 100);
+      case 'Moving':
+        return Math.round((health.mobility || 1) * 100);
+      case 'Manipulation':
+        return Math.round((health.manipulation || 1) * 100);
+      case 'Blood Pumping':
+        return Math.round((health.bloodLevel || 1) * 100);
+      case 'Blood Filtration':
+        const kidneyHealth = health.kidneyHealth || 1;
+        const liverHealth = health.liverHealth || 1;
+        return Math.round(((kidneyHealth + liverHealth) / 2) * 100);
+      case 'Breathing':
+        return Math.round((health.lungHealth || 1) * 100);
+      default:
+        return 100;
+    }
+  };
+
+  const bodilySystems = [
+    { name: 'Pain', fatal: false },
+    { name: 'Consciousness', fatal: true },
+    { name: 'Sight', fatal: false },
+    { name: 'Hearing', fatal: false },
+    { name: 'Moving', fatal: false },
+    { name: 'Manipulation', fatal: false },
+    { name: 'Breathing', fatal: true },
+    { name: 'Blood Filtration', fatal: true },
+    { name: 'Blood Pumping', fatal: true },
+  ].map(sys => ({ ...sys, capacity: getSystemCapacity(sys.name) }));
 
   const getCapacityColor = (capacity: number, fatal: boolean) => {
-    if (capacity >= 70) return '#22c55e';
-    if (capacity >= 50) return '#fbbf24';
-    if (capacity >= 30) return '#f59e0b';
-    return '#dc2626';
+    if (fatal) {
+      if (capacity < 25) return '#dc2626';
+      if (capacity < 50) return '#f59e0b';
+      if (capacity < 80) return '#fbbf24';
+      return '#22c55e';
+    } else {
+      if (capacity < 30) return '#f59e0b';
+      if (capacity < 70) return '#fbbf24';
+      return '#22c55e';
+    }
   };
 
   return (
@@ -267,9 +308,9 @@ function HealthOverviewTab({ colonist, uiScale }: { colonist: any; uiScale: numb
       <div className="health-section">
         <h4 className="colonist-bio-section-title">Creature Info</h4>
         <div className="health-info-grid">
-          <div>Type: Human</div>
-          <div>Gender: {gender}</div>
-          <div>Age: {age} years</div>
+          <div className="health-info-item">Type: Human</div>
+          <div className="health-info-item">Gender: {gender}</div>
+          <div className="health-info-item">Age: {age} years</div>
         </div>
       </div>
 
@@ -283,6 +324,7 @@ function HealthOverviewTab({ colonist, uiScale }: { colonist: any; uiScale: numb
             {selfTend ? 'ON' : 'OFF'}
           </button>
         </div>
+        {!selfTend && <div className="health-info-note">(reduced efficiency)</div>}
       </div>
 
       <div className="health-section health-section--separated">
@@ -322,7 +364,7 @@ function HealthOverviewTab({ colonist, uiScale }: { colonist: any; uiScale: numb
       <div className="health-section health-section--separated">
         <h4 className="colonist-bio-section-title">Bodily Systems</h4>
         <div className="health-systems">
-          {systems.map((system) => (
+          {bodilySystems.map((system) => (
             <div key={system.name} className="health-system-row">
               <span className="health-system-label">{system.name}</span>
               <div className="health-system-bar">
@@ -345,33 +387,144 @@ function HealthOverviewTab({ colonist, uiScale }: { colonist: any; uiScale: numb
 }
 
 function HealthOperationsTab({ colonist, uiScale }: { colonist: any; uiScale: number }) {
+  const health = colonist.health || {};
+  const queuedOps = health.queuedOperations || [];
+
+  const formatBodyPart = (part: string) => {
+    return part.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
   return (
     <div className="health-operations">
       <h4 className="colonist-bio-section-title">Surgical Operations</h4>
-      <div className="colonist-bio-empty">
-        No operations available yet
+      
+      {queuedOps.length > 0 && (
+        <div className="health-operations-section">
+          <h5 className="health-subsection-title">Queued Operations</h5>
+          <div className="health-operations-list">
+            {queuedOps.map((op: any, idx: number) => (
+              <div key={idx} className="health-operation-card">
+                <div 
+                  className="health-operation-priority" 
+                  style={{
+                    backgroundColor: op.priority >= 7 ? '#dc2626' : op.priority >= 4 ? '#f59e0b' : '#22c55e'
+                  }}
+                />
+                <div className="health-operation-content">
+                  <div className="health-operation-label">{op.label}</div>
+                  <div className="health-operation-desc">{op.description || 'No description'}</div>
+                  {op.targetBodyPart && (
+                    <div className="health-operation-target">Target: {formatBodyPart(op.targetBodyPart)}</div>
+                  )}
+                  <div className="health-operation-priority-label">Priority: {op.priority}/10</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="health-operations-section">
+        <h5 className="health-subsection-title">Available Operations</h5>
+        <div className="colonist-bio-empty">
+          No operations available yet (System under development)
+        </div>
       </div>
     </div>
   );
 }
 
 function HealthInjuriesTab({ colonist, uiScale }: { colonist: any; uiScale: number }) {
-  const injuries = colonist.health?.injuries || [];
+  const health = colonist.health || {};
+  const injuries = health.injuries || [];
+  const implants = health.implants || [];
+
+  const formatBodyPart = (part: string) => {
+    return part.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  };
+
+  const totalBleeding = injuries.reduce((sum: number, inj: any) => sum + (inj.bleeding || 0), 0);
 
   return (
     <div className="health-injuries">
       <h4 className="colonist-bio-section-title">Injuries & Conditions</h4>
+      
+      {totalBleeding > 0 && (
+        <div className="health-bleeding-alert">
+          ⚠️ Total Bleeding: {(totalBleeding * 100).toFixed(1)}% per second
+        </div>
+      )}
+
       {injuries.length === 0 ? (
         <div className="colonist-bio-empty">No injuries or conditions</div>
       ) : (
         <div className="health-injury-list">
           {injuries.map((injury: any, idx: number) => (
-            <div key={idx} className="health-injury-row">
-              <div className="health-injury-part">{injury.part}</div>
-              <div className="health-injury-type">{injury.type}</div>
-              <div className="health-injury-severity">{Math.round(injury.severity * 100)}%</div>
+            <div key={idx} className="health-injury-card">
+              <div className="health-injury-header">
+                <div className="health-injury-part">{formatBodyPart(injury.bodyPart)}</div>
+                <div className="health-injury-type">{injury.type}</div>
+              </div>
+              
+              <div className="health-injury-stats">
+                <div className="health-injury-stat">
+                  <span className="health-injury-stat-label">Severity:</span>
+                  <div className="health-injury-severity-bar">
+                    <div 
+                      className="health-injury-severity-fill"
+                      style={{
+                        width: `${injury.severity * 100}%`,
+                        backgroundColor: injury.severity > 0.7 ? '#dc2626' : injury.severity > 0.4 ? '#f59e0b' : '#fbbf24'
+                      }}
+                    />
+                  </div>
+                  <span className="health-injury-stat-value">{Math.round(injury.severity * 100)}%</span>
+                </div>
+
+                {injury.bleeding > 0 && (
+                  <div className="health-injury-stat health-injury-bleeding">
+                    <span className="health-injury-stat-label">Bleeding:</span>
+                    <span className="health-injury-stat-value">{(injury.bleeding * 100).toFixed(1)}%/s</span>
+                  </div>
+                )}
+
+                {injury.pain > 0 && (
+                  <div className="health-injury-stat">
+                    <span className="health-injury-stat-label">Pain:</span>
+                    <span className="health-injury-stat-value">{Math.round(injury.pain * 100)}%</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="health-injury-status">
+                {injury.treated && <span className="health-injury-badge health-injury-badge--treated">Treated</span>}
+                {injury.infected && <span className="health-injury-badge health-injury-badge--infected">INFECTED</span>}
+                {injury.permanent && <span className="health-injury-badge health-injury-badge--permanent">Permanent</span>}
+              </div>
+
+              {injury.treatmentQuality && (
+                <div className="health-injury-treatment">
+                  Treatment Quality: {Math.round(injury.treatmentQuality * 100)}%
+                </div>
+              )}
             </div>
           ))}
+        </div>
+      )}
+
+      {implants.length > 0 && (
+        <div className="health-implants-section">
+          <h5 className="health-subsection-title">Implants & Prosthetics</h5>
+          <div className="health-implants-list">
+            {implants.map((implant: any, idx: number) => (
+              <div key={idx} className="health-implant-row">
+                <span className="health-implant-label">{implant.label}</span>
+                <span className="health-implant-quality">
+                  ({Math.round((implant.quality || 1) * 100)}% efficiency)
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
