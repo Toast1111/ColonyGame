@@ -4,6 +4,128 @@ import { playUiClickPrimary, playUiClickSecondary } from '../../game/audio/helpe
 import { getColonistProfileState, subscribeColonistProfile } from '../stores/colonistBioStore';
 import { SkillsTab, GearTab, SocialTab, LogTab, HealthTab } from './ColonistProfileTabs';
 
+interface TooltipProps {
+  content: string | null;
+  children: ReactNode;
+}
+
+function Tooltip({ content, children }: TooltipProps) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const targetRef = useRef<HTMLDivElement>(null);
+
+  const handlePointerEnter = (e: React.PointerEvent) => {
+    if (!content) return;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPosition({ x: rect.left + rect.width / 2, y: rect.top });
+    setIsVisible(true);
+  };
+
+  const handlePointerLeave = () => {
+    setIsVisible(false);
+  };
+
+  return (
+    <div 
+      ref={targetRef}
+      className="tooltip-wrapper"
+      onPointerEnter={handlePointerEnter}
+      onPointerLeave={handlePointerLeave}
+      style={{ display: 'inline-block' }}
+    >
+      {children}
+      {isVisible && content && (
+        <div
+          className="colonist-bio-tooltip"
+          style={{
+            position: 'fixed',
+            left: `${position.x}px`,
+            top: `${position.y - 8}px`,
+            transform: 'translate(-50%, -100%)',
+            pointerEvents: 'none',
+            zIndex: 10000
+          }}
+        >
+          <div className="colonist-bio-tooltip-content">
+            {content}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function getTraitTooltip(trait: any): string {
+  if (!trait) return '';
+  
+  const lines = [trait.description];
+  
+  if (trait.effects && trait.effects.length > 0) {
+    lines.push('');
+    lines.push('Effects:');
+    trait.effects.forEach((effect: any) => {
+      if (effect.description) {
+        lines.push(`  • ${effect.description}`);
+      }
+    });
+  }
+  
+  return lines.join('\n');
+}
+
+function getSkillTooltip(skill: string): string {
+  const skillDescriptions: Record<string, string> = {
+    'Carpentry': 'Ability to construct wooden structures and furniture. Higher skill increases work speed and quality.',
+    'Masonry': 'Crafting with stone and brick. Skilled masons build faster and create more durable structures.',
+    'Smithing': 'Forging metal weapons, tools, and armor. Quality improves with skill level.',
+    'Tailoring': 'Sewing and leatherworking. Creates clothing and protective gear.',
+    'Cooking': 'Preparing meals from raw ingredients. Higher skill reduces food waste and improves meal quality.',
+    'Medicine': 'Treating injuries and illnesses. Experienced doctors heal faster and have better success rates.',
+    'Herbalism': 'Knowledge of medicinal plants and natural remedies.',
+    'Alchemy': 'Creating potions and compounds from various ingredients.',
+    'Mechanics': 'Repairing and maintaining mechanical devices.',
+    'Engineering': 'Designing and building complex structures and systems.',
+    'Agriculture': 'Growing crops and managing farmland efficiently.',
+    'Animal Husbandry': 'Raising and caring for livestock.',
+    'Hunting': 'Tracking and killing wild animals for food and materials.',
+    'Tracking': 'Following trails and finding hidden objects or creatures.',
+    'Fishing': 'Catching fish from rivers, lakes, and oceans.',
+    'Mining': 'Extracting ore and stone from the earth.',
+    'Prospecting': 'Locating valuable mineral deposits.',
+    'Gem Cutting': 'Shaping precious stones into valuable items.',
+    'Jewelry Making': 'Crafting rings, necklaces, and other ornamental items.',
+    'Glassblowing': 'Creating glass objects and art.',
+    'Leatherworking': 'Processing and crafting leather goods.',
+    'Pottery': 'Shaping clay into useful containers and decorative items.',
+    'Weaving': 'Creating textiles from thread and fiber.',
+    'Dyeing': 'Coloring fabrics and materials.',
+    'Painting': 'Creating artistic works on canvas or surfaces.',
+    'Sculpture': 'Carving and shaping three-dimensional art.',
+    'Music': 'Playing instruments and composing songs.',
+    'Storytelling': 'Entertaining and inspiring others with tales.',
+    'Poetry': 'Writing verse and expressive literature.',
+    'Calligraphy': 'Beautiful and artistic writing.',
+    'Navigation': 'Finding direction and planning routes.',
+    'Cartography': 'Creating accurate maps of territories.',
+    'Astronomy': 'Understanding celestial bodies and their movements.',
+    'Mathematics': 'Solving complex calculations and equations.',
+    'Philosophy': 'Deep thinking about existence and meaning.',
+    'Leadership': 'Inspiring and organizing others toward common goals.',
+    'Tactics': 'Planning and executing combat strategies.',
+    'Wilderness survival': 'Thriving in harsh natural environments.',
+    'Gardening': 'Cultivating plants for food and beauty.',
+    'Animal Care': 'Keeping animals healthy and happy.',
+    'Taming wild beasts': 'Domesticating and training wild animals.',
+    'Sleight of hand': 'Quick, dexterous manipulation of objects.',
+    'Lockpicking': 'Opening locks without keys.',
+    'Deep meditation': 'Achieving mental clarity and focus.',
+    'Fortune-telling': 'Predicting future events through various means.',
+    'First Aid': 'Providing immediate medical care for injuries.'
+  };
+
+  return skillDescriptions[skill] || `Knowledge and experience with ${skill.toLowerCase()}.`;
+}
+
 export function ColonistProfilePanel() {
   const state = useSyncExternalStore(subscribeColonistProfile, getColonistProfileState, getColonistProfileState);
 
@@ -224,15 +346,28 @@ function BioTab({
         colonist={colonist}
       />
       <BioSection title="Personality Traits" hidden={!profile.personality?.length}>
-        {profile.personality?.map((trait) => (
-          <div key={trait} className="colonist-bio-line colonist-bio-line--trait">• {trait}</div>
-        ))}
+        {profile.personality?.map((trait) => {
+          const traitData = colonist?.profile?.passiveTraits?.find((t: any) => t.name === trait);
+          return (
+            <Tooltip key={trait} content={traitData ? getTraitTooltip(traitData) : null}>
+              <div className="colonist-bio-line colonist-bio-line--trait">• {trait}</div>
+            </Tooltip>
+          );
+        })}
       </BioSection>
       <BioSection title="Family" hidden={!profile.family}>
         {renderFamily(profile.family)}
       </BioSection>
       <BioSection title="Skills" hidden={!profile.skills?.length}>
-        <div className="colonist-bio-line colonist-bio-line--skills">• {profile.skills?.join(', ')}</div>
+        <div className="colonist-bio-line colonist-bio-line--skills">
+          • {profile.skills?.map((skill, idx) => (
+            <Tooltip key={skill} content={getSkillTooltip(skill)}>
+              <span className="colonist-bio-skill">
+                {skill}{idx < (profile.skills?.length ?? 0) - 1 ? ', ' : ''}
+              </span>
+            </Tooltip>
+          ))}
+        </div>
       </BioSection>
       <BioSection title="Backstory" hidden={!profile.backstory}>
         <div className="colonist-bio-backstory">{profile.backstory}</div>

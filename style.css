@@ -328,9 +328,46 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 	line-height:1.4;
 	overflow-wrap:anywhere;
 }
-.colonist-bio-line--trait{color:#7dd3fc}
+.colonist-bio-line--trait{color:#7dd3fc;cursor:help}
 .colonist-bio-line--family{color:#34d399}
 .colonist-bio-line--skills{color:#fbbf24}
+.colonist-bio-skill{cursor:help;text-decoration:underline;text-decoration-style:dotted;text-decoration-color:rgba(251,191,36,0.4);text-underline-offset:2px}
+.colonist-bio-skill:hover{text-decoration-color:rgba(251,191,36,0.8)}
+.colonist-bio-tooltip{
+	position:fixed;
+	pointer-events:none;
+	z-index:10000;
+	max-width:320px;
+	animation:tooltipFadeIn 0.15s ease-out;
+}
+.colonist-bio-tooltip-content{
+	background:rgba(15,23,42,0.97);
+	border:1px solid #334155;
+	border-radius:6px;
+	padding:10px 12px;
+	box-shadow:0 10px 25px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.05);
+	color:#e2e8f0;
+	font-size:12px;
+	line-height:1.6;
+	white-space:pre-wrap;
+	backdrop-filter:blur(8px);
+}
+.colonist-bio-tooltip::after{
+	content:'';
+	position:absolute;
+	left:50%;
+	bottom:-6px;
+	transform:translateX(-50%);
+	width:0;
+	height:0;
+	border-left:6px solid transparent;
+	border-right:6px solid transparent;
+	border-top:6px solid #334155;
+}
+@keyframes tooltipFadeIn{
+	from{opacity:0;transform:translate(-50%,-90%);}
+	to{opacity:1;transform:translate(-50%,-100%);}
+}
 .colonist-bio-backstory{
 	font-size:calc(var(--ui-scale, 1) * 12px);
 	color:#9ca3af;
