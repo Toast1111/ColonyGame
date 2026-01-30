@@ -458,7 +458,7 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
         const pivotalEvent = detailedInfo.lifeEvents[rng.range(0, detailedInfo.lifeEvents.length - 1)];
         story += `Everything changed for ${name} when they were ${pivotalEvent.age}. That was when ${pivotalEvent.event}. `;
       }
-      story += `Born ${detailedInfo.birthplace}, `;
+      story += `Born in ${detailedInfo.birthplace}, `;
       if (detailedInfo.family.parents.length === 0) {
         story += `they never knew their parents. `;
       } else {
@@ -470,14 +470,14 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
       if (detailedInfo.skills.length > 0) {
         story += `${name} discovered their gift for ${detailedInfo.skills[0].toLowerCase()} at a young age. `;
       }
-      story += `Growing up ${detailedInfo.birthplace}, they learned early that survival meant `;
+      story += `Growing up in ${detailedInfo.birthplace}, they learned early that survival meant `;
       story += rng.choice(['adapting quickly', 'trusting no one completely', 'keeping secrets', 'staying sharp']);
       story += '. ';
       break;
       
     case 2: // Fear/psychology focused opening
       if (detailedInfo.fears.length > 0) {
-        story += `Some say ${name}'s fear of ${detailedInfo.fears[0]} stems from their childhood ${detailedInfo.birthplace}. `;
+        story += `Some say ${name}'s fear of ${detailedInfo.fears[0]} stems from their childhood in ${detailedInfo.birthplace}. `;
       }
       story += `Now ${age}, they've lived through `;
       if (detailedInfo.lifeEvents.length > 0) {
@@ -494,7 +494,7 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
     case 3: // Mystery/secret focused opening
       if (detailedInfo.secrets.length > 0) {
         story += `${name} carries a burden few could imagine: they ${detailedInfo.secrets[0]}. `;
-        story += `This secret has shaped their ${age} years more than their birthplace of ${detailedInfo.birthplace} ever could. `;
+        story += `This secret has shaped their ${age} years more than being born in ${detailedInfo.birthplace} ever could. `;
       } else {
         story += `${name}, ${age}, came from ${detailedInfo.birthplace} with ghosts in their past. `;
       }
@@ -511,7 +511,7 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
       if (detailedInfo.family.spouse) {
         story += `These days, they share their life with ${detailedInfo.family.spouse}. `;
       }
-      story += `Originally from ${detailedInfo.birthplace}, `;
+      story += `They originally came from ${detailedInfo.birthplace}, `;
       break;
       
     case 5: // Career/background focused opening
@@ -529,9 +529,9 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
       story += `At ${age}, ${name} has learned that life rarely goes as planned. `;
       if (detailedInfo.family.parents.length > 0) {
         story += `Their parents, ${detailedInfo.family.parents.map(p => p.split(' (')[0]).join(' and ')}, `;
-        story += `raised them ${detailedInfo.birthplace}, `;
+        story += `who raised them in ${detailedInfo.birthplace}, `;
       } else {
-        story += `Orphaned young and raised ${detailedInfo.birthplace}, `;
+        story += `Orphaned at a young age and raised in ${detailedInfo.birthplace}, `;
       }
       story += 'but that was just the beginning. ';
       break;
@@ -581,9 +581,9 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
     case 2: // Highlight skills and quirks
       if (detailedInfo.skills.length > 1) {
         const skills = detailedInfo.skills.slice(0, 3);
-        story += `Over the years, they\'ve picked up `;
+        story += `Over the years, they\'ve picked up skills in `;
         story += skills.slice(0, -1).map(s => s.toLowerCase()).join(', ');
-        story += ` and ${skills[skills.length - 1].toLowerCase()}. `;
+        story += `, and ${skills[skills.length - 1].toLowerCase()}. `;
       }
       break;
       
@@ -609,9 +609,9 @@ function createRichBackstory(profile: Partial<ColonistProfile>): string {
         const traitName = trait.name;
         const connections = [
           `Their ${traitName.toLowerCase()} nature stems from ${reason}.`,
-          `${reason} - this left them ${traitName.toLowerCase()}.`,
+          `${reason.charAt(0).toUpperCase() + reason.slice(1)} left them ${traitName.toLowerCase()}.`,
           `People often notice they're ${traitName.toLowerCase()}, a quality developed through ${reason}.`,
-          `The ${reason} made them ${traitName.toLowerCase()}.`
+          `${reason.charAt(0).toUpperCase() + reason.slice(1)} made them ${traitName.toLowerCase()}.`
         ];
         traitDescriptions.push(rng.choice(connections));
       }

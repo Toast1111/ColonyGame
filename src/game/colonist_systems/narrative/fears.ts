@@ -3,7 +3,7 @@
  */
 
 export const FEARS = [
-  "the dark", "enclosed spaces", "heights", "deep water", "fire",
+  "darkness", "confined spaces", "heights", "deep water", "fire",
   "thunder", "crowds", "being alone", "insects", "snakes",
   "dogs", "horses", "blood", "needles", "death",
   "the unknown", "failure", "abandonment", "betrayal", "losing control",
