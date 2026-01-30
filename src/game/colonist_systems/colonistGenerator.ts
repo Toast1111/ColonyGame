@@ -12,7 +12,7 @@ import { ALL_PASSIVE_TRAITS, type PassiveTrait } from './traits/passiveTraits';
 import type { Background } from './traits/backgrounds';
 import { BIRTHPLACES, LIFE_EVENTS, SKILLS, FEARS, SECRETS, type LifeEvent } from './narrative';
 import { createDefaultSkillSet, addStartingSkillVariance } from '../skills/skills';
-import type { InventoryItem, Equipment, ColonistInventory } from '../types';
+import type { InventoryItem, Equipment, ColonistInventory, SkillSet, SkillName } from '../types';
 
 // Enhanced interface with detailed personal information
 export interface ColonistProfile {
@@ -94,6 +94,91 @@ function hashStringToNumber(str: string): number {
     hash = hash & hash; // Convert to 32bit integer
   }
   return Math.abs(hash);
+}
+
+// Map narrative skills to gameplay skills
+const SKILL_MAPPING: Record<string, { gameSkill: string; boost: number }> = {
+  // Medical skills
+  'Medicine': { gameSkill: 'Medicine', boost: 5 },
+  'First Aid': { gameSkill: 'Medicine', boost: 4 },
+  
+  // Construction/Crafting
+  'Carpentry': { gameSkill: 'Construction', boost: 4 },
+  'Masonry': { gameSkill: 'Construction', boost: 4 },
+  'Smithing': { gameSkill: 'Crafting', boost: 5 },
+  'Tailoring': { gameSkill: 'Crafting', boost: 4 },
+  'Mechanics': { gameSkill: 'Crafting', boost: 4 },
+  'Engineering': { gameSkill: 'Crafting', boost: 5 },
+  'Leatherworking': { gameSkill: 'Crafting', boost: 3 },
+  'Pottery': { gameSkill: 'Crafting', boost: 3 },
+  'Weaving': { gameSkill: 'Crafting', boost: 3 },
+  'Glassblowing': { gameSkill: 'Crafting', boost: 3 },
+  'Jewelry Making': { gameSkill: 'Crafting', boost: 3 },
+  
+  // Combat
+  'Tactics': { gameSkill: 'Shooting', boost: 3 },
+  'Hunting': { gameSkill: 'Shooting', boost: 4 },
+  'Tracking': { gameSkill: 'Shooting', boost: 2 },
+  
+  // Agriculture (Herbalism boosts both Medicine and Plants)
+  'Agriculture': { gameSkill: 'Plants', boost: 5 },
+  'Gardening': { gameSkill: 'Plants', boost: 4 },
+  'Animal Husbandry': { gameSkill: 'Plants', boost: 3 },
+  'Herbalism': { gameSkill: 'Plants', boost: 3 },
+  
+  // Mining
+  'Mining': { gameSkill: 'Mining', boost: 5 },
+  'Prospecting': { gameSkill: 'Mining', boost: 3 },
+  'Gem Cutting': { gameSkill: 'Mining', boost: 2 },
+  
+  // Cooking
+  'Cooking': { gameSkill: 'Cooking', boost: 5 },
+  'Alchemy': { gameSkill: 'Cooking', boost: 3 },
+  
+  // Social/Research
+  'Leadership': { gameSkill: 'Social', boost: 4 },
+  'Storytelling': { gameSkill: 'Social', boost: 3 },
+  'Poetry': { gameSkill: 'Social', boost: 2 },
+  'Music': { gameSkill: 'Social', boost: 3 },
+  'Philosophy': { gameSkill: 'Research', boost: 4 },
+  'Mathematics': { gameSkill: 'Research', boost: 5 },
+  'Astronomy': { gameSkill: 'Research', boost: 4 },
+  'Cartography': { gameSkill: 'Research', boost: 3 },
+};
+
+// Apply skill boosts based on backstory narrative skills
+function applyBackstorySkillBoosts(skillSet: SkillSet, narrativeSkills: string[], initialSetup: boolean = false) {
+  for (const narrativeSkill of narrativeSkills) {
+    const mapping = SKILL_MAPPING[narrativeSkill];
+    if (mapping) {
+      const gameSkill = skillSet.byName[mapping.gameSkill as SkillName];
+      if (gameSkill) {
+        if (initialSetup) {
+          // During initial setup, set to modest professional level (not overpowered)
+          // Primary skill from background: 6-8 (competent professional)
+          // Secondary/related skills: 3-5 (some training)
+          const baseLevel = mapping.boost >= 5 ? 6 : 3;
+          const variance = mapping.boost >= 5 ? 2 : 2;
+          gameSkill.level = baseLevel + Math.floor(Math.random() * variance);
+          
+          // Give passion for their profession (but not guaranteed)
+          if (gameSkill.passion === 'none') {
+            const passionRoll = Math.random();
+            if (mapping.boost >= 5 && passionRoll > 0.2) {
+              // 80% chance for primary skills
+              gameSkill.passion = passionRoll > 0.6 ? 'burning' : 'interested';
+            } else if (passionRoll > 0.5) {
+              // 50% chance for secondary skills
+              gameSkill.passion = 'interested';
+            }
+          }
+        } else {
+          // This path is for legacy/future use - small boost without breaking balance
+          gameSkill.level = Math.min(12, gameSkill.level + Math.floor(mapping.boost / 2));
+        }
+      }
+    }
+  }
 }
 
 function generateStats(): ColonistProfile['stats'] {
@@ -375,7 +460,7 @@ function generateContextualTraits(
   return contextualTraits;
 }
 
-function generateDetailedInfo(rng: SeededRandom, age: number, name: string): ColonistProfile['detailedInfo'] {
+function generateDetailedInfo(rng: SeededRandom, age: number, name: string, background: Background): ColonistProfile['detailedInfo'] {
   const birthplace = rng.choice(BIRTHPLACES);
   
   // Generate family
@@ -414,8 +499,11 @@ function generateDetailedInfo(rng: SeededRandom, age: number, name: string): Col
   }
   lifeEvents.sort((a, b) => a.age - b.age);
   
-  // Generate skills, fears, secrets
-  const skills = rng.choices(SKILLS, rng.range(2, 4));
+  // Generate skills based on background (primary skills + random extras)
+  const backgroundSkills = getSkillsForBackground(background.name);
+  const extraSkills = rng.choices(SKILLS.filter(s => !backgroundSkills.includes(s)), rng.range(0, 2));
+  const skills = [...backgroundSkills, ...extraSkills];
+  
   const fears = rng.choices(FEARS, rng.range(1, 2));
   const secrets = rng.next() > 0.7 ? [rng.choice(SECRETS)] : [];
   
@@ -439,6 +527,33 @@ function generateDetailedInfo(rng: SeededRandom, age: number, name: string): Col
     secrets,
     relationships
   };
+}
+
+// Map backgrounds to appropriate narrative skills
+function getSkillsForBackground(backgroundName: string): string[] {
+  const skillMap: Record<string, string[]> = {
+    'Medic': ['Medicine', 'First Aid', 'Herbalism'],
+    'Doctor': ['Medicine', 'First Aid'],
+    'Farmer': ['Agriculture', 'Gardening', 'Animal Husbandry'],
+    'Herbalist': ['Herbalism', 'Gardening', 'Alchemy'],
+    'Soldier': ['Tactics', 'Hunting', 'Leadership'],
+    'Guard': ['Tactics', 'Leadership'],
+    'Scholar': ['Philosophy', 'Mathematics', 'Astronomy'],
+    'Engineer': ['Engineering', 'Mechanics', 'Mathematics'],
+    'Noble': ['Leadership', 'Poetry', 'Music'],
+    'Merchant': ['Leadership', 'Mathematics', 'Storytelling'],
+    'Hunter': ['Hunting', 'Tracking', 'Fishing'],
+    'Laborer': ['Carpentry', 'Masonry', 'Mining'],
+    'Craftsman': ['Smithing', 'Leatherworking', 'Carpentry'],
+    'Miner': ['Mining', 'Prospecting', 'Masonry'],
+    'Cook': ['Cooking', 'Herbalism'],
+    'Builder': ['Carpentry', 'Masonry', 'Engineering'],
+    'Witch': ['Alchemy', 'Herbalism', 'Astronomy'],
+    'Assassin': ['Tactics', 'Alchemy'],
+    'Pirate': ['Navigation', 'Tactics', 'Fishing'],
+  };
+  
+  return skillMap[backgroundName] || ['Carpentry', 'Cooking']; // Default fallback
 }
 
 function createRichBackstory(profile: Partial<ColonistProfile>): string {
@@ -798,11 +913,11 @@ export function generateColonistProfile(): ColonistProfile {
   const rng = new SeededRandom(seed);
   const age = rng.range(20, 55);
   
-  // STEP 1: Generate detailed personal information FIRST
-  const detailedInfo = generateDetailedInfo(rng, age, name);
-  
-  // STEP 2: Generate background
+  // STEP 1: Generate background FIRST (this drives their skills)
   const background = getRandomBackground();
+  
+  // STEP 2: Generate detailed personal information (with background-appropriate skills)
+  const detailedInfo = generateDetailedInfo(rng, age, name, background);
   
   // STEP 3: Generate traits that make sense with the backstory
   const contextualTraits = generateContextualTraits(rng, detailedInfo, background, age);
@@ -850,7 +965,13 @@ export function generateColonistProfile(): ColonistProfile {
 
   // Attach initial skill set (game will later copy to colonist entity)
   const initialSkillSet = createDefaultSkillSet();
-  addStartingSkillVariance(initialSkillSet);
+  
+  // BALANCED APPROACH: Add background-based skills FIRST to guarantee competence,
+  // then add random variance to other skills. This prevents both overpowered colonists
+  // and ensures backstory matches actual skills.
+  applyBackstorySkillBoosts(initialSkillSet, detailedInfo.skills, true); // true = initial setup
+  addStartingSkillVariance(initialSkillSet); // Will only boost skills still at 0
+  
   (profile as any).initialSkills = initialSkillSet;
   
   return profile;

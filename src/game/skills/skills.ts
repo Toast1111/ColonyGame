@@ -22,7 +22,10 @@ export function createDefaultSkillSet(): SkillSet {
 
 export function addStartingSkillVariance(skills: SkillSet) {
   for (const skill of Object.values(skills.byName)) {
-    // Random baseline levels with slight bias
+    // Skip skills already set by background (they're already at professional level)
+    if (skill.level > 0) continue;
+    
+    // Random baseline levels with slight bias for other skills
     const roll = Math.random();
     if (roll > 0.95) skill.level = 8 + Math.floor(Math.random()*4); // specialist
     else if (roll > 0.75) skill.level = 4 + Math.floor(Math.random()*3);
