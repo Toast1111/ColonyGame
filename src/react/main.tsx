@@ -7,6 +7,7 @@ import { Hotbar } from './ui/Hotbar';
 import { BuildMenu } from './ui/BuildMenu';
 import { ColonistProfilePanel } from './ui/ColonistBioPanel';
 import { WorkPriorityPanel } from './ui/WorkPriorityPanel';
+import { ResearchPanel } from './ui/ResearchPanel';
 
 const rootId = 'react-root';
 let container = document.getElementById(rootId);
@@ -49,6 +50,7 @@ createRoot(container).render(
     <BuildMenu />
     <ColonistProfilePanel />
     <WorkPriorityPanel />
+    <ResearchPanel />
     <Hotbar />
     <MobileControls />
     <GameOverOverlay />

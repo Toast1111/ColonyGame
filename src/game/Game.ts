@@ -13,7 +13,7 @@ import { getZoneDef } from "./zones";
 import { HealthManager } from "./managers/HealthManager";
 import { InventoryManager } from "./managers/InventoryManager";
 import { ResearchManager } from "./research/ResearchManager";
-import { ResearchUI } from "./ui/dom/ResearchUI";
+import { toggleResearchPanel } from './ui/panels/researchPanel';
 import { applyWorldTransform, clear, drawBuilding, drawBullets, drawCircle, drawGround, drawFloors, drawHUD, drawPoly, drawPersonIcon, drawShieldIcon, drawColonistAvatar } from "./render";
 import { WorkGiverManager } from './systems/workGiverManager';
 import { ReservationManager } from './managers/ReservationManager';
@@ -591,7 +591,6 @@ export class Game {
   public healthManager = new HealthManager(); // Stop eating health paste! Delegate properly! 🎨
   public inventoryManager = new InventoryManager(); // Equipment and item management - no more paste-eating! 🍝
   public researchManager!: ResearchManager; // Research system - technology progression
-  public researchUI!: ResearchUI; // Research UI panel
   
   // New manager architecture refactor managers
   public medicalManager!: MedicalManager; // Medical care and treatment coordination
@@ -654,7 +653,6 @@ export class Game {
     
     // Initialize research system
     this.researchManager = new ResearchManager();
-    this.researchUI = new ResearchUI(this.researchManager, this);
     
     // Initialize new managers (refactor)
     this.medicalManager = new MedicalManager(this);
@@ -2694,8 +2692,7 @@ export class Game {
   }
   if (!consoleOpen && this.keyPressed('r')) { 
     // Toggle research panel
-    this.researchUI.toggle();
-    playUiPanelOpen(this);
+    toggleResearchPanel();
   }
     if (!consoleOpen && this.keyPressed('g')) { this.debug.nav = !this.debug.nav; this.toast(this.debug.nav ? 'Debug: nav ON' : 'Debug: nav OFF'); }
     if (!consoleOpen && this.keyPressed('j')) { this.debug.colonists = !this.debug.colonists; this.toast(this.debug.colonists ? 'Debug: colonists ON' : 'Debug: colonists OFF'); }

@@ -15,6 +15,7 @@ import type { BUILD_TYPES } from '../buildings';
 import type { ContextMenuDescriptor, ContextMenuItem } from '../ui/contextMenus/types';
 import type { HotbarTab } from '../ui/hud/modernHotbar';
 import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/panels/workPriorityPanel';
+import { openResearchPanel, closeResearchPanel } from '../ui/panels/researchPanel';
 import { AudioManager } from '../audio/AudioManager';
 
 export class UIManager {
@@ -319,10 +320,7 @@ export class UIManager {
       
       // Close research panel if we're closing research tab
       if (tab === 'research') {
-        const game = (window as any).game;
-        if (game?.researchUI) {
-          game.researchUI.hide();
-        }
+        closeResearchPanel(false);
       }
   // UI audio: hotbar close (single-variant)
   void audio.play('ui.hotbar.close').catch(() => {});
@@ -345,10 +343,7 @@ export class UIManager {
       
       // Open research panel if we're opening research tab
       if (tab === 'research') {
-        const game = (window as any).game;
-        if (game?.researchUI) {
-          game.researchUI.show();
-        }
+        openResearchPanel();
       }
   // UI audio: hotbar open (single-variant)
   void audio.play('ui.hotbar.open').catch(() => {});
