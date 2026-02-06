@@ -471,71 +471,6 @@ export function drawSkillsTab(game: any, c: any, x: number, y: number, w: number
   ctx.restore();
 }
 
-export function drawGearTab(game: any, c: any, x: number, y: number, w: number, h: number) {
-  const ctx = game.ctx as CanvasRenderingContext2D;
-  const padX = game.scale(14); // Left padding
-  const padTop = game.scale(12); // Top padding
-  let textY = y + padTop;
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(16, '600'); ctx.textAlign = 'left';
-  ctx.fillText('Equipment & Inventory', x + padX, textY); textY += game.scale(24);
-  if (!c.inventory) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No inventory data available', x + padX, textY); return; }
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Equipment', x + padX, textY); textY += game.scale(18);
-  const equipmentSlots = ['helmet', 'armor', 'weapon', 'tool', 'shield', 'accessory'];
-  for (const slot of equipmentSlots) {
-    const item = c.inventory.equipment[slot as any];
-    ctx.fillStyle = '#94a3b8'; ctx.font = game.getScaledFont(12, '500');
-    const slotName = slot.charAt(0).toUpperCase() + slot.slice(1);
-    ctx.fillText(`${slotName}:`, x + padX, textY);
-    if (item) {
-      ctx.fillStyle = getItemQualityColor(game, item.quality || 'normal');
-      ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText(item.name, x + padX + game.scale(80), textY);
-      ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400');
-      ctx.fillText(`(${item.quality || 'normal'})`, x + padX + game.scale(180), textY);
-    } else {
-      ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText('None', x + padX + game.scale(80), textY);
-    }
-    textY += game.scale(16);
-  }
-  textY += game.scale(12);
-  ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Inventory Items', x + padX, textY); textY += game.scale(18);
-  if (c.inventory.items.length === 0) {
-    ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(12, '400'); ctx.fillText('No items in inventory', x + padX + game.scale(8), textY);
-  } else {
-    for (const item of c.inventory.items) {
-      ctx.fillStyle = getItemQualityColor(game, item.quality || 'normal'); ctx.font = game.getScaledFont(12, '400');
-      const displayText = `${item.name} (${item.quantity})`;
-      ctx.fillText(displayText, x + padX + game.scale(8), textY);
-      ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400');
-      ctx.fillText(`${item.quality || 'normal'}`, x + padX + game.scale(150), textY);
-      if (item.durability !== undefined) ctx.fillText(`${Math.round(item.durability)}%`, x + padX + game.scale(200), textY);
-      textY += game.scale(16);
-      if (textY > y + h - game.scale(20)) { ctx.fillStyle = '#6b7280'; ctx.font = game.getScaledFont(10, '400'); ctx.fillText('...more items', x + padX + game.scale(8), textY); break; }
-    }
-  }
-  // Show transient hauling payloads so players can see what the pawn is carrying right now
-  const carriedList: { name: string; qty: number }[] = [];
-  const payload = (c as any).carryingItem;
-  if (payload && payload.qty > 0) {
-    const pretty = (payload.type || 'Item').toString();
-    const name = pretty.charAt(0).toUpperCase() + pretty.slice(1);
-    carriedList.push({ name, qty: payload.qty });
-  }
-  if (c.carryingWheat && c.carryingWheat > 0) carriedList.push({ name: 'Wheat', qty: c.carryingWheat });
-  if (c.carryingBread && c.carryingBread > 0) carriedList.push({ name: 'Bread', qty: c.carryingBread });
-  if (carriedList.length > 0) {
-    textY += game.scale(12);
-    ctx.fillStyle = '#f1f5f9'; ctx.font = game.getScaledFont(14, '600'); ctx.fillText('Currently Carrying', x + padX, textY); textY += game.scale(18);
-    for (const it of carriedList) {
-      ctx.fillStyle = '#22c55e'; ctx.font = game.getScaledFont(12, '400');
-      ctx.fillText(`${it.name} (${it.qty})`, x + padX + game.scale(8), textY);
-      textY += game.scale(16);
-      if (textY > y + h - game.scale(20)) break;
-    }
-  }
-}
-
 export function drawSocialTab(game: any, c: any, x: number, y: number, w: number, h: number) {
   const ctx = game.ctx as CanvasRenderingContext2D;
   const padX = game.scale(14); // Left padding
@@ -634,19 +569,6 @@ function getLogColor(type?: string): string {
   }
 }
 
-function getItemQualityColor(game: any, quality: string): string {
-  switch (quality.toLowerCase()) {
-    case 'legendary': return '#a855f7';
-    case 'masterwork': return '#f59e0b';
-    case 'excellent': return '#10b981';
-    case 'good': return '#3b82f6';
-    case 'normal': return '#6b7280';
-    case 'poor': return '#ef4444';
-    case 'awful': return '#991b1b';
-    default: return '#6b7280';
-  }
-}
-
 export function measureSkillsTabHeight(game: any, c: any, y: number, h: number): number {
   let rowY = y + game.scale(4);
   rowY += game.scale(22);
@@ -658,31 +580,6 @@ export function measureSkillsTabHeight(game: any, c: any, y: number, h: number):
   const rowH = barHeight + game.scale(6);
   rowY += skills.length * rowH;
   return Math.max(h, rowY + game.scale(8));
-}
-
-export function measureGearTabHeight(game: any, c: any, y: number, h: number): number {
-  let textY = y + game.scale(8);
-  textY += game.scale(24);
-  if (!c.inventory) {
-    return Math.max(h, textY + game.scale(16));
-  }
-  textY += game.scale(18);
-  const equipmentSlots = 6;
-  textY += equipmentSlots * game.scale(16);
-  textY += game.scale(12);
-  textY += game.scale(18);
-  const itemsCount = c.inventory.items.length || 0;
-  textY += Math.max(1, itemsCount) * game.scale(16);
-  const payload = (c as any).carryingItem;
-  const carryingCount = (payload && payload.qty > 0 ? 1 : 0)
-    + (c.carryingWheat && c.carryingWheat > 0 ? 1 : 0)
-    + (c.carryingBread && c.carryingBread > 0 ? 1 : 0);
-  if (carryingCount > 0) {
-    textY += game.scale(12);
-    textY += game.scale(18);
-    textY += carryingCount * game.scale(16);
-  }
-  return Math.max(h, textY + game.scale(8));
 }
 
 export function measureSocialTabHeight(game: any, c: any, y: number, h: number): number {
