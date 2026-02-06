@@ -81,8 +81,8 @@ export function BuildMenu() {
   const headerHeight = Math.max(menuHeight * 0.08, state.isTouch ? 46 : 34);
   const categoryItemHeight = Math.max(menuHeight * 0.08, state.isTouch ? 56 : 42);
   const categoryPadding = Math.max(menuHeight * 0.01, state.isTouch ? 8 : 6);
-  const buildingItemHeight = Math.max(menuHeight * 0.14, state.isTouch ? 92 : 72);
-  const buildingPadding = Math.max(menuHeight * 0.01, state.isTouch ? 10 : 6);
+  const buildingItemHeight = Math.max(menuHeight * 0.11, state.isTouch ? 56 : 42);
+  const buildingPadding = Math.max(menuHeight * 0.01, state.isTouch ? 8 : 6);
 
   const handleCategoryClick = (category: string) => {
     game?.uiManager?.setSelectedBuildCategory(category);
@@ -153,9 +153,6 @@ export function BuildMenu() {
             >
               <div className="build-menu-building-name">{def.name}</div>
               <div className="build-menu-building-cost">{game?.costText?.(def.cost || {})}</div>
-              {def.description && (
-                <div className="build-menu-building-desc">{def.description}</div>
-              )}
             </button>
           ))}
         </div>
