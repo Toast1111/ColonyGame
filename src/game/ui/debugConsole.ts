@@ -30,7 +30,7 @@ export function initDebugConsole(game: Game) {
       const fn = dc.commands.get(args[0]);
       return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, items, kill, heal, godmode, farm, building, stove, time, tree, research, music";
+    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, items, kill, heal, godmode, farm, building, stove, time, tree, research, events, music";
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -1017,6 +1017,40 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: research complete|reset|start <id> — manipulate research";
   }, "research complete|reset|start <id> — complete all, reset, or start specific research");
+
+  reg("events", (g, args) => {
+    const action = (args[0] || "status").toLowerCase();
+    const manager = (g as any).eventManager;
+    if (!manager) return "event manager not found";
+
+    if (action === "status") {
+      return `events: ${manager.isEnabled() ? 'enabled' : 'disabled'}, count: ${manager.getEvents().length}`;
+    }
+
+    if (action === "enable" || action === "on") {
+      manager.setEnabled(true);
+      return "events enabled";
+    }
+
+    if (action === "disable" || action === "off") {
+      manager.setEnabled(false);
+      return "events disabled";
+    }
+
+    if (action === "list") {
+      const list = manager.getEvents();
+      if (!list.length) return "no events registered";
+      return list.map((event: any) => `${event.id}: ${event.name} (${event.category})`).join("\n");
+    }
+
+    if (action === "trigger" && args[1]) {
+      const id = args[1];
+      const ok = manager.triggerEventById(id);
+      return ok ? `triggered event: ${id}` : `failed to trigger event: ${id}`;
+    }
+
+    return "usage: events status|list|trigger <id>|enable|disable";
+  }, "events status|list|trigger <id>|enable|disable — list or trigger events, or toggle the system");
 
   reg("music", (g, args) => {
     const action = (args[0] || "").toLowerCase();

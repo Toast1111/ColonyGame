@@ -22,6 +22,8 @@ import { MedicalManager } from './managers/MedicalManager';
 import { BuildingManager } from './managers/BuildingManager';
 import { ColonistActionManager } from './managers/ColonistActionManager';
 import { ColonistNavigationManager } from './managers/ColonistNavigationManager';
+import { EventManager } from './managers/EventManager';
+import { createDefaultEvents } from './events';
 import { createEnemyWithProfile } from './enemy_systems/enemyGenerator';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
@@ -591,6 +593,7 @@ export class Game {
   public healthManager = new HealthManager(); // Stop eating health paste! Delegate properly! 🎨
   public inventoryManager = new InventoryManager(); // Equipment and item management - no more paste-eating! 🍝
   public researchManager!: ResearchManager; // Research system - technology progression
+  public eventManager!: EventManager; // World events (raids, boons, incidents)
   
   // New manager architecture refactor managers
   public medicalManager!: MedicalManager; // Medical care and treatment coordination
@@ -653,6 +656,7 @@ export class Game {
     
     // Initialize research system
     this.researchManager = new ResearchManager();
+    this.eventManager = new EventManager(this, createDefaultEvents());
     
     // Initialize new managers (refactor)
     this.medicalManager = new MedicalManager(this);
@@ -2771,6 +2775,9 @@ export class Game {
       this.camera.y = clamp(c.y - vh / 2, 0, Math.max(0, WORLD.h - vh));
     }
     this.dayTick(dt);
+
+    // World events (use game-time scaled dt)
+    this.eventManager.update(dt * this.fastForward);
     
   // AI updates - track performance
   this.performanceMetrics.startTiming('ai');
