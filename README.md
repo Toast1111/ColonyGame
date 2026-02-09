@@ -39,8 +39,9 @@ If you fork and rename the repo, the workflow will still set the base path corre
 
 - `src/core/*`: utilities
 - `src/game/*`: game types, constants, buildings, renderer, Game class
-- `index.html`, `style.css`: shell
+- `scripts/*`: utility scripts organized by purpose (dev, build, deploy, test)
 - `docs/*`: technical documentation organized by system
+- `index.html`, `style.css`: shell
 
 ## Documentation
 
@@ -52,9 +53,11 @@ All technical documentation has been organized into the `docs/` folder by system
 - 🎯 **Work Priority** - RimWorld-style work assignment
 - 🗺️ **Navigation** - Enemy AI and pathfinding
 - ⚔️ **Combat** - Combat mechanics
+- 🔬 **Research** - Technology and progression
+- 🎓 **Tutorial** - In-game tutorial system
 - And more...
 
-See the [docs index](./docs/README.md) for the complete list of 59 organized documentation files.
+See the [docs index](./docs/README.md) for the complete list of 250+ organized documentation files.
 
 ## Notes
 
