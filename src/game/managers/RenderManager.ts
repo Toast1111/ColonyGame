@@ -24,7 +24,7 @@ import { getZoneDef, isZone } from '../zones';
 import { drawDebugConsole } from '../ui/debugConsole';
 import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/panels/performanceHUD';
-import type { Colonist, Building, Enemy } from '../types';
+import type { Colonist, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
 import { setHotbarState } from '../../react';
 
@@ -275,6 +275,11 @@ export class RenderManager {
     const inViewport = (x: number, y: number, r: number = 0) => {
       return x + r >= minX && x - r <= maxX && y + r >= minY && y - r <= maxY;
     };
+
+    const sandStorm = game.sandStormSystem;
+    const fogActive = sandStorm?.isActive() ?? false;
+    const fogSources = fogActive ? sandStorm.getVisionSources() : [];
+    const isVisibleInFog = (x: number, y: number) => !fogActive || sandStorm.isPointVisible(x, y, fogSources);
 
     // Trees
     for (let i = 0; i < game.trees.length; i++) {
@@ -531,6 +536,7 @@ export class RenderManager {
     for (let i = 0; i < game.enemies.length; i++) {
       const e = game.enemies[i];
       if (!inViewport(e.x, e.y, e.r + 5)) continue;
+      if (!isVisibleInFog(e.x, e.y)) continue;
       
       // If enemy has a profile (generated with enemyGenerator), render with sprites
       if ((e as any).profile) {
@@ -542,7 +548,7 @@ export class RenderManager {
     }
 
     // Zoom overlay for highlighting entities when fully zoomed out
-    if (game.zoomOverlayActive) {
+    if (game.zoomOverlayActive && !fogActive) {
       this.drawZoomOverlay(game, ctx, inViewport);
     }
 
@@ -574,6 +580,11 @@ export class RenderManager {
         ctx.fillStyle = `rgba(6,10,18, 0.58)`;
         ctx.fillRect(0, 0, WORLD.w, WORLD.h);
       }
+    }
+
+    // Sand storm fog-of-war overlay
+    if (fogActive) {
+      sandStorm.renderFog(ctx, fogSources);
     }
 
     // Ghost building preview
@@ -656,6 +667,7 @@ export class RenderManager {
     ctx.fillText(label, centerX, centerY);
     ctx.restore();
   }
+
 
   /**
    * Render debug visualizations (only when debug flags are enabled)

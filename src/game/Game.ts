@@ -80,6 +80,7 @@ import { AudioManager, type AudioKey, type PlayAudioOptions } from './audio/Audi
 import { ItemManager, type ItemManagerConfig } from './managers/ItemManager';
 import { ResourceSpawnManager } from './managers/ResourceSpawnManager';
 import { MusicManager } from './managers/MusicManager';
+import { SandStormSystem } from './events/sandstorm/SandStormSystem';
 import type { MobileControlsHandle } from './ui/dom/mobileControls';
 
 export class Game {
@@ -614,6 +615,7 @@ export class Game {
   public zoomOverlayTimer: number | null = null;
   private static readonly ZOOM_OVERLAY_DELAY = 1000; // 1 second delay
   private static readonly MIN_ZOOM_FOR_OVERLAY = 0.65; // Slightly above minimum zoom to trigger
+  public sandStormSystem!: SandStormSystem;
 
   constructor(canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('no ctx');
@@ -657,6 +659,7 @@ export class Game {
     // Initialize research system
     this.researchManager = new ResearchManager();
     this.eventManager = new EventManager(this, createDefaultEvents());
+    this.sandStormSystem = new SandStormSystem(this);
     
     // Initialize new managers (refactor)
     this.medicalManager = new MedicalManager(this);
@@ -2778,6 +2781,7 @@ export class Game {
 
     // World events (use game-time scaled dt)
     this.eventManager.update(dt * this.fastForward);
+    this.sandStormSystem.update(dt * this.fastForward);
     
   // AI updates - track performance
   this.performanceMetrics.startTiming('ai');
