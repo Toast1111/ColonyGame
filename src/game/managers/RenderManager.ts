@@ -4,6 +4,7 @@
  */
 
 import type { Game } from '../Game';
+import type { Colonist } from '../types';
 import { COLORS, T, WORLD } from '../constants';
 import { clear, applyWorldTransform, drawGround, drawPoly, drawCircle, drawFloors, drawMountains, drawBullets, drawHUD, drawBuilding, drawBuildingProgressBars, drawColonistAvatar, drawPersonIcon } from '../render/index';
 import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
