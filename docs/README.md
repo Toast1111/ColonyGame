@@ -12,6 +12,8 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 - [Phase 2 Success](./refactoring/REFACTORING_SUCCESS.md) - Systems integration
 - [UI Refactoring](./refactoring/UI_REFACTORING_SUMMARY.md) - InputManager & UIManager extraction
 - [UI Testing Guide](./refactoring/UI_REFACTORING_TEST_GUIDE.md) - Comprehensive test checklist
+- [Intent-Based Actions](./refactoring/INTENT_BASED_ACTION_SYSTEM.md) - Action system design
+- [Worker Pool Removal](./refactoring/WORKER_POOL_REMOVAL.md) - Async optimization
 
 ### � [Work Priority System](./work-priority/)
 **RimWorld-style work assignment system**
@@ -44,6 +46,7 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 - [Floor Integration](./pathfinding/PATHFINDING_FLOOR_FIX.md) - Floor speed modifiers
 - [Floor Testing](./pathfinding/PATHFINDING_FLOOR_TEST.md) - Floor system tests
 - [Visual Guide](./pathfinding/PATHFINDING_VISUAL_GUIDE.md) - Debug visualization
+- [Async Pathfinding](./pathfinding/ASYNC_PATHFINDING_WITHOUT_WORKERS.md) - Performance optimization
 
 ### 🏔️ [Terrain](./terrain/)
 **Terrain generation and management**
@@ -51,6 +54,10 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 - [Migration Guide](./terrain/TERRAIN_MIGRATION_GUIDE.md) - Upgrading to new system
 - [Nav Integration](./terrain/TERRAIN_AND_NAV_SUMMARY.md) - Navigation integration
 - [Q&A](./terrain/TERRAIN_ANSWER.md) - Common questions
+- [Mountain System Testing](./terrain/MOUNTAIN_SYSTEM_TESTING.md) - Mountain mechanics
+- [Mountain Fix Summary](./terrain/MOUNTAIN_FIX_SUMMARY.md) - Bug fixes
+- [Mountain Fix Testing](./terrain/MOUNTAIN_FIX_TESTING.md) - Test procedures
+- [Unified Tree Layout](./terrain/UNIFIED_TREE_LAYOUT.md) - Tree rendering
 
 ### 🟦 [Floor System](./floor-system/)
 **Floor tiles and speed modifiers**
@@ -64,13 +71,64 @@ Welcome to the Colony Game documentation! All technical documentation has been o
 - [Door System](./door-system/DOOR_SYSTEM.md) - Core door mechanics
 - [Animation Update](./door-system/DOOR_ANIMATION_UPDATE.md) - Animation improvements
 
-### ⚔️ [Combat](./combat/)
+### ⚔️ [Combat & Combat Systems](./combat/ & ./combat-systems/)
 **Combat mechanics and damage systems**
 - [Combat Manager Complete](./combat/COMBAT_MANAGER_COMPLETE.md) - Full implementation
 - [Combat Guide](./combat/COMBAT_MANAGER_GUIDE.md) - Usage guide
+- [Weapon Equipment System](./combat-systems/WEAPON_EQUIPMENT_SYSTEM_COMPLETE.md) - Equipment mechanics
 
-### 🐛 [Bug Fixes](./STATE_FLIPPING_BUG_FIX.md)
-General bug fixes and patches
+### 🏗️ [Building Systems](./building-systems/)
+**Building mechanics and interactions**
+- [Building Inventory System](./building-systems/BUILDING_INVENTORY_SYSTEM.md) - Inventory mechanics
+- [Bed Interaction Redesign](./building-systems/BED_INTERACTION_SYSTEM_REDESIGN.md) - Bed system
+
+### 🎵 [Audio](./audio/)
+**Sound systems and spatial audio**
+- [Building Audio System](./audio/BUILDING_AUDIO_SYSTEM.md) - Building sound integration
+
+### 🐛 [Bug Fixes](./bug-fixes/)
+**General bug fixes and patches**
+- [Bug Fixes Summary](./bug-fixes/BUG_FIXES_SUMMARY.md) - Overview
+- [Fix Summary](./bug-fixes/FIX_SUMMARY.md) - Critical fixes
+- [Hauling & Resources](./bug-fixes/HAULING_AND_RESOURCES_FIXES.md) - Resource system fixes
+
+### 🎓 [Tutorial System](./tutorial/)
+**In-game tutorial and onboarding**
+- [Tutorial System](./tutorial/TUTORIAL_SYSTEM.md) - Tutorial architecture
+- [Tutorial Complete](./tutorial/TUTORIAL_IMPLEMENTATION_COMPLETE.md) - Implementation
+
+### 🔬 [Research System](./research/)
+**Technology and progression**
+- [Research System](./research/RESEARCH_SYSTEM_IMPLEMENTATION.md) - Core system
+- [Research Tree Redesign](./research/RESEARCH_TREE_REDESIGN_COMPLETE.md) - Tree structure
+
+### 🛠️ [Debug Tools](./debug-tools/)
+**Development and debugging utilities**
+- [Debug Console Commands](./debug-tools/DEBUG_CONSOLE_COMMANDS_SUMMARY.md) - Console reference
+
+### 🎨 [UI Systems](./ui-systems/)
+**User interface components**
+- [Camera Follow Unlock](./ui-systems/CAMERA_FOLLOW_UNLOCK_FEATURE.md) - Camera controls
+
+### 📋 [Reference](./reference/)
+**Quick reference guides**
+- [Colonist Base Stats](./reference/COLONIST_BASE_STATS_REFERENCE.md) - Stat reference
+- [Hauling Quick Reference](./reference/HAULING_QUICKREF.md) - Hauling system
+- [Tutorial Quick Reference](./reference/TUTORIAL_QUICKREF.md) - Tutorial commands
+
+### 🍳 [Cooking Systems](./cooking-systems/)
+**Food preparation and cooking**
+- Detailed cooking mechanics documentation
+
+### 📚 [General](./general/)
+**Project-wide documentation**
+- [Changelog](./general/CHANGELOG.md) - Version history
+- [Recent Changes](./general/RECENT_CHANGES.md) - Latest updates
+- [Security Summary](./general/SECURITY_SUMMARY.md) - Security considerations
+
+### 📦 [Archived](./archived/)
+**Historical documentation**
+- Older documentation moved here for reference
 
 ## 🚀 Quick Links
 
@@ -90,17 +148,27 @@ General bug fixes and patches
 ## 📊 Documentation Count
 
 ```
-Total Documents: 51+
-├── Refactoring:    6 docs
-├── Work Priority:  8 docs
-├── Medical:       14 docs  
-├── Navigation:     5 docs
-├── Pathfinding:    4 docs
-├── Terrain:        4 docs
-├── Floor System:   4 docs
-├── Door System:    2 docs
-├── Combat:         2 docs
-└── General:        2 docs
+Total Documents: 250+
+├── Refactoring:        8 docs
+├── Work Priority:      8 docs
+├── Medical:           14 docs  
+├── Navigation:         5 docs
+├── Pathfinding:        5 docs
+├── Terrain:            8 docs
+├── Floor System:       4 docs
+├── Door System:        2 docs
+├── Combat:             3 docs
+├── Building Systems:   6 docs
+├── Audio:             20 docs
+├── Bug Fixes:         11 docs
+├── Tutorial:           2 docs
+├── Research:           7 docs
+├── Debug Tools:        7 docs
+├── UI Systems:         5 docs
+├── Cooking Systems:    5 docs
+├── Reference:          3 docs
+├── General:            5 docs
+└── Archived:          21 docs
 ```
 
 ## 🔍 Finding Documentation

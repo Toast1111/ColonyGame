@@ -6,10 +6,12 @@ This document describes the organization of the ColonyGame repository.
 
 ```
 ColonyGame/
-├── docs/               # All documentation
+├── docs/               # All documentation (organized by system)
+├── scripts/            # Utility scripts (organized by purpose)
 ├── src/                # Source code
 ├── dist/               # Build output (generated)
 ├── node_modules/       # Dependencies (generated)
+├── .github/            # GitHub Actions workflows
 ├── index.html          # Entry HTML
 ├── style.css          # Global styles
 ├── package.json        # Project config
@@ -18,30 +20,42 @@ ColonyGame/
 └── README.md          # Project readme
 ```
 
+## Scripts Structure (`scripts/`)
+
+Utility scripts organized by purpose:
+
+- **dev/** - Development and debugging utilities
+  - `find_region_refs.sh` - Region system reference checker
+- **README.md** - Scripts documentation
+
+See `scripts/README.md` for detailed usage and guidelines.
+
 ## Documentation Structure (`docs/`)
 
 Documentation is organized by system/feature:
 
 - **archived/** - Historical implementation summaries and old docs
 - **audio/** - Audio system documentation and debugging guides
-- **bug-fixes/** - Bug fix summaries
-- **building-systems/** - Building placement and inventory systems
-- **combat-systems/** - Combat, weapons, and melee systems
-- **cooking-systems/** - Cooking workflow and recipes
+- **bug-fixes/** - Bug fix summaries and critical fixes
+- **building-systems/** - Building placement, inventory, and bed systems
 - **combat/** - Combat manager guides
+- **combat-systems/** - Combat, weapons, drafting, and melee systems  
+- **cooking-systems/** - Cooking workflow and recipes
 - **debug-tools/** - Debug console and FSM analysis tools
 - **door-system/** - Door animation and queue system
 - **floor-system/** - Floor types and speed modifiers
+- **general/** - Project-wide docs (changelog, security, summaries)
 - **medical/** - Medical AI, health, and treatment systems
-- **navigation/** - Navigation grid and pathfinding
-- **pathfinding/** - Navmesh optimization and performance
+- **navigation/** - Navigation grid and pathfinding for enemies
+- **pathfinding/** - Navmesh optimization, async pathfinding, performance
 - **performance/** - Optimization guides (rendering, AI, async)
-- **refactoring/** - Code refactoring documentation
-- **reference/** - External reference code (e.g., RimWorld source)
-- **regions/** - Region system (for spatial partitioning)
-- **terrain/** - Terrain generation and migration
+- **refactoring/** - Code refactoring documentation and architecture improvements
+- **reference/** - Quick reference guides (stats, hauling, tutorial)
+- **research/** - Research system, tech tree, and progression
+- **terrain/** - Terrain generation, mountains, trees, migration
 - **tools/** - Development tools (FSM Blueprint Editor)
-- **ui-systems/** - UI/UX implementation and refactoring
+- **tutorial/** - Tutorial system implementation and guides
+- **ui-systems/** - UI/UX implementation, camera, and refactoring
 - **work-priority/** - Work priority panel system
 
 ## Source Code Structure (`src/`)
@@ -172,25 +186,41 @@ Entities (colonists, enemies) use explicit FSM states with clear transitions.
 ### Work Giver System
 RimWorld-style job assignment with priorities and work types.
 
-## Recent Reorganization (2025-10-17)
+## Recent Reorganization (2026-02-09)
 
-The repository structure was reorganized to improve navigation:
+The repository structure was reorganized to improve navigation and findability:
 
-1. **Documentation cleanup**:
-   - Moved 24+ markdown files from root to organized docs/ subdirectories
-   - Created categorical directories (audio, combat-systems, ui-systems, etc.)
-   - Moved archived summaries to docs/archived/
+1. **Scripts organization**:
+   - Created `scripts/dev/` subdirectory
+   - Moved `find_region_refs.sh` to `scripts/dev/`
+   - Added comprehensive `scripts/README.md` with usage guidelines
+   - Established clear structure for future scripts (dev/, build/, deploy/, test/)
 
-2. **Source code organization**:
-   - Consolidated duplicate example files in rimworld-systems/examples/
-   - Moved render.ts to render/index.ts with subdirectories (sprites/, debug/)
-   - Created ui/panels/ for modal panels (work priority, colonist profile, etc.)
-   - Removed empty files (gestures.ts, lightingRender.ts)
-   - Moved reference materials to docs/reference/
+2. **Documentation reorganization**:
+   - Moved 39 root-level markdown files to appropriate subdirectories
+   - Created new directories: `general/`, `research/`, `tutorial/`
+   - Organized files by system/feature type
+   - Updated `docs/README.md` with complete documentation index
+   - Improved navigation with clear categories
 
-3. **Import updates**:
-   - Updated all import paths to reflect new structure
-   - Verified build succeeds after reorganization
+3. **File organization by category**:
+   - **Bug fixes** → `docs/bug-fixes/`
+   - **Research system** → `docs/research/`
+   - **Tutorial system** → `docs/tutorial/`
+   - **Terrain/mountains** → `docs/terrain/`
+   - **Audio** → `docs/audio/`
+   - **UI systems** → `docs/ui-systems/`
+   - **Debug tools** → `docs/debug-tools/`
+   - **Refactoring** → `docs/refactoring/`
+   - **Reference guides** → `docs/reference/`
+   - **General docs** → `docs/general/`
+
+4. **Benefits**:
+   - Easier to find documentation by system/feature
+   - Clearer separation of concerns
+   - Better discoverability for developers
+   - Consistent organization patterns
+   - Scalable structure for future additions
 
 ## Navigation Tips
 
