@@ -2,7 +2,7 @@ import { dist2, norm, sub } from "../../core/utils";
 import { T, WORLD } from "../constants";
 import type { Building, Colonist, Enemy, ColonistState, Resources } from "../types";
 import type { ItemType } from "../types/items";
-import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "../skills/skills";
+import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from "./skills";
 import { initializeColonistHealth, healInjuries, updateHealthStats, calculateOverallHealth, updateHealthProgression } from "../health/healthSystem";
 import { medicalSystem } from "../health/medicalSystem";
 import { medicalWorkGiver, type MedicalJob } from "../health/medicalWorkGiver";

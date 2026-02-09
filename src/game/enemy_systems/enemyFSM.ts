@@ -1,12 +1,12 @@
-import { dist2 } from "../core/utils";
-import { T } from "../game/constants";
-import type { Building, Enemy, Colonist } from "../game/types";
-import { isDoorBlocking, isNearDoor, attackDoor } from "../game/systems/doorSystem";
-import { computeEnemyPath } from "../core/pathfinding";
-import { isMountainTile } from "../game/terrain";
-import { itemDatabase } from "../data/itemDatabase";
-import { isUnarmed, selectUnarmedAttack, calculateUnarmedDamage } from "../game/combat/unarmedCombat";
-import { getWeaponAudioByDefName } from "../game/audio/weaponAudioMap";
+import { dist2 } from "../../core/utils";
+import { T } from "../constants";
+import type { Building, Enemy, Colonist } from "../types";
+import { isDoorBlocking, isNearDoor, attackDoor } from "../systems/doorSystem";
+import { computeEnemyPath } from "../../core/pathfinding";
+import { isMountainTile } from "../terrain";
+import { itemDatabase } from "../../data/itemDatabase";
+import { isUnarmed, selectUnarmedAttack, calculateUnarmedDamage } from "../combat/unarmedCombat";
+import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";
 
 // Helper function to check if a position would collide with buildings or mountains (for enemies)
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -398,40 +398,67 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
         } else {
           c.hp -= finalDamage;
         }
-        
-        // Play hit sound effect
-        if (weapon && weapon.defName) {
-          // Weapon hit sound
-          const weaponDefName = weapon.defName;
-          const impactAudioKey = (game as any).itemDatabase ? 
-            getWeaponAudioByDefName((game as any).itemDatabase, weaponDefName, false) : null;
-          if (impactAudioKey) {
-            (game as any).playAudio(impactAudioKey, { 
-              volume: 0.8, 
-              rng: Math.random,
-              position: { x: e.x, y: e.y },
-              listenerPosition: (game as any).audioManager.getListenerPosition()
-            });
-          }
+
+        // Apply stun if applicable
+        if (shouldStun && stunDuration > 0) {
+          (c as any).stunnedUntil = (performance.now() / 1000) + stunDuration;
+        }
+
+        // Play weapon audio if available, otherwise fallback to unarmed sound
+        const weaponDefName = weapon?.defName;
+        const audioDef = getWeaponAudioByDefName(itemDatabase, weaponDefName, false);
+        if (audioDef) {
+          (game as any).playAudio(audioDef, {
+            volume: 0.9,
+            rng: Math.random,
+            position: { x: e.x, y: e.y },
+            listenerPosition: (game as any).audioManager.getListenerPosition()
+          });
         } else {
-          // Unarmed hit sound (use blunt impact for fists/head, different for bite)
-          const hitSound = damageType === 'bite' ? 'weapons.melee.sword.impact' : 'weapons.melee.club.impact';
-          (game as any).playAudio(hitSound, { 
-            volume: 0.7, 
+          (game as any).playAudio('weapons.hit.melee', {
+            volume: 0.6,
             rng: Math.random,
             position: { x: e.x, y: e.y },
             listenerPosition: (game as any).audioManager.getListenerPosition()
           });
         }
         
-        // Apply stun effect if applicable (for unarmed fist attacks)
-        if (shouldStun && stunDuration > 0) {
-          (c as any).stunnedUntil = performance.now() / 1000 + stunDuration;
-        }
-        
         (e as any).meleeCd = cooldown;
-        if (c.hp <= 0) { c.alive = false; (game.colonists as Colonist[]).splice((game.colonists as Colonist[]).indexOf(c), 1); game.msg('A colonist has fallen', 'warn'); }
       }
     }
+  }
+
+  // Handle ranged attacks if enemy has a ranged weapon
+  const weapon = (e as any).inventory?.equipment?.weapon;
+  if (weapon && weapon.defName) {
+    const weaponDef = itemDatabase.getItemDef(weapon.defName);
+    if (weaponDef && weaponDef.range && weaponDef.range > 0) {
+      const range = weaponDef.range || 150;
+      const distance = Math.hypot(targetPos.x - e.x, targetPos.y - e.y);
+      if (distance <= range && distance > 50) {
+        // Enemy is in range and not too close
+        if (!(e as any).rangedCd || (e as any).rangedCd <= 0) {
+          // Fire ranged weapon
+          (e as any).rangedCd = (weaponDef.cooldownTicks || 60) / 30; // Convert ticks to seconds
+          (game as any).spawnBullet(e.x, e.y, targetPos.x, targetPos.y, 200, e, weaponDef.damage || e.dmg, weaponDef.damageType || 'gunshot');
+          
+          // Play ranged weapon audio
+          const audioDef = getWeaponAudioByDefName(itemDatabase, weaponDef.defName || weapon.defName, true);
+          if (audioDef) {
+            (game as any).playAudio(audioDef, {
+              volume: 0.9,
+              rng: Math.random,
+              position: { x: e.x, y: e.y },
+              listenerPosition: (game as any).audioManager.getListenerPosition()
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Update cooldowns
+  if ((e as any).rangedCd) {
+    (e as any).rangedCd = Math.max(0, (e as any).rangedCd - dt);
   }
 }

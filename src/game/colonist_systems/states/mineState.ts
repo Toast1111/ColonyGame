@@ -2,7 +2,7 @@ import type { Colonist } from '../../types';
 import type { Game } from '../../Game';
 import { T } from '../../constants';
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from '../../terrain';
-import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from '../../skills/skills';
+import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from '../skills';
 import type { ItemType } from '../../types/items';
 
 // Handles the mining state (mountain tiles and rocks)

@@ -27,7 +27,7 @@ import { createDefaultEvents } from './events';
 import { createEnemyWithProfile } from './enemy_systems/enemyGenerator';
 import { drawTerrainDebug } from "./render/debug/terrainDebugRender";
 import { updateColonistFSM } from "./colonist_systems/colonistFSM";
-import { updateEnemyFSM } from "../ai/enemyFSM";
+import { updateEnemyFSM } from "./enemy_systems/enemyFSM";
 import { drawBuildMenu as drawBuildMenuUI, handleBuildMenuClick as handleBuildMenuClickUI } from "./ui/buildMenu";
 import { handleHotbarClick } from "./ui/hud/modernHotbar";
 import { handleBuildMenuClick as handleModernBuildMenuClick } from "./ui/hud/modernBuildMenu";

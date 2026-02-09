@@ -1,6 +1,6 @@
 import type { Game } from "../Game";
 import type { Building, Bullet, Enemy } from "../types";
-import { grantSkillXP } from "../skills/skills";
+import { grantSkillXP } from "../colonist_systems/skills";
 import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles } from "../../core/particles";
 import { dist2 } from "../../core/utils";
 import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";

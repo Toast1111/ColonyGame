@@ -10,7 +10,7 @@
 
 import type { Colonist, Injury, Building, Operation } from '../types';
 import { MEDICAL_TREATMENTS, type MedicalTreatment, MedicalPriority } from './medicalSystem';
-import { skillLevel } from '../skills/skills';
+import { skillLevel } from '../colonist_systems/skills';
 
 export interface MedicalJob {
   id: string;

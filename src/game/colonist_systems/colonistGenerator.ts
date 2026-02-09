@@ -11,7 +11,7 @@ import {
 import { ALL_PASSIVE_TRAITS, type PassiveTrait } from './traits/passiveTraits';
 import type { Background } from './traits/backgrounds';
 import { BIRTHPLACES, LIFE_EVENTS, SKILLS, FEARS, SECRETS, type LifeEvent } from './narrative';
-import { createDefaultSkillSet, addStartingSkillVariance } from '../skills/skills';
+import { createDefaultSkillSet, addStartingSkillVariance } from './skills';
 import type { InventoryItem, Equipment, ColonistInventory, SkillSet, SkillName } from '../types';
 
 // Enhanced interface with detailed personal information

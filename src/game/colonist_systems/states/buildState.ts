@@ -6,7 +6,7 @@ import { getConstructionAudio, getConstructionCompleteAudio } from '../../audio/
 import { stopConstructionAudio, stopConstructionLoop } from '../../audio/helpers/constructionAudio';
 import { initializeDoor, isDoorBlocking } from '../../systems/doorSystem';
 import { isMountainTile as checkIsMountainTile } from '../../terrain';
-import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from '../../skills/skills';
+import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from '../skills';
 
 // Helper function to check if a position would collide with buildings or mountains
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {

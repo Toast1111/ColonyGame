@@ -12,7 +12,7 @@ import type { Colonist, ColonistState } from '../../types';
 import type { Game } from '../../Game';
 import type { Building } from '../../types';
 import type { ItemType } from '../../types/items';
-import { skillLevel, skillWorkSpeedMultiplier, grantSkillXP } from '../../skills/skills';
+import { skillLevel, skillWorkSpeedMultiplier, grantSkillXP } from '../skills';
 
 export function updateSmeltingState(
   c: Colonist,

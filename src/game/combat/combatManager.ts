@@ -16,7 +16,7 @@
 
 import type { Game } from "../Game";
 import type { Colonist, Enemy, Building } from "../types";
-import { skillLevel } from "../skills/skills";
+import { skillLevel } from "../colonist_systems/skills";
 import { itemDatabase } from "../../data/itemDatabase";
 
 export interface ThreatAssessment {

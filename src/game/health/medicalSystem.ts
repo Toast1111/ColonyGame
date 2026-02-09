@@ -1,5 +1,5 @@
 import type { Colonist, Injury, BodyPartType, InjuryType } from '../types';
-import { skillLevel, grantSkillXP } from '../skills/skills';
+import { skillLevel, grantSkillXP } from '../colonist_systems/skills';
 import { damageBodyPart, createInjury, initializeColonistHealth, updateHealthStats } from './healthSystem';
 import { itemDatabase } from '../../data/itemDatabase';
 import type { MedicalJob } from './medicalWorkGiver';

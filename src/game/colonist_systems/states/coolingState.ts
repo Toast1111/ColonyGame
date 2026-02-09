@@ -1,6 +1,6 @@
 import type { Colonist, ColonistState, Building } from '../../types';
 import type { Game } from '../../Game';
-import { skillWorkSpeedMultiplier, grantSkillXP } from '../../skills/skills';
+import { skillWorkSpeedMultiplier, grantSkillXP } from '../skills';
 import type { ItemType } from '../../types/items';
 
 /**

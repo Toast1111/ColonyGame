@@ -11,7 +11,7 @@
 import type { Colonist, ColonistState } from '../../types';
 import type { Game } from '../../Game';
 import type { Building } from '../../types';
-import { skillLevel, skillWorkSpeedMultiplier, grantSkillXP } from '../../skills/skills';
+import { skillLevel, skillWorkSpeedMultiplier, grantSkillXP } from '../skills';
 
 export function updateStonecuttingState(
   c: Colonist,
