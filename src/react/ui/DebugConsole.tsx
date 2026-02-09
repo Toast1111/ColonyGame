@@ -67,9 +67,16 @@ export function DebugConsole() {
   };
 
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     if (e.key === 'Enter') {
       e.preventDefault();
       handleSubmit();
+      return;
+    }
+
+    if (e.key === '`' || e.code === 'Backquote') {
+      e.preventDefault();
+      setDebugConsoleOpen(false);
       return;
     }
 
@@ -108,6 +115,10 @@ export function DebugConsole() {
       e.preventDefault();
       setDebugConsoleState({ input: suggestions[0] });
     }
+  };
+
+  const handleKeyUp = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    e.stopPropagation();
   };
 
   return (
@@ -181,6 +192,7 @@ export function DebugConsole() {
             value={state.input}
             onChange={(e) => setDebugConsoleState({ input: e.target.value })}
             onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
             placeholder="Type a command…"
             spellCheck={false}
             autoCapitalize="off"
