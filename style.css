@@ -22,7 +22,7 @@ header button:focus{outline:none;border-color:#2b3d59}
 .loading-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#38bdf8,#3b82f6);transition:width .25s ease}
 .loading-detail{font-size:clamp(12px,1.6vw,14px);color:#94a3b8}
 #react-root{display:contents;pointer-events:none;z-index:50}
-header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-events:auto}
+header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar,.debug-console-overlay{pointer-events:auto}
 .gameover-overlay{position:fixed;inset:0;pointer-events:auto;font-family:"Press Start 2P", monospace;color:#ffffff;z-index:100}
 .gameover-fade{position:absolute;inset:0;background:#000000}
 .gameover-guilt{position:absolute;inset:0}
@@ -81,6 +81,43 @@ header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar{pointer-e
 .work-priority-footer p{margin:2px 0}
 .resource-pill-bar{display:inline-block;width:8px;height:18px;border-radius:6px}
 .resource-pill-text{line-height:1}
+
+/* Debug Console (React) */
+.debug-console-overlay{position:fixed;left:24px;bottom:calc(var(--resource-bar-height) + 84px);z-index:85;pointer-events:auto;max-width:min(92vw,820px)}
+.debug-console-panel{display:flex;flex-direction:column;gap:0;background:linear-gradient(160deg,rgba(10,16,28,0.96) 0%,rgba(12,10,18,0.98) 40%,rgba(6,12,20,0.96) 100%);border:1px solid rgba(59,130,246,0.35);box-shadow:0 24px 60px rgba(0,0,0,0.6);border-radius:16px;overflow:hidden;position:relative}
+.debug-console-panel::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(56,189,248,0.15),transparent 55%),radial-gradient(circle at 20% 80%,rgba(244,114,182,0.12),transparent 45%);pointer-events:none}
+.debug-console-header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid rgba(30,41,59,0.7);background:rgba(9,14,26,0.7);backdrop-filter:blur(8px);position:relative;z-index:1}
+.debug-console-title{font-family:"Space Mono","IBM Plex Mono","Fira Code",ui-monospace,monospace;font-size:14px;letter-spacing:2px;text-transform:uppercase;color:#7dd3fc}
+.debug-console-subtitle{font-family:"Space Grotesk","Work Sans","Segoe UI",sans-serif;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#94a3b8;margin-left:auto}
+.debug-console-close{margin-left:8px;border:none;background:rgba(30,41,59,0.6);color:#cbd5f5;font-size:16px;border-radius:10px;width:30px;height:30px;cursor:pointer;transition:all .15s ease}
+.debug-console-close:hover{background:rgba(59,130,246,0.3);color:#e2e8f0}
+.debug-console-body{display:grid;grid-template-columns:minmax(240px,1fr) 220px;gap:0;min-height:280px;position:relative;z-index:1}
+.debug-console-output{padding:14px 16px;overflow:auto;max-height:320px;font-family:"Space Mono","IBM Plex Mono","Fira Code",ui-monospace,monospace;font-size:12px;color:#dbeafe;line-height:1.6;background:rgba(8,12,20,0.6)}
+.debug-console-output::-webkit-scrollbar{width:8px}
+.debug-console-output::-webkit-scrollbar-thumb{background:rgba(148,163,184,0.4);border-radius:999px}
+.debug-console-output::-webkit-scrollbar-track{background:transparent}
+.debug-console-line{white-space:pre-wrap;word-break:break-word}
+.debug-console-empty{color:#64748b;font-style:italic}
+.debug-console-empty span{color:#38bdf8;font-weight:600}
+.debug-console-sidebar{border-left:1px solid rgba(30,41,59,0.8);padding:14px 12px;background:rgba(9,12,20,0.7);display:flex;flex-direction:column;gap:14px}
+.debug-console-section-title{font-family:"Space Grotesk","Work Sans","Segoe UI",sans-serif;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:#94a3b8;margin-bottom:8px}
+.debug-console-command-list{display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow:auto}
+.debug-console-command{border:1px solid rgba(59,130,246,0.4);background:rgba(59,130,246,0.12);color:#bfdbfe;border-radius:999px;padding:4px 8px;font-size:11px;font-family:"Space Mono","IBM Plex Mono","Fira Code",ui-monospace,monospace;cursor:pointer}
+.debug-console-command:hover{border-color:rgba(125,211,252,0.8);color:#e0f2fe}
+.debug-console-suggestions{display:flex;flex-direction:column;gap:6px}
+.debug-console-suggestion{font-size:12px;color:#f472b6;font-family:"Space Mono","IBM Plex Mono","Fira Code",ui-monospace,monospace}
+.debug-console-input-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-top:1px solid rgba(30,41,59,0.8);background:rgba(8,12,20,0.75);position:relative;z-index:1}
+.debug-console-prompt{font-family:"Space Mono","IBM Plex Mono","Fira Code",ui-monospace,monospace;color:#38bdf8;font-size:14px}
+.debug-console-input{flex:1;border:none;background:transparent;color:#e2e8f0;font-family:"Space Mono","IBM Plex Mono","Fira Code",ui-monospace,monospace;font-size:13px;outline:none}
+.debug-console-input::placeholder{color:#64748b}
+.debug-console-run{border:none;background:linear-gradient(135deg,#38bdf8,#f472b6);color:#0b1120;font-weight:700;border-radius:10px;padding:6px 14px;cursor:pointer;font-size:12px;letter-spacing:0.5px;text-transform:uppercase}
+.debug-console-run:hover{filter:brightness(1.05)}
+
+@media (max-width: 720px){
+	.debug-console-overlay{left:12px;right:12px;bottom:calc(var(--resource-bar-height) + 70px)}
+	.debug-console-body{grid-template-columns:1fr}
+	.debug-console-sidebar{display:none}
+}
 .resource-menu-button{appearance:none;border:1px solid #1b2736;background:#0f1621;color:var(--fg);border-radius:.6rem;cursor:pointer;font-size:16px;line-height:1;min-height:34px;min-width:34px;box-shadow:0 6px 14px #0006;transition:all .2s ease;pointer-events:auto}
 .resource-menu-button:hover{border-color:#2b3d59;background:#1a2332}
 .resource-menu-button:active{transform:scale(0.96)}

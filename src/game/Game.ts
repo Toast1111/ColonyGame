@@ -57,7 +57,8 @@ import { snapToTileCenter } from './utils/tileAlignment';
 import { toggleWorkPriorityPanel, isWorkPriorityPanelOpen } from './ui/panels/workPriorityPanel';
 import { handleBuildingInventoryPanelClick, isBuildingInventoryPanelOpen } from './ui/panels/buildingInventoryPanel';
 // import { getInventoryItemCount } from './systems/buildingInventory';
-import { initDebugConsole, toggleDebugConsole, handleDebugConsoleKey, drawDebugConsole } from './ui/debugConsole';
+import { initDebugConsole } from './ui/debugConsole';
+import { getDebugConsoleState, setDebugConsoleOpen } from '../react';
 import { updateDoor, initializeDoor, findBlockingDoor, requestDoorOpen, isDoorBlocking, releaseDoorQueue } from './systems/doorSystem';
 import { GameOverScreen } from './ui/GameOverScreen';
 import { TutorialSystem } from './ui/TutorialSystem';
@@ -1474,17 +1475,22 @@ export class Game {
     
     // Bind keyboard events through InputManager
     this.inputManager.bindKeyboardEvents(() => {
-      const dc = (this as any).debugConsole;
-      return dc && dc.open; // Block input if debug console is open
+      return getDebugConsoleState().open; // Block input if debug console is open
     });
     
     // Debug console toggle (separate from game input)
     window.addEventListener('keydown', (e) => {
       // Backquote toggles console; if open, route keys to console and stop propagation
       const ke = e as KeyboardEvent;
-      if (ke.key === '`' || (ke.code === 'Backquote')) { e.preventDefault(); toggleDebugConsole(this); return; }
-      const handled = handleDebugConsoleKey(this, e as KeyboardEvent);
-      if (handled) { e.preventDefault(); e.stopPropagation(); }
+      if (ke.key === '`' || (ke.code === 'Backquote')) {
+        e.preventDefault();
+        setDebugConsoleOpen(!getDebugConsoleState().open);
+        return;
+      }
+      if (getDebugConsoleState().open && ke.key === 'Escape') {
+        e.preventDefault();
+        setDebugConsoleOpen(false);
+      }
     });
     
     // Unified touch input: pan, pinch-zoom, and tap/select/place
@@ -2678,8 +2684,7 @@ export class Game {
     }
     
     // If debug console is open, ignore gameplay hotkeys (space, etc.)
-    const dc = (this as any).debugConsole;
-    const consoleOpen = !!(dc && dc.open);
+    const consoleOpen = getDebugConsoleState().open;
     
     // Note: Work priority panel is now non-modal (like build menu), so it doesn't block input
     

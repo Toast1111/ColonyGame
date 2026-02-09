@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import { GameOverOverlay } from './index';
+import { GameOverOverlay, DebugConsole } from './index';
 import { TopBar } from './ui/TopBar';
 import { MobileControls } from './ui/MobileControls';
 import { ResourceBar } from './ui/ResourceBar';
@@ -53,6 +53,7 @@ createRoot(container).render(
     <ResearchPanel />
     <Hotbar />
     <MobileControls />
+    <DebugConsole />
     <GameOverOverlay />
   </>
 );

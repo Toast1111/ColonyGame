@@ -7,6 +7,7 @@ export { BuildMenu } from './ui/BuildMenu';
 export { ColonistProfilePanel } from './ui/ColonistBioPanel';
 export { WorkPriorityPanel } from './ui/WorkPriorityPanel';
 export { ResearchPanel } from './ui/ResearchPanel';
+export { DebugConsole } from './ui/DebugConsole';
 export { createMobileControlsBridge, type MobileControlsHandle } from './ui/mobileControlsBridge';
 export { getMobileControlsState, subscribeMobileControls, setMobileControlsState } from './stores/mobileControlsStore';
 export { getResourceBarState, subscribeResourceBar, setResourceBarState } from './stores/resourceBarStore';
@@ -14,6 +15,7 @@ export { getHotbarState, subscribeHotbar, setHotbarState } from './stores/hotbar
 export { getColonistProfileState, subscribeColonistProfile, setColonistProfileState } from './stores/colonistBioStore';
 export { getWorkPriorityState, subscribeWorkPriority, setWorkPriorityVisible, toggleWorkPriorityPanel } from './stores/workPriorityStore';
 export { getResearchPanelState, subscribeResearchPanel, setResearchPanelVisible, toggleResearchPanel } from './stores/researchStore';
+export { getDebugConsoleState, subscribeDebugConsole, setDebugConsoleOpen } from './stores/debugConsoleStore';
 export {
   getGameOverOverlayState,
   subscribeGameOverOverlay,

@@ -21,10 +21,8 @@ import { drawControlPanel, type ControlPanelRect } from '../ui/hud/controlPanel'
 import { canPlace as canPlacePlacement } from '../placement/placementSystem';
 import { BUILD_TYPES, hasCost } from '../buildings';
 import { getZoneDef, isZone } from '../zones';
-import { drawDebugConsole } from '../ui/debugConsole';
 import { drawTooltip, isPointInCircle } from '../ui/uiUtils';
 import { drawPerformanceHUD } from '../ui/panels/performanceHUD';
-import type { Colonist, Enemy } from '../types';
 import { worldBackgroundCache, nightOverlayCache, colonistSpriteCache } from '../../core/RenderCache';
 import { setHotbarState } from '../../react';
 
@@ -697,8 +695,7 @@ export class RenderManager {
       this.renderMiningDebug();
     }
 
-    // Debug console (rendered last in world space)
-    drawDebugConsole(game);
+    // Debug console is now React-based.
   }
 
   /**
@@ -1191,8 +1188,7 @@ export class RenderManager {
     // Performance HUD (top layer - always visible when enabled)
     drawPerformanceHUD(game);
     
-    // Debug console (always on top)
-    drawDebugConsole(game);
+    // Debug console is now React-based.
     
     // Tutorial system (absolute top layer - covers everything when active)
     if (game.tutorialSystem.isActive()) {

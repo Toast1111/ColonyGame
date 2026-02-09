@@ -8,29 +8,59 @@ import { RESEARCH_TREE } from "../research/researchDatabase";
 
 type CommandHandler = (game: Game, args: string[]) => string | void;
 
-export function initDebugConsole(game: Game) {
-  (game as any).debugConsole = {
-    open: false,
-    input: "",
-    history: [] as string[],
-    historyIndex: -1,
-    output: [] as string[],
-    commands: new Map<string, CommandHandler>()
-  };
+export class DebugConsoleSystem {
+  private game: Game;
+  private commands = new Map<string, CommandHandler>();
+  public lastStockpileId?: string;
+
+  constructor(game: Game) {
+    this.game = game;
+  }
+
+  register(name: string, fn: CommandHandler, help?: string): void {
+    this.commands.set(name, fn);
+    if (help) (fn as any).help = help;
+  }
+
+  getCommandNames(): string[] {
+    return Array.from(this.commands.keys()).sort();
+  }
+
+  getCommandHelp(name: string): string {
+    const fn = this.commands.get(name);
+    if (!fn) return `No help for '${name}'`;
+    return (fn as any).help || `No help for '${name}'`;
+  }
+
+  execute(line: string): string[] {
+    const trimmed = line.trim();
+    if (!trimmed) return [];
+    const [cmd, ...args] = trimmed.split(/\s+/);
+    const fn = this.commands.get(cmd.toLowerCase());
+    if (!fn) return [`unknown command: ${cmd}`];
+    try {
+      const res = fn(this.game, args);
+      if (!res) return [];
+      return res.split('\n');
+    } catch (err: any) {
+      return [`error: ${err?.message || err}`];
+    }
+  }
+}
+
+export function initDebugConsole(game: Game): DebugConsoleSystem {
+  const system = new DebugConsoleSystem(game);
+  (game as any).debugConsoleSystem = system;
 
   const reg = (name: string, fn: CommandHandler, help?: string) => {
-    (game as any).debugConsole.commands.set(name, fn);
-    // store help text as output of 'help name'
-    if (help) (fn as any).help = help;
+    system.register(name, fn, help);
   };
 
   reg("help", (g, args) => {
-    const dc = (g as any).debugConsole;
     if (args.length) {
-      const fn = dc.commands.get(args[0]);
-      return fn && (fn as any).help ? (fn as any).help : `No help for '${args[0]}'`;
+      return system.getCommandHelp(args[0]);
     }
-    return "commands: help, toggle, spawn, speed, pause, give, select, clear, injure, health, resources, mountains, drop, stockpile, items, kill, heal, godmode, farm, building, stove, time, tree, research, events, music";
+    return `commands: ${system.getCommandNames().join(', ')}`;
   }, "help [cmd] — show commands or help for cmd");
 
   reg("toggle", (g, args) => {
@@ -500,7 +530,7 @@ Co-authored-by: Another User <another@example.com>
     // Helper to resolve zone id or 'last'
     const resolveZone = (idOrLast: string) => {
       if (!idOrLast || idOrLast === 'last') {
-        const lastId = (g as any).debugConsole.lastStockpileId as string | undefined;
+        const lastId = system.lastStockpileId as string | undefined;
         return lastId ? rim.stockpiles.getZone(lastId) : null;
       }
       return rim.stockpiles.getZone(idOrLast) || null;
@@ -516,7 +546,7 @@ Co-authored-by: Another User <another@example.com>
       const cx = g.camera.x + vw / 2;
       const cy = g.camera.y + vh / 2;
       const zone = rim.createStockpileZone(Math.floor(cx - w/2), Math.floor(cy - h/2), w, h, name);
-      (g as any).debugConsole.lastStockpileId = zone.id;
+      system.lastStockpileId = zone.id;
       return `stockpile created ${zone.id} '${zone.name}' at (${zone.x},${zone.y}) ${w}x${h}`;
     }
 
@@ -1349,105 +1379,5 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: pathfind info|clear|debug — show path info for selected colonist, clear their path, or toggle debug vis";
   }, "pathfind info|clear|debug — debug pathfinding for selected colonist");
-}
-
-export function toggleDebugConsole(game: Game) {
-  const dc = (game as any).debugConsole;
-  if (!dc) return;
-  dc.open = !dc.open;
-}
-
-export function handleDebugConsoleKey(game: Game, e: KeyboardEvent) {
-  const dc = (game as any).debugConsole;
-  if (!dc || !dc.open) return false;
-  if (e.key === 'Escape') { dc.open = false; return true; }
-  if (e.key === 'Enter') {
-    const line = dc.input.trim();
-    if (line.length) {
-      dc.history.unshift(line);
-      dc.historyIndex = -1;
-      execute(game, line);
-      dc.input = "";
-    }
-    return true;
-  }
-  if (e.key === 'Backspace') { dc.input = dc.input.slice(0, -1); return true; }
-  if (e.key === 'ArrowUp') { if (dc.history.length) { dc.historyIndex = Math.min(dc.historyIndex + 1, dc.history.length - 1); dc.input = dc.history[dc.historyIndex]; } return true; }
-  if (e.key === 'ArrowDown') { if (dc.historyIndex > 0) { dc.historyIndex -= 1; dc.input = dc.history[dc.historyIndex]; } else { dc.historyIndex = -1; dc.input = ""; } return true; }
-  // Append printable characters
-  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) { dc.input += e.key; return true; }
-  return false;
-}
-
-function execute(game: Game, line: string) {
-  const dc = (game as any).debugConsole;
-  const [cmd, ...args] = line.split(/\s+/);
-  const fn = dc.commands.get(cmd.toLowerCase());
-  if (!fn) { dc.output.push(`unknown command: ${cmd}`); trim(dc); return; }
-  try {
-    const res = fn(game, args);
-    if (res) dc.output.push(res);
-  } catch (err: any) {
-    dc.output.push(`error: ${err?.message || err}`);
-  }
-  trim(dc);
-}
-
-function trim(dc: any) {
-  const max = 10;
-  if (dc.output.length > max) dc.output.splice(0, dc.output.length - max);
-}
-
-export function drawDebugConsole(game: Game) {
-  const dc = (game as any).debugConsole;
-  if (!dc || !dc.open) return;
-  const ctx = game.ctx;
-  const pad = 10; const w = game.canvas.width; const h = game.canvas.height;
-  const hotbarH = game.scale(game.isTouch ? 86 : 64);
-  const bottomOffset = hotbarH + 8; // keep above the quick build menu with a gap
-  const boxH = Math.min(220, Math.max(140, Math.round(h * 0.25)));
-  ctx.save();
-  ctx.resetTransform();
-  ctx.globalAlpha = 0.92;
-  ctx.fillStyle = '#0b1220cc';
-  const y0 = h - bottomOffset - boxH;
-  ctx.fillRect(0, y0, w, boxH);
-  // Outline for better visibility
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = '#ffffffff';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(0.5, y0 + 0.5, w - 1, boxH - 1);
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = '#c7d2fe';
-  const fontSize = game.isTouch ? 17 : 15;
-  ctx.font = `${fontSize}px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace`;
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  // Output lines
-  let y = y0 + pad + 4;
-  for (const line of dc.output) {
-    ctx.fillText(line, pad, y);
-    y += fontSize + 5;
-  }
-  // Prompt
-  const prompt = `> ${dc.input}`;
-  ctx.fillStyle = '#e5e7eb';
-  const promptY = (h - bottomOffset) - pad;
-  ctx.fillText(prompt, pad, promptY);
-  // Blinking caret
-  const showCaret = (performance.now() % 1000) < 600;
-  if (showCaret) {
-    const metrics = ctx.measureText(prompt);
-    const tw = metrics.width;
-    const ascent = (metrics as any).actualBoundingBoxAscent || fontSize * 0.9;
-    const descent = (metrics as any).actualBoundingBoxDescent || fontSize * 0.2;
-    const cx = pad + tw + 2;
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(cx, promptY - ascent);
-    ctx.lineTo(cx, promptY + descent);
-    ctx.stroke();
-  }
-  ctx.restore();
+  return system;
 }
