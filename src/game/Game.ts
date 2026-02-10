@@ -2838,8 +2838,13 @@ export class Game {
         }
       }
       
+      // Work progress tasks should be exempt from adaptive throttling
+      const isWorkTask = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' ||
+        c.task === 'build' || c.task === 'chop' || c.task === 'mine' || c.task === 'harvest' ||
+        c.task === 'harvestFarm' || c.task === 'harvestWell';
+
       // Check if this colonist should do full AI update this frame
-      if (this.adaptiveTickRate.shouldUpdate(colonistId, importance)) {
+      if (isWorkTask || this.adaptiveTickRate.shouldUpdate(colonistId, importance)) {
         // Full AI update: decision making, state transitions, task selection
         updateColonistFSM(this, c, dt * this.fastForward);
       } else {
