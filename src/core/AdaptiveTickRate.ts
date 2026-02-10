@@ -65,6 +65,7 @@ export interface EntityTickState {
 
 export class AdaptiveTickRateManager {
   private entityStates = new Map<string, EntityTickState>();
+  private updateHistory = new Map<string, number[]>();
   private frameTime = 0;
   
   // Performance tracking
@@ -196,6 +197,7 @@ export class AdaptiveTickRateManager {
         skippedUpdates: 0
       };
       this.entityStates.set(entityId, state);
+      this.recordUpdate(entityId);
       this.updatedThisFrame++;
       return true; // Update on first encounter
     }
@@ -209,6 +211,7 @@ export class AdaptiveTickRateManager {
         const config = IMPORTANCE_CONFIGS[importance];
         const jitter = (Math.random() - 0.5) * config.jitterRange * 2;
         state.nextUpdate = this.frameTime + (1 / config.targetHz) + jitter;
+        this.recordUpdate(entityId);
         this.updatedThisFrame++;
         return true;
       }
@@ -225,6 +228,7 @@ export class AdaptiveTickRateManager {
       state.lastUpdate = this.frameTime;
       state.nextUpdate = this.frameTime + interval + jitter;
       state.skippedUpdates = 0;
+      this.recordUpdate(entityId);
       this.updatedThisFrame++;
       return true;
     }
@@ -248,6 +252,41 @@ export class AdaptiveTickRateManager {
       importance,
       skippedUpdates: 0
     });
+    this.recordUpdate(entityId);
+  }
+
+  public getEntityUpdateHz(entityId: string, windowSec = 2): {
+    hz: number;
+    lastInterval?: number;
+    importance?: ImportanceLevel;
+    targetHz?: number;
+  } {
+    const history = this.updateHistory.get(entityId) || [];
+    const now = this.frameTime;
+    const cutoff = now - windowSec;
+    const recent = history.filter((t) => t >= cutoff);
+    const hz = windowSec > 0 ? recent.length / windowSec : 0;
+    const lastInterval = history.length >= 2 ? (history[history.length - 1] - history[history.length - 2]) : undefined;
+    const state = this.entityStates.get(entityId);
+    const targetHz = state ? IMPORTANCE_CONFIGS[state.importance].targetHz : undefined;
+    return { hz, lastInterval, importance: state?.importance, targetHz };
+  }
+
+  private recordUpdate(entityId: string): void {
+    const history = this.updateHistory.get(entityId) || [];
+    history.push(this.frameTime);
+    if (history.length > 120) {
+      history.splice(0, history.length - 120);
+    }
+    const cutoff = this.frameTime - 10;
+    let trimIndex = 0;
+    while (trimIndex < history.length && history[trimIndex] < cutoff) {
+      trimIndex++;
+    }
+    if (trimIndex > 0) {
+      history.splice(0, trimIndex);
+    }
+    this.updateHistory.set(entityId, history);
   }
   
   /**

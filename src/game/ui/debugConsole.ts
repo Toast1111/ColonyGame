@@ -117,6 +117,21 @@ export function initDebugConsole(game: Game): DebugConsoleSystem {
     system.register(name, fn, help);
   };
 
+  const getSelectedColonistId = (g: Game, colonist: any): string => {
+    const index = g.colonists.indexOf(colonist);
+    return `colonist_${colonist.profile?.name || 'unknown'}_${index}`;
+  };
+
+  const formatTickRateInfo = (g: Game, colonist: any): string => {
+    const entityId = getSelectedColonistId(g, colonist);
+    const stats = g.adaptiveTickRate.getEntityUpdateHz(entityId, 2);
+    const hz = stats.hz.toFixed(1);
+    const target = stats.targetHz ? stats.targetHz.toFixed(1) : 'n/a';
+    const interval = stats.lastInterval ? (stats.lastInterval * 1000).toFixed(1) + 'ms' : 'n/a';
+    const importance = stats.importance !== undefined ? String(stats.importance) : 'n/a';
+    return `TickRate ${colonist.profile?.name || 'Colonist'}: actual=${hz}hz target=${target}hz lastInterval=${interval} importance=${importance}`;
+  };
+
   reg("help", (g, args) => {
     if (args.length) {
       return system.getCommandHelp(args[0]);
@@ -1392,6 +1407,37 @@ Co-authored-by: Another User <another@example.com>
     
     return "usage: render status|force|toggle — check render status, force redraw, or toggle dirty rects";
   }, "render status|force|toggle — debug rendering system and dirty frame issues");
+
+  reg("tickrate", (g, args) => {
+    const action = (args[0] || "status").toLowerCase();
+    const colonist = g.selColonist;
+    if (!colonist) return "No colonist selected";
+
+    if (action === "status" || action === "once") {
+      return formatTickRateInfo(g, colonist);
+    }
+
+    if (action === "on" || action === "watch") {
+      const existing = (g as any).__tickRateInterval as any;
+      if (existing) return "tickrate watch already running";
+      (g as any).__tickRateInterval = setInterval(() => {
+        console.log(formatTickRateInfo(g, colonist));
+      }, 1000);
+      return "tickrate watch enabled (logs every 1s)";
+    }
+
+    if (action === "off") {
+      const existing = (g as any).__tickRateInterval as any;
+      if (existing) {
+        clearInterval(existing);
+        (g as any).__tickRateInterval = null;
+        return "tickrate watch disabled";
+      }
+      return "tickrate watch not running";
+    }
+
+    return "usage: tickrate status|once|on|off — show or watch adaptive tick rate";
+  }, "tickrate status|once|on|off — show or watch adaptive tick rate for selected colonist");
 
   reg("pathfind", (g, args) => {
     const action = (args[0] || "info").toLowerCase();
