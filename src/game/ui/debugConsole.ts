@@ -3,6 +3,7 @@ import type { Resources } from "../types";
 import { playDayMusic, playGameOverMusic, playRaidMusic, stopDayMusic, stopGameOverMusic, stopRaidMusic } from "../audio/helpers/musicAudio";
 import { itemDatabase } from "../../data/itemDatabase";
 import { initializeColonistHealth, applyDamageToColonist } from "../health/healthSystem";
+import { createDefaultSkillSet } from "../colonist_systems/skills";
 import { addItemToInventory } from "../systems/buildingInventory";
 import { RESEARCH_TREE } from "../research/researchDatabase";
 
@@ -52,6 +53,66 @@ export function initDebugConsole(game: Game): DebugConsoleSystem {
   const system = new DebugConsoleSystem(game);
   (game as any).debugConsoleSystem = system;
 
+  const normalizeStandardColonist = (colonist: any): void => {
+    if (colonist.profile?.stats) {
+      colonist.profile.stats.workSpeed = 1.0;
+      colonist.profile.stats.socialBonus = 0;
+      colonist.profile.stats.hungerRate = 1.0;
+      colonist.profile.stats.fatigueRate = 1.0;
+    }
+    if (colonist.profile) {
+      colonist.profile.passiveTraits = [];
+      colonist.profile.startingInventory = {
+        items: [],
+        equipment: {},
+        carryCapacity: 50,
+        currentWeight: 0
+      } as any;
+    }
+
+    colonist.traitModifiers = {
+      workSpeed: 1.0,
+      movementSpeed: 1.0,
+      experienceGain: 1.0,
+      hungerRate: 1.0,
+      fatigueRate: 1.0,
+      carryCapacity: 50
+    };
+
+    colonist.hp = 100;
+    colonist.maxHp = 100;
+    colonist.speed = 50;
+
+    if (!colonist.skills) {
+      colonist.skills = createDefaultSkillSet();
+    }
+    if (colonist.skills?.byName) {
+      for (const skill of Object.values(colonist.skills.byName) as any[]) {
+        skill.level = 8; // ~1.0x skill work speed multiplier
+        skill.xp = 0;
+        skill.passion = 'none';
+        skill.xpDeltas = [];
+      }
+      colonist.skills.xpMultiplier = 1;
+    }
+
+    colonist.inventory = {
+      items: [],
+      equipment: {},
+      carryCapacity: 50,
+      currentWeight: 0
+    } as any;
+
+    if (typeof game.recalcInventoryWeight === 'function') {
+      game.recalcInventoryWeight(colonist);
+    }
+  };
+
+  const spawnStandardColonist = (g: Game, pos: { x: number; y: number }): void => {
+    const colonist = g.spawnColonist(pos) as any;
+    normalizeStandardColonist(colonist);
+  };
+
   const reg = (name: string, fn: CommandHandler, help?: string) => {
     system.register(name, fn, help);
   };
@@ -83,8 +144,14 @@ export function initDebugConsole(game: Game): DebugConsoleSystem {
     const n = Math.max(1, Math.min(20, parseInt(args[1] || "1", 10) || 1));
     if (what === "enemy") { for (let i = 0; i < n; i++) g.spawnEnemy(); return `spawned ${n} enemy`; }
     if (what === "colonist") { for (let i = 0; i < n; i++) g.spawnColonist({ x: g.camera.x + 100 + i * 8, y: g.camera.y + 100 }); return `spawned ${n} colonist`; }
+    if (what === "standard" || what === "baseline") {
+      for (let i = 0; i < n; i++) {
+        spawnStandardColonist(g, { x: g.camera.x + 100 + i * 8, y: g.camera.y + 100 });
+      }
+      return `spawned ${n} standard colonist`;
+    }
     return `unknown spawn '${what}'`;
-  }, "spawn enemy [n] | spawn colonist [n]");
+  }, "spawn enemy [n] | spawn colonist [n] | spawn standard [n]");
 
   reg("speed", (g, args) => {
     const s = parseFloat(args[0] || "");
