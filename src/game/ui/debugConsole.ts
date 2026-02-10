@@ -1,6 +1,7 @@
 import type { Game } from "../Game";
 import type { Resources } from "../types";
 import { playDayMusic, playGameOverMusic, playRaidMusic, stopDayMusic, stopGameOverMusic, stopRaidMusic } from "../audio/helpers/musicAudio";
+import { appendDebugConsoleOutput } from "../../react/stores/debugConsoleStore";
 import { itemDatabase } from "../../data/itemDatabase";
 import { initializeColonistHealth, applyDamageToColonist } from "../health/healthSystem";
 import { createDefaultSkillSet } from "../colonist_systems/skills";
@@ -130,6 +131,15 @@ export function initDebugConsole(game: Game): DebugConsoleSystem {
     const interval = stats.lastInterval ? (stats.lastInterval * 1000).toFixed(1) + 'ms' : 'n/a';
     const importance = stats.importance !== undefined ? String(stats.importance) : 'n/a';
     return `TickRate ${colonist.profile?.name || 'Colonist'}: actual=${hz}hz target=${target}hz lastInterval=${interval} importance=${importance}`;
+  };
+
+  const emitTickRateInfo = (g: Game): void => {
+    const colonist = g.selColonist as any;
+    if (!colonist) {
+      appendDebugConsoleOutput('TickRate: no colonist selected');
+      return;
+    }
+    appendDebugConsoleOutput(formatTickRateInfo(g, colonist));
   };
 
   reg("help", (g, args) => {
@@ -1421,8 +1431,9 @@ Co-authored-by: Another User <another@example.com>
       const existing = (g as any).__tickRateInterval as any;
       if (existing) return "tickrate watch already running";
       (g as any).__tickRateInterval = setInterval(() => {
-        console.log(formatTickRateInfo(g, colonist));
+        emitTickRateInfo(g);
       }, 1000);
+      emitTickRateInfo(g);
       return "tickrate watch enabled (logs every 1s)";
     }
 
