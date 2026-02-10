@@ -26,7 +26,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     size: { w: 2, h: 2 }, 
     build: 80, 
     color: COLORS.farm, 
-    growTime: 1 // 1 unit = 2 days with 0.5 growth per day
+    growTime: 0.5, // 1 unit = 2 days with 0.5 growth per day
   },
   turret: { 
     category:'Defense', 
