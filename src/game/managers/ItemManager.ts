@@ -1,6 +1,6 @@
 import { FloorItemManager } from "../systems/floorItems";
 import { StockpileManager } from "../systems/stockpileZones";
-import { HaulManager, type HaulingJob } from "../systems/haulManager";
+import { HaulManager, type HaulingJob } from "./HaulManager";
 import { ItemRenderer } from "../rendering/itemRenderer";
 import type { ItemType, FloorItem } from "../types/items";
 import type { StockpileZone } from "../types/stockpiles";

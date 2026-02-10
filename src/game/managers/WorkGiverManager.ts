@@ -1,5 +1,5 @@
-import type { WorkGiver, WorkGiverContext, WorkCandidate } from '../workGivers/types';
-import { WORK_GIVERS } from '../workGivers';
+import type { WorkGiver, WorkGiverContext, WorkCandidate } from "../workGivers/types";
+import { WORK_GIVERS } from "../workGivers";
 
 /**
  * WorkGiverManager

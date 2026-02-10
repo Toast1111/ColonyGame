@@ -1,5 +1,5 @@
-import { AUDIO_MANIFEST, type AudioKey, pickAudioVariant, resolveAudioSrc, type RandomFn } from '../../assets/audio/manifest';
-import { clamp } from '../../core/utils';
+import { AUDIO_MANIFEST, type AudioKey, pickAudioVariant, resolveAudioSrc, type RandomFn } from "../../assets/audio/manifest";
+import { clamp } from "../../core/utils";
 
 export interface PlayAudioOptions {
   volume?: number;
@@ -404,4 +404,4 @@ export class AudioManager {
   }
 }
 
-export type { AudioKey } from '../../assets/audio/manifest';
+export type { AudioKey } from "../../assets/audio/manifest";

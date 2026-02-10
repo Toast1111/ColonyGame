@@ -1,4 +1,4 @@
-import type { AudioKey } from '../AudioManager';
+import type { AudioKey } from '../../managers/AudioManager';
 
 interface MedicalAudioState {
   activeKey?: AudioKey;

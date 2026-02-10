@@ -16,7 +16,7 @@ import type { ContextMenuDescriptor, ContextMenuItem } from '../ui/contextMenus/
 import type { HotbarTab } from '../ui/hud/modernHotbar';
 import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/panels/workPriorityPanel';
 import { openResearchPanel, closeResearchPanel } from '../ui/panels/researchPanel';
-import { AudioManager } from '../audio/AudioManager';
+import { AudioManager } from './AudioManager';
 
 export class UIManager {
   // Modern hotbar system

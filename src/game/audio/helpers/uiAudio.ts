@@ -1,4 +1,4 @@
-import type { AudioKey } from '../AudioManager';
+import type { AudioKey } from '../../managers/AudioManager';
 
 function playUi(game: any, key: AudioKey): void {
   if (game?.playAudio) {

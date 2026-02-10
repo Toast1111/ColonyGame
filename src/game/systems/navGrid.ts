@@ -2,7 +2,7 @@ import { aStar, clearGrid, markRectSolid, markCircleSolid, markRoadPath, syncTer
 import { T } from "../constants";
 import type { Colonist } from "../types";
 import type { Game } from "../Game";
-import { isDoorBlocking } from "../systems/doorSystem";
+import { isDoorBlocking } from "./doorSystem";
 
 /**
  * Rebuild only a small area of the nav grid (for tree/rock removal)

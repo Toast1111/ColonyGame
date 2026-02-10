@@ -1,4 +1,4 @@
-import type { AudioKey } from './AudioManager';
+import type { AudioKey } from '../managers/AudioManager';
 
 /**
  * Dynamic Weapon Audio System

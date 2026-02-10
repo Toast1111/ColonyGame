@@ -13,7 +13,7 @@ import {
   computePathWithDangerAvoidance as computePathWithDangerAvoidanceNav, 
   cellIndexAt as cellIndexAtNav, 
   isBlocked as isBlockedNav 
-} from '../navigation/navGrid';
+} from '../systems/navGrid';
 import { syncTerrainToGrid } from '../../core/pathfinding';
 
 export class NavigationManager {

@@ -14,7 +14,7 @@
 
 import type { Game } from "../Game";
 import type { Grid } from "../../core/pathfinding";
-import { rebuildNavGrid, rebuildNavGridPartial } from "../navigation/navGrid";
+import { rebuildNavGrid, rebuildNavGridPartial } from "./navGrid";
 
 export interface RebuildRequest {
   type: 'full' | 'partial';

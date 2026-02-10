@@ -8,7 +8,7 @@
  * - Stop music when game is paused or ended
  */
 
-import { AudioManager } from '../audio/AudioManager';
+import { AudioManager } from './AudioManager';
 import { playDayMusic, playRaidMusic, stopDayMusic, stopRaidMusic } from '../audio/helpers/musicAudio';
 
 export class MusicManager {

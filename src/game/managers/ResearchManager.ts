@@ -5,8 +5,8 @@
  * Separate from Game.ts for maintainability.
  */
 
-import { RESEARCH_TREE, ResearchNode, isResearchAvailable, getResearch } from './researchDatabase';
-import type { Building } from '../types';
+import { RESEARCH_TREE, ResearchNode, isResearchAvailable, getResearch } from "../research/researchDatabase";
+import type { Building } from "../types";
 
 export interface ResearchProgress {
   researchId: string;

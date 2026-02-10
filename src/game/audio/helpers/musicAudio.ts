@@ -1,4 +1,4 @@
-import type { AudioManager } from '../AudioManager';
+import type { AudioManager } from '../../managers/AudioManager';
 import { getAudioVariants, type AudioVariant } from '../../../assets/audio/manifest';
 
 type MusicKey = 'music.raid.combat' | 'music.day.ambient' | 'music.gameover.sad';
@@ -20,7 +20,7 @@ const shuffleSessions = new Map<MusicKey, ShuffleSession>();
 function safePlayLoop(audioManager: AudioManager, key: MusicKey, volume: number): void {
   audioManager
     .play(key, { volume, loop: true, replaceExisting: true })
-    .catch((err) => {
+    .catch((err: unknown) => {
       console.warn('[MusicAudio] Failed to start music:', key, err);
     });
 }
@@ -109,7 +109,7 @@ function playShuffledLoop(audioManager: AudioManager, key: MusicKey, volume: num
 
     audioManager
       .play(key, { volume, loop: false, replaceExisting: true, rng })
-      .then((source) => {
+      .then((source: AudioBufferSourceNode | null) => {
         if (!source || !session.active || session.token !== token) {
           return;
         }
@@ -120,7 +120,7 @@ function playShuffledLoop(audioManager: AudioManager, key: MusicKey, volume: num
           playNext();
         });
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         console.warn('[MusicAudio] Failed to start shuffled music:', key, err);
       });
   };
