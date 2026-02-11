@@ -17,6 +17,91 @@ import { isMountainTile as checkIsMountainTile } from "../terrain";
 import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateSleepState, updateResearchState, updateIdleState, updateMoveState, updateGuardState, updateBuildState } from "./states";
 import { canInterruptColonist, forceInterruptIntent, shouldEnterDecisionPhase, getColonistIntent, setColonistIntent, updateColonistIntent, hasIntent, createWorkIntent } from "../systems/colonistIntent";
 
+const WORKING_STATES: ColonistState[] = [
+  'build',
+  'chop',
+  'mine',
+  'harvest',
+  'flee',
+  'move',
+];
+
+const COLLISION_IGNORE_BUILDINGS = new Set(['hq', 'path', 'house', 'farm', 'bed']);
+const STUCK_RESCUE_DISTANCES = [20, 40, 60, 80] as const;
+const STUCK_RESCUE_ANGLES = [
+  0,
+  Math.PI / 2,
+  Math.PI,
+  (3 * Math.PI) / 2,
+  Math.PI / 4,
+  (3 * Math.PI) / 4,
+  (5 * Math.PI) / 4,
+  (7 * Math.PI) / 4,
+] as const;
+
+function clampToWorld(x: number, y: number, radius: number): { x: number; y: number } {
+  return {
+    x: Math.max(radius, Math.min(x, WORLD.w - radius)),
+    y: Math.max(radius, Math.min(y, WORLD.h - radius)),
+  };
+}
+
+function ensureColonistMovementTracking(c: Colonist) {
+  c.stuckTimer ??= 0;
+
+  if (!(c as any).lastPos) {
+    (c as any).lastPos = { x: c.x, y: c.y };
+  }
+
+  if (!(c as any).lastMoveCheck) {
+    (c as any).lastMoveCheck = 0;
+  }
+}
+
+function ensureColonistInventory(c: Colonist) {
+  if (!c.inventory) {
+    c.inventory = { items: [], equipment: {}, carryCapacity: 0, currentWeight: 0 } as any;
+  }
+
+  return c.inventory;
+}
+function findClosestRestBed(game: any, c: Colonist): Building | null {
+  if (game.buildingManager?.findBestRestBuilding) {
+    return game.buildingManager.findBestRestBuilding(c as any, {
+      preferMedical: true,
+      allowShelterFallback: true,
+    }) as Building;
+  }
+
+  const beds = (game.buildings as Building[]).filter((b: Building) =>
+    (b.kind === 'bed' || b.kind === 'house') &&
+    b.done &&
+    game.buildingHasSpace &&
+    game.buildingHasSpace(b, c)
+  );
+
+  if (!beds.length) {
+    return null;
+  }
+
+  beds.sort((a, b) => {
+    const medBiasA = a.kind === 'bed' && a.isMedicalBed ? -10 : 0;
+    const medBiasB = b.kind === 'bed' && b.isMedicalBed ? -10 : 0;
+    const da = dist2(c as any, game.centerOf(a) as any) + medBiasA;
+    const db = dist2(c as any, game.centerOf(b) as any) + medBiasB;
+    return da - db;
+  });
+
+  return beds[0];
+}
+
+function resetDoorWaitState(c: Colonist) {
+  c.waitingForDoor = null;
+  c.doorWaitStart = undefined;
+  c.doorPassingThrough = null;
+  c.doorApproachVector = null;
+}
+
 
 // Helper function to check if a position would collide with buildings or mountains
 function wouldCollideWithBuildings(game: any, x: number, y: number, radius: number): boolean {
@@ -31,7 +116,7 @@ function wouldCollideWithBuildings(game: any, x: number, y: number, radius: numb
   for (const b of game.buildings) {
     // Skip HQ, paths, houses, and farms as they don't block movement
     // Skip doors that are open
-    if (b.kind === 'hq' || b.kind === 'path' || b.kind === 'house' || b.kind === 'farm' || b.kind === 'bed' || !b.done) continue;
+    if (COLLISION_IGNORE_BUILDINGS.has(b.kind) || !b.done) continue;
     if (b.kind === 'door' && !isDoorBlocking(b)) continue;
     
     // Check circle-rectangle collision
@@ -140,15 +225,7 @@ function moveTowardsSafely(game: any, c: Colonist, targetX: number, targetY: num
 // Universal stuck detection and rescue system
 function checkAndRescueStuckColonist(game: any, c: Colonist): boolean {
   // Initialize stuck timer and position tracking if they don't exist
-  if (c.stuckTimer === undefined) {
-    c.stuckTimer = 0;
-  }
-  if (!(c as any).lastPos) {
-    (c as any).lastPos = { x: c.x, y: c.y };
-  }
-  if (!(c as any).lastMoveCheck) {
-    (c as any).lastMoveCheck = 0;
-  }
+  ensureColonistMovementTracking(c);
 
   // Check if colonist is currently inside a building collision area
   const isBuildingStuck = wouldCollideWithBuildings(game, c.x, c.y, c.r);
@@ -169,22 +246,20 @@ function checkAndRescueStuckColonist(game: any, c: Colonist): boolean {
   const isStuck = isBuildingStuck || isMovementStuck;
   
   if (isStuck) {
-    c.stuckTimer += 1/60; // Assume 60 FPS
+    c.stuckTimer = (c.stuckTimer ?? 0) + 1/60; // Assume 60 FPS
     
     // If stuck for more than 3 seconds, attempt rescue (increased from 2s)
-    if (c.stuckTimer > 3.0) {
-      const angles = [0, Math.PI/2, Math.PI, 3*Math.PI/2, Math.PI/4, 3*Math.PI/4, 5*Math.PI/4, 7*Math.PI/4];
+    if ((c.stuckTimer ?? 0) > 3.0) {
       let rescued = false;
       
       // Try progressively larger distances
-      for (const distance of [20, 40, 60, 80]) {
-        for (const angle of angles) {
+      for (const distance of STUCK_RESCUE_DISTANCES) {
+        for (const angle of STUCK_RESCUE_ANGLES) {
           const rescueX = c.x + Math.cos(angle) * distance;
           const rescueY = c.y + Math.sin(angle) * distance;
           
           // Ensure rescue position is within world bounds
-          const clampedX = Math.max(c.r, Math.min(rescueX, WORLD.w - c.r));
-          const clampedY = Math.max(c.r, Math.min(rescueY, WORLD.h - c.r));
+          const { x: clampedX, y: clampedY } = clampToWorld(rescueX, rescueY, c.r);
           
           if (!wouldCollideWithBuildings(game, clampedX, clampedY, c.r)) {
             c.x = clampedX;
@@ -310,7 +385,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
   
   // Needs progression
   // Hunger increases faster when working; slower when resting (rebalanced for realistic meal frequency)
-  const working = c.state === 'build' || c.state === 'chop' || c.state === 'mine' || c.state === 'harvest' || c.state === 'flee' || c.state === 'move';
+  const working = WORKING_STATES.includes(c.state as ColonistState);
   
   // Apply trait modifiers to hunger and fatigue rates (from passive traits)
   const hungerMultiplier = (c as any).traitModifiers?.hungerRate || c.profile?.stats.hungerRate || 1.0;
@@ -613,26 +688,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     case 'heal': {
       // Self-care state for low health: prefer bed rest, otherwise self-tend if enabled
       let targetBed: Building | null = null;
-      if (game.buildingManager?.findBestRestBuilding) {
-        targetBed = game.buildingManager.findBestRestBuilding(c as any, { preferMedical: true, allowShelterFallback: true }) as any;
-      }
-      if (!targetBed) {
-        const beds = (game.buildings as Building[]).filter((b: Building) =>
-          (b.kind === 'bed' || b.kind === 'house') &&
-          b.done &&
-          game.buildingHasSpace && game.buildingHasSpace(b, c)
-        );
-        if (beds.length) {
-          beds.sort((a, b) => {
-            const medBiasA = a.kind === 'bed' && a.isMedicalBed ? -10 : 0;
-            const medBiasB = b.kind === 'bed' && b.isMedicalBed ? -10 : 0;
-            const da = dist2(c as any, game.centerOf(a) as any) + medBiasA;
-            const db = dist2(c as any, game.centerOf(b) as any) + medBiasB;
-            return da - db;
-          });
-          targetBed = beds[0];
-        }
-      }
+      targetBed = findClosestRestBed(game, c);
 
       if (targetBed) {
         const bedCenter = game.centerOf(targetBed);
@@ -671,9 +727,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         (c as any).medicalJob = pendingJob;
       }
       // Ensure doctor inventory exists for supply pickup and checks
-      if (!c.inventory) {
-        c.inventory = { items: [], equipment: {}, carryCapacity: 0, currentWeight: 0 } as any;
-      }
+      ensureColonistInventory(c);
       const job: MedicalJob | undefined = (c as any).medicalJob;
       
       if (!job) {
@@ -896,26 +950,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       // Prefer staying in the current bed to avoid oscillation
       let targetBed: Building | null = (c.inside && c.inside.kind === 'bed') ? c.inside : null;
       // Prefer medical beds for any injury; fall back to regular beds with space
-      if (game.buildingManager?.findBestRestBuilding) {
-        targetBed = game.buildingManager.findBestRestBuilding(c as any, { preferMedical: true, allowShelterFallback: true }) as any;
-      }
-      if (!targetBed) {
-        const beds = (game.buildings as Building[]).filter((b: Building) =>
-          (b.kind === 'bed' || b.kind === 'house') &&
-          b.done &&
-          game.buildingHasSpace && game.buildingHasSpace(b, c)
-        );
-        if (beds.length) {
-          beds.sort((a, b) => {
-            const medBiasA = a.kind === 'bed' && a.isMedicalBed ? -10 : 0;
-            const medBiasB = b.kind === 'bed' && b.isMedicalBed ? -10 : 0;
-            const da = dist2(c as any, game.centerOf(a) as any) + medBiasA;
-            const db = dist2(c as any, game.centerOf(b) as any) + medBiasB;
-            return da - db;
-          });
-          targetBed = beds[0];
-        }
-      }
+      targetBed = findClosestRestBed(game, c);
       
       if (targetBed) {
         const bedCenter = game.centerOf(targetBed);
@@ -1873,10 +1908,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (door && c.id) {
           releaseDoorQueue(door, c.id);
         }
-        c.waitingForDoor = null;
-        c.doorWaitStart = undefined;
-        c.doorPassingThrough = null;
-        c.doorApproachVector = null;
+        resetDoorWaitState(c);
         changeState('seekTask', 'door no longer exists');
         break;
       }
@@ -1909,10 +1941,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (c.id) {
             releaseDoorQueue(door, c.id);
           }
-          c.waitingForDoor = null;
-          c.doorWaitStart = undefined;
-          c.doorPassingThrough = null;
-          c.doorApproachVector = null;
+          resetDoorWaitState(c);
           c.task = null;
           c.target = null;
           game.clearPath && game.clearPath(c);
@@ -2090,10 +2119,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         if (c.id) {
           releaseDoorQueue(c.waitingForDoor, c.id);
         }
-        c.waitingForDoor = null;
-        c.doorWaitStart = undefined;
-        c.doorPassingThrough = null;
-        c.doorApproachVector = null;
+        resetDoorWaitState(c);
       }
       
       // Check if colonist should exit drafted state
