@@ -1162,7 +1162,17 @@ Co-authored-by: Another User <another@example.com>
     if (action === "list") {
       const list = manager.getEvents();
       if (!list.length) return "no events registered";
-      return list.map((event: any) => `${event.id}: ${event.name} (${event.category})`).join("\n");
+      return list
+        .map((event: any) => `${event.id}: ${event.name} (${event.category}, weight=${event.weight})`)
+        .join("\n");
+    }
+
+    if (action === "details") {
+      const list = manager.getEvents();
+      if (!list.length) return "no events registered";
+      return list
+        .map((event: any) => `${event.id}: ${event.name}\n  category=${event.category} weight=${event.weight} cooldown=${event.cooldownDays ?? 0}d\n  ${event.description}`)
+        .join("\n");
     }
 
     if (action === "trigger" && args[1]) {
@@ -1171,8 +1181,13 @@ Co-authored-by: Another User <another@example.com>
       return ok ? `triggered event: ${id}` : `failed to trigger event: ${id}`;
     }
 
-    return "usage: events status|list|trigger <id>|enable|disable";
-  }, "events status|list|trigger <id>|enable|disable — list or trigger events, or toggle the system");
+    if (action === "trigger-random") {
+      const id = manager.triggerRandomEligibleEvent?.();
+      return id ? `triggered random event: ${id}` : "no eligible events to trigger";
+    }
+
+    return "usage: events status|list|details|trigger <id>|trigger-random|enable|disable";
+  }, "events status|list|details|trigger <id>|trigger-random|enable|disable — inspect events, force one by id/random, or toggle the system");
 
   reg("music", (g, args) => {
     const action = (args[0] || "").toLowerCase();

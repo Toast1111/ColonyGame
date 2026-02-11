@@ -60,26 +60,43 @@ export class EventManager {
     return true;
   }
 
+  triggerRandomEligibleEvent(): string | null {
+    const ctx = this.buildContext();
+    const event = this.pickWeightedEligibleEvent(ctx);
+    if (!event) return null;
+
+    event.trigger(ctx);
+    this.lastTriggeredDay.set(event.id, ctx.nowDay);
+    return event.id;
+  }
+
   private tryTriggerRandomEvent(): void {
     const ctx = this.buildContext();
-
-    const eligible = this.events.filter((event) => this.canTriggerEvent(event, ctx));
-    if (eligible.length === 0) return;
-
     if (Math.random() > this.baseChance) return;
 
+    const event = this.pickWeightedEligibleEvent(ctx);
+    if (!event) return;
+
+    event.trigger(ctx);
+    this.lastTriggeredDay.set(event.id, ctx.nowDay);
+  }
+
+  private pickWeightedEligibleEvent(ctx: EventContext): GameEvent | null {
+    const eligible = this.events.filter((event) => this.canTriggerEvent(event, ctx));
+    if (eligible.length === 0) return null;
+
     const totalWeight = eligible.reduce((sum, event) => sum + Math.max(0, event.weight), 0);
-    if (totalWeight <= 0) return;
+    if (totalWeight <= 0) return null;
 
     let roll = Math.random() * totalWeight;
     for (const event of eligible) {
       roll -= Math.max(0, event.weight);
       if (roll <= 0) {
-        event.trigger(ctx);
-        this.lastTriggeredDay.set(event.id, ctx.nowDay);
-        return;
+        return event;
       }
     }
+
+    return eligible[eligible.length - 1] || null;
   }
 
   private canTriggerEvent(event: GameEvent, ctx: EventContext): boolean {
