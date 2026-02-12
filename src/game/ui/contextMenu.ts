@@ -1,4 +1,5 @@
 import type { ContextMenuDescriptor } from './contextMenus/types';
+import type { Building, Colonist } from '../types';
 import { getContextMenuState, hideContextMenuState, showContextMenu } from '../../react';
 
 export function openContextMenu(game: any, descriptor: ContextMenuDescriptor<any>) {
