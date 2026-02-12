@@ -6,7 +6,7 @@ This folder contains UI modules extracted from `Game.ts`.
 
 - **buildMenu.ts** — Build menu rendering and click handling (opened with 'B' key)
 - **colonistProfile.ts** — Colonist profile panel and tabs
-- **contextMenu.ts** — Context menu show/hide/draw
+- **contextMenu.ts** — Context menu open/close helpers (rendered by React)
 - **placement.ts** — Placement ghost and controls
 - **buildingInventoryPanel.ts** — Building inventory UI
 - **workPriorityPanel.ts** — Work priority management UI

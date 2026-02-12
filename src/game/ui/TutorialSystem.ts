@@ -12,6 +12,7 @@
 import type { Game } from '../Game';
 import { playUiClickPrimary, playUiPanelClose, playUiPanelOpen } from '../audio/helpers/uiAudio';
 import { HQ_POS } from '../constants';
+import { hideContextMenu, isContextMenuOpen } from './contextMenu';
 
 interface TutorialStep {
   id: string;
@@ -184,12 +185,12 @@ export class TutorialSystem {
       title: 'Step 8: Colonist Commands',
       instruction: 'Right-click on a colonist (small figure near HQ)',
       description: [
-        'Opens a menu with colonist info and commands',
-        'Try drafting them or checking their health'
+        'Opens a menu with a draft toggle',
+        'Try drafting them'
       ],
       arrowTo: { x: 0.5, y: 0.5 }, // Will be updated in onEnter to point at colonist
       waitForCondition: (game) => {
-        return game.contextMenu !== null;
+        return isContextMenuOpen();
       },
       onEnter: (game) => {
         // Close work panel
@@ -203,7 +204,7 @@ export class TutorialSystem {
       },
       onExit: (game) => {
         // Close context menu
-        game.contextMenu = null;
+        hideContextMenu(game);
         // Reset zoom
         game.camera.zoom = 1.0;
       },

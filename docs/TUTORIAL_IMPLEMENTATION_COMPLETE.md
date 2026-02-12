@@ -19,7 +19,7 @@ I've implemented a comprehensive intro cinematic and interactive tutorial system
 3. **Building Basics** - Opening build menu (B key)
 4. **Building Placement** - How to place buildings (waits for house placement)
 5. **Work Priorities** - Job assignment system (waits for Work tab click)
-6. **Colonist Management** - Right-click context menus (waits for context menu)
+6. **Colonist Management** - Right-click context menu (draft toggle)
 7. **Zones** - Stockpile and growing zones (8s auto-advance)
 8. **Survival & Win/Loss** - ⚠️ **HQ DESTRUCTION = GAME OVER** (6s auto-advance)
 9. **Complete** - Tutorial finished, save to localStorage
@@ -53,7 +53,7 @@ I've implemented a comprehensive intro cinematic and interactive tutorial system
 2. **`src/game/managers/RenderManager.ts`**
    - Add tutorial rendering layer (between debug console and game over)
 
-3. **`src/game/ui/dom/HelpPanel.ts`**
+3. **`src/react/ui/HelpPanel.tsx`**
    - Add "Replay Tutorial" button to help panel
    - Wire button click to `game.tutorialSystem.start()`
 

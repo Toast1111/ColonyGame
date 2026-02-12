@@ -6,7 +6,7 @@ This implementation adds a RimWorld-style combat drafting system to the colony g
 ## Features
 
 ### 1. Draft/Undraft Toggle
-- Access via right-click context menu on any colonist
+- Access via right-click context menu on any colonist (draft/undraft only)
 - Draft: Takes colonist under player control for combat
 - Undraft: Returns colonist to normal AI behavior
 

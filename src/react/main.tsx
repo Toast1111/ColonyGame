@@ -12,6 +12,7 @@ import { HelpPanel } from './ui/HelpPanel';
 import { ChangelogModal } from './ui/ChangelogModal';
 import { Toast } from './ui/Toast';
 import { ErrorOverlay } from './ui/ErrorOverlay';
+import { ContextMenu } from './ui/ContextMenu';
 
 const rootId = 'react-root';
 let container = document.getElementById(rootId);
@@ -61,6 +62,7 @@ createRoot(container).render(
     <ChangelogModal />
     <Toast />
     <ErrorOverlay />
+    <ContextMenu />
     <DebugConsole />
     <GameOverOverlay />
   </>

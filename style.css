@@ -22,7 +22,7 @@ header button:focus{outline:none;border-color:#2b3d59}
 .loading-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#38bdf8,#3b82f6);transition:width .25s ease}
 .loading-detail{font-size:clamp(12px,1.6vw,14px);color:#94a3b8}
 #react-root{display:contents;pointer-events:none;z-index:50}
-header,#headerDropdown,#mobileControls,#help,#toast,.changelog-modal,#error-overlay,.gameover-overlay,.resource-bar,.debug-console-overlay{pointer-events:auto}
+header,#headerDropdown,#mobileControls,#help,#toast,.changelog-modal,#error-overlay,.context-menu,.gameover-overlay,.resource-bar,.debug-console-overlay{pointer-events:auto}
 .gameover-overlay{position:fixed;inset:0;pointer-events:auto;font-family:"Press Start 2P", monospace;color:#ffffff;z-index:100}
 .gameover-fade{position:absolute;inset:0;background:#000000}
 .gameover-guilt{position:absolute;inset:0}
@@ -124,6 +124,16 @@ header,#headerDropdown,#mobileControls,#help,#toast,.changelog-modal,#error-over
 #headerDropdown{position:fixed;top:calc(var(--header-height) + var(--resource-bar-height) + 8px);right:12px;background:#0f1621;border:1px solid #1e293b;border-radius:.75rem;box-shadow:0 12px 28px #0008;padding:8px;z-index:70}
 #headerDropdown button{display:block;width:100%;text-align:left;margin:4px 0;outline:none}
 #headerDropdown button:focus{outline:none}
+
+.context-menu{position:fixed;min-width:220px;max-width:320px;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:6px;box-shadow:0 14px 30px rgba(0,0,0,0.45);z-index:80;color:#e2e8f0;font-size:14px}
+.context-menu-item{position:relative;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;user-select:none}
+.context-menu-item:hover{background:rgba(30,41,59,0.85)}
+.context-menu-item.disabled{opacity:0.5;cursor:default}
+.context-menu-item.disabled:hover{background:transparent}
+.context-menu-icon{width:18px;display:inline-flex;align-items:center;justify-content:center}
+.context-menu-label{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.context-menu-arrow{color:#94a3b8;margin-left:auto}
+.context-menu-submenu{position:absolute;left:calc(100% + 6px);top:0;background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:6px;min-width:200px;box-shadow:0 14px 30px rgba(0,0,0,0.45);z-index:81}
 
 .hotbar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:0 12px;background:rgba(11,18,40,0.92);border-top:1px solid rgba(30,41,59,0.8);z-index:60;pointer-events:auto}
 .hotbar-tab{flex:1;display:flex;align-items:center;justify-content:center;border:1px solid rgba(30,41,59,0.4);background:rgba(15,23,42,0.1);color:rgba(159,179,200,0.9);font-size:12px;padding:6px 4px;cursor:pointer}

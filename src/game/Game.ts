@@ -7,7 +7,6 @@ import { makeTerrainGrid, type TerrainGrid, generateMountains, getTerrainTypeId,
 import { COLORS, HQ_POS, NIGHT_SPAN, T, WORLD } from "./constants";
 import type { Building, Bullet, Camera, Colonist, ColonistCommandIntent, Enemy, Message, Resources, Particle, MiningZone } from "./types";
 import type { ItemType } from "./types/items";
-import type { ContextMenuDescriptor, ContextMenuItem } from "./ui/contextMenus/types";
 import { BUILD_TYPES, hasCost } from "./buildings";
 import { getZoneDef } from "./zones";
 import { HealthManager } from "./managers/HealthManager";
@@ -33,7 +32,7 @@ import { handleHotbarClick } from "./ui/hud/modernHotbar";
 import { handleBuildMenuClick as handleModernBuildMenuClick } from "./ui/hud/modernBuildMenu";
 import { handleControlPanelClick } from "./ui/hud/controlPanel";
 import { drawColonistProfile as drawColonistProfileUI } from "./ui/panels/colonistProfile";
-import { drawContextMenu as drawContextMenuUI, hideContextMenu as hideContextMenuUI } from "./ui/contextMenu";
+import { isContextMenuOpen } from "./ui/contextMenu";
 import { showColonistContextMenu } from "./ui/contextMenus/colonistMenu";
 import { showBuildingContextMenu } from "./ui/contextMenus/buildings";
 import { drawPlacementUI as drawPlacementUIUI } from "./ui/placement";
@@ -41,7 +40,7 @@ import { handleMobilePlacementClick, isClickOnGhost } from "./ui/mobilePlacement
 import { canPlace as canPlacePlacement, tryPlaceNow as tryPlaceNowPlacement, placeAtMouse as placeAtMousePlacement, nudgePending as nudgePendingPlacement, rotatePending as rotatePendingPlacement, confirmPending as confirmPendingPlacement, cancelPending as cancelPendingPlacement, paintPathAtMouse as paintPathAtMousePlacement, paintWallAtMouse as paintWallAtMousePlacement, eraseInRect as eraseInRectPlacement, cancelOrErase as cancelOrErasePlacement, evictColonistsFrom as evictColonistsFromPlacement } from "./placement/placementSystem";
 import { generateColonistProfile, getColonistDescription } from "./colonist_systems/colonistGenerator";
 import { initializeColonistHealth } from "./health/healthSystem";
-import { playUiClickPrimary, playUiClickSecondary, playUiDragEnd, playUiDragStart, playUiHotbarHover, playUiHover, playUiPanelOpen } from "./audio/helpers/uiAudio";
+import { playUiClickPrimary, playUiClickSecondary, playUiDragEnd, playUiDragStart, playUiHotbarHover, playUiHover } from "./audio/helpers/uiAudio";
 import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
 import { medicalWorkGiver } from "./health/medicalWorkGiver";
 import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth } from './health/healthSystem';
@@ -532,12 +531,6 @@ export class Game {
   
   get colonistHealthOperationButtons() { return this.uiManager.colonistHealthOperationButtons; }
   set colonistHealthOperationButtons(value) { this.uiManager.colonistHealthOperationButtons = value; }
-  
-  get contextMenu() { return this.uiManager.contextMenu; }
-  set contextMenu(value) { this.uiManager.contextMenu = value; }
-  
-  get contextMenuRects() { return this.uiManager.contextMenuRects; }
-  set contextMenuRects(value) { this.uiManager.contextMenuRects = value; }
   
   get longPressTimer() { return this.uiManager.longPressTimer; }
   set longPressTimer(value) { this.uiManager.longPressTimer = value; }
@@ -1304,52 +1297,6 @@ export class Game {
           }
         }
         
-        // Check for context menu click
-        if (this.contextMenu) {
-          const mx = this.mouse.x * this.DPR; const my = this.mouse.y * this.DPR;
-          let clickedOnMenu = false;
-          const menu = this.contextMenu;
-
-          if (this.contextMenuRects && Array.isArray(this.contextMenuRects)) {
-            for (const rect of this.contextMenuRects) {
-              if (rect && typeof rect.x === 'number' && typeof rect.y === 'number' && 
-                  typeof rect.w === 'number' && typeof rect.h === 'number') {
-                if (mx >= rect.x && mx <= rect.x + rect.w && my >= rect.y && my <= rect.y + rect.h) {
-                  const item = rect.item;
-                  if (!item) continue;
-                  const enabled = item.enabled !== false;
-
-                  if (!rect.isSubmenu && item.submenu && item.submenu.length) {
-                    if (enabled) {
-                      menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
-                      if (menu.openSubmenu) { playUiPanelOpen(this); }
-                    }
-                    clickedOnMenu = true;
-                    return;
-                  }
-
-                  if (enabled) {
-                    if (item.action) {
-                      item.action({ game: this, target: menu.target, item });
-                    } else if (menu.onSelect) {
-                      menu.onSelect({ game: this, target: menu.target, item });
-                    }
-                    playUiClickPrimary(this);
-                  }
-
-                  hideContextMenuUI(this);
-                  clickedOnMenu = true;
-                  return;
-                }
-              }
-            }
-          }
-
-          if (!clickedOnMenu) {
-            hideContextMenuUI(this);
-          }
-        }
-        
   if (this.showBuildMenu) { handleBuildMenuClickUI(this); return; }
         
         // Check for erase mode (toggled by mobile erase button)
@@ -1965,50 +1912,6 @@ export class Game {
       }
     }
 
-    // Check for context menu click
-    if (this.contextMenu) {
-      const mxMenu = this.mouse.x * this.DPR; const myMenu = this.mouse.y * this.DPR;
-      let clickedOnMenu = false;
-      const menu = this.contextMenu;
-
-      if (this.contextMenuRects && Array.isArray(this.contextMenuRects)) {
-        for (const rect of this.contextMenuRects) {
-          if (rect && typeof rect.x === 'number' && typeof rect.y === 'number' && 
-              typeof rect.w === 'number' && typeof rect.h === 'number') {
-            if (mxMenu >= rect.x && mxMenu <= rect.x + rect.w && myMenu >= rect.y && myMenu <= rect.y + rect.h) {
-              const item = rect.item;
-              if (!item) continue;
-              const enabled = item.enabled !== false;
-
-              if (!rect.isSubmenu && item.submenu && item.submenu.length) {
-                if (enabled) {
-                  menu.openSubmenu = menu.openSubmenu === item.id ? undefined : item.id;
-                }
-                clickedOnMenu = true;
-                return;
-              }
-
-              if (enabled) {
-                if (item.action) {
-                  item.action({ game: this, target: menu.target, item });
-                } else if (menu.onSelect) {
-                  menu.onSelect({ game: this, target: menu.target, item });
-                }
-              }
-
-              hideContextMenuUI(this);
-              clickedOnMenu = true;
-              return;
-            }
-          }
-        }
-      }
-
-      if (!clickedOnMenu) {
-        hideContextMenuUI(this);
-      }
-    }
-
     // Build menu click
   if (this.showBuildMenu) { handleBuildMenuClickUI(this); return; }
 
@@ -2029,7 +1932,7 @@ export class Game {
     const colonistUnderPointer = this.findColonistAt(this.mouse.wx, this.mouse.wy);
     const enemyUnderPointer = this.selColonist?.isDrafted ? this.findEnemyAt(this.mouse.wx, this.mouse.wy) : null;
 
-    const canDirectCommand = Boolean(this.selColonist && this.selColonist.isDrafted && this.lastInputWasTouch && !this.pendingPlacement && !this.selectedBuild && !this.contextMenu && !this.showBuildMenu && !this.eraseMode);
+    const canDirectCommand = Boolean(this.selColonist && this.selColonist.isDrafted && this.lastInputWasTouch && !this.pendingPlacement && !this.selectedBuild && !isContextMenuOpen() && !this.showBuildMenu && !this.eraseMode);
     if (canDirectCommand) {
       if (enemyUnderPointer) {
         this.selColonist!.draftedTarget = enemyUnderPointer;
@@ -3191,7 +3094,7 @@ export class Game {
   bestApproachToCircle(c: Colonist, circle: { x: number; y: number; r: number }, interact: number) { return this.navigationManager.bestApproachToCircle(c, circle, interact); }  // UI: colonist profile panel moved to src/game/ui/colonistProfile.ts
 
 
-  // Context menu rendering moved to src/game/ui/contextMenu.ts
+  // Context menu rendering is handled by React (src/react/ui/ContextMenu.tsx)
 
   handleContextMenuAction(actionId: string, colonist: Colonist) {
     // Delegate to the new ColonistActionManager

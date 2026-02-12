@@ -11,11 +11,10 @@ import { drawTerrainDebug } from '../render/debug/terrainDebugRender';
 import { drawParticles, toggleParticleSprites } from '../../core/particles/particleRender';
 import { drawColonistProfile as drawColonistProfileUI } from '../ui/panels/colonistProfile';
 import { setColonistProfileState } from '../../react';
-import { drawLongPressProgress } from '../ui/contextMenu';
+import { drawLongPressProgress, isContextMenuOpen } from '../ui/contextMenu';
 import { drawBuildMenu as drawBuildMenuUI } from '../ui/buildMenu';
 import { drawPlacementUI as drawPlacementUIUI } from '../ui/placement';
 import { drawMobilePlacementUI } from '../ui/mobilePlacement';
-import { drawContextMenu as drawContextMenuUI } from '../ui/contextMenu';
 // Work priority panel now rendered by React component
 import { drawBuildingInventoryPanel } from '../ui/panels/buildingInventoryPanel';
 import { drawControlPanel, type ControlPanelRect } from '../ui/hud/controlPanel';
@@ -1173,13 +1172,8 @@ export class RenderManager {
       drawMobilePlacementUI(game);
     }
 
-    // Context menu
-    if (game.contextMenu) {
-      drawContextMenuUI(game);
-    }
-    
     // Colonist hover tooltip - show info when mouse hovers over colonist (only if no menu open)
-    if (!game.contextMenu && !game.uiManager.activeHotbarTab && !game.selColonist) {
+    if (!isContextMenuOpen() && !game.uiManager.activeHotbarTab && !game.selColonist) {
       this.drawColonistHoverTooltip(game, ctx, canvas);
     }
     

@@ -42,7 +42,7 @@ A comprehensive intro cinematic and interactive tutorial system that teaches new
 - **Details**: Shows priority matrix (1-4 scale)
 
 ### 6. Colonist Management
-- **Content**: Right-click context menus, drafting, health viewing
+- **Content**: Right-click context menu, drafting
 - **Completion**: Player opens colonist context menu
 - **Visual**: Pointer animation, camera centers on colonist
 
@@ -80,7 +80,7 @@ A comprehensive intro cinematic and interactive tutorial system that teaches new
 - **`src/game/managers/RenderManager.ts`**
   - Add tutorial rendering layer (above debug console, below game over)
 
-- **`src/game/ui/dom/HelpPanel.ts`**
+- **`src/react/ui/HelpPanel.tsx`**
   - Add "Replay Tutorial" button
   - Wire button to `tutorialSystem.start()`
 

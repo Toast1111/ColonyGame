@@ -18,14 +18,11 @@ The weapon equipment system has been fully implemented and integrated with the e
 - **Distance-based assignment**: Only assigns nearby weapons (within 500 pixels)
 
 ### 3. Enhanced Context Menu (`colonistMenu.ts`)
-- **Manual weapon equipping**: Right-click colonist → "Equip Weapon..." submenu
-- **Nearby weapon detection**: Shows up to 5 closest weapons within 200 pixels
-- **Direct task assignment**: Players can manually order colonists to equip specific weapons
+- **Status**: Manual equip via colonist context menu has been removed.
+- **Reason**: Colonist context menu is draft-only to improve reliability.
 
 ### 4. Action Manager Integration (`ColonistActionManager.ts`)
-- **Equipment command handling**: Processes `equip_weaponId` context menu actions
-- **Task assignment**: Sets colonist state to 'equipment' with target weapon
-- **Player feedback**: Provides confirmation messages for equipment orders
+- **Status**: Manual equip commands removed with draft-only context menu.
 
 ## Integration Points ✅
 
@@ -33,7 +30,7 @@ The weapon equipment system has been fully implemented and integrated with the e
 - **New 'equipment' state**: Added to ColonistState type and FSM switch statement
 - **High priority**: Equipment tasks have priority 45 (higher than most work)
 - **Task assignment**: Work giver integration enables automatic weapon pickup
-- **Manual override**: Context menu allows direct player control
+- **Manual override**: Not available (context menu is draft-only)
 
 ### Existing Systems Integration
 - **Inventory System**: Uses existing Equipment interface and InventoryManager
@@ -72,18 +69,13 @@ The weapon equipment system has been fully implemented and integrated with the e
 - **Conflict avoidance**: Prevents multiple colonists from targeting same weapon
 - **Task completion**: Automatic state transition back to `seekTask` after equipping
 
-## Manual Control 🎮
+## Manual Control (Removed)
 
 ### Context Menu Workflow
-1. **Right-click colonist** → Shows colonist context menu
-2. **"Equip Weapon..." submenu** → Lists nearby weapons (if any)
-3. **Select weapon** → Colonist immediately assigned equipment task
-4. **Automatic completion** → Colonist moves to weapon, picks up, equips
+1. **Right-click colonist** → Shows draft/undraft toggle only
 
 ### Player Benefits
-- **Direct control**: Override automatic weapon assignment
-- **Tactical decisions**: Equip specific weapons for combat situations
-- **Emergency rearming**: Quickly reequip colonists after combat losses
+- **Automatic handling**: Weapon upgrades are handled by AI work givers
 
 ## Testing Status 🧪
 
@@ -135,6 +127,6 @@ The weapon equipment system has been fully implemented and integrated with the e
 ---
 
 ## Summary
-The weapon equipment system is **production-ready** and fully integrated with the colony management game. Colonists will automatically find and equip weapon upgrades, while players retain full manual control through intuitive context menus. The system seamlessly integrates with existing combat, inventory, and work assignment systems to provide a complete equipment management experience.
+The weapon equipment system is **production-ready** and fully integrated with the colony management game. Colonists will automatically find and equip weapon upgrades through the work giver system. The system seamlessly integrates with existing combat, inventory, and work assignment systems to provide a complete equipment management experience.
 
 **Status: COMPLETE** ✅⚔️🎉

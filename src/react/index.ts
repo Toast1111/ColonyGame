@@ -12,6 +12,7 @@ export { HelpPanel } from './ui/HelpPanel';
 export { ChangelogModal } from './ui/ChangelogModal';
 export { Toast } from './ui/Toast';
 export { ErrorOverlay } from './ui/ErrorOverlay';
+export { ContextMenu } from './ui/ContextMenu';
 export { createMobileControlsBridge, type MobileControlsHandle } from './ui/mobileControlsBridge';
 export { createHelpPanelBridge, type HelpPanelHandle } from './ui/helpPanelBridge';
 export { createChangelogBridge, type ChangelogModalHandle } from './ui/changelogBridge';
@@ -23,6 +24,7 @@ export { getHelpPanelState, subscribeHelpPanel, setHelpPanelVisible, toggleHelpP
 export { getChangelogState, subscribeChangelog, setChangelogState, setChangelogVisible } from './stores/changelogStore';
 export { getToastState, subscribeToast, showToast, hideToast } from './stores/toastStore';
 export { getErrorOverlayState, subscribeErrorOverlay, showErrorOverlay, clearErrorOverlay } from './stores/errorOverlayStore';
+export { getContextMenuState, subscribeContextMenu, showContextMenu, hideContextMenuState } from './stores/contextMenuStore';
 export { getResourceBarState, subscribeResourceBar, setResourceBarState } from './stores/resourceBarStore';
 export { getHotbarState, subscribeHotbar, setHotbarState } from './stores/hotbarStore';
 export { getColonistProfileState, subscribeColonistProfile, setColonistProfileState } from './stores/colonistBioStore';

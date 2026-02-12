@@ -12,7 +12,6 @@
 
 import type { Colonist, Building } from '../types';
 import type { BUILD_TYPES } from '../buildings';
-import type { ContextMenuDescriptor, ContextMenuItem } from '../ui/contextMenus/types';
 import type { HotbarTab } from '../ui/hud/modernHotbar';
 import { toggleWorkPriorityPanel, closeWorkPriorityPanel, isWorkPriorityPanelOpen } from '../ui/panels/workPriorityPanel';
 import { openResearchPanel, closeResearchPanel } from '../ui/panels/researchPanel';
@@ -125,24 +124,6 @@ export class UIManager {
     y: number;
     w: number;
     h: number;
-  }> = [];
-  
-  // Context menu state
-  contextMenu: (ContextMenuDescriptor<any> & { 
-    visible: boolean; 
-    x: number; 
-    y: number; 
-    openSubmenu?: string 
-  }) | null = null;
-  
-  contextMenuRects: Array<{ 
-    item: ContextMenuItem<any>; 
-    x: number; 
-    y: number; 
-    w: number; 
-    h: number; 
-    isSubmenu?: boolean; 
-    parentId?: string 
   }> = [];
   
   // Long-press detection (mobile context menus)
@@ -276,30 +257,6 @@ export class UIManager {
   }
   
   /**
-   * Hide context menu
-   */
-  hideContextMenu(): void {
-    // Play UI close SFX for context menu
-    try { void AudioManager.getInstance().play('ui.panel.close'); } catch {}
-    this.contextMenu = null;
-    this.contextMenuRects = [];
-  }
-  
-  /**
-   * Show context menu
-   */
-  showContextMenu(menu: ContextMenuDescriptor<any>, x: number, y: number): void {
-    // Play UI open SFX for context menu
-    try { void AudioManager.getInstance().play('ui.panel.open'); } catch {}
-    this.contextMenu = {
-      ...menu,
-      visible: true,
-      x,
-      y
-    };
-  }
-  
-  /**
    * Set active hotbar tab
    */
   setHotbarTab(tab: HotbarTab | null): void {
@@ -376,8 +333,6 @@ export class UIManager {
     this.colonistPanelCloseRect = null;
     this.colonistProfileTab = 'bio';
     this.colonistTabRects = [];
-    this.contextMenu = null;
-    this.contextMenuRects = [];
     this.cancelLongPress();
     this.lastPaintCell = null;
     this.eraseDragStart = null;
