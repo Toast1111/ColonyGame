@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type MouseEvent } from 'react';
 import { CATEGORY_INFO, RESEARCH_TREE, type ResearchCategory, type ResearchNode } from '../../game/research/researchDatabase';
 import { getResearchPanelState, subscribeResearchPanel, setResearchPanelVisible } from '../stores/researchStore';
+import { setMobileControlsSuppressed } from '../stores/mobileControlsStore';
 
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 120;
@@ -36,6 +37,11 @@ export function ResearchPanel() {
     return () => clearInterval(interval);
   }, [state.visible]);
 
+  useEffect(() => {
+    setMobileControlsSuppressed(state.visible);
+    return () => setMobileControlsSuppressed(false);
+  }, [state.visible]);
+
   const categories = useMemo(() => Object.keys(CATEGORY_INFO) as ResearchCategory[], []);
   const nodes = useMemo(() => Object.values(RESEARCH_TREE), []);
 
@@ -67,11 +73,6 @@ export function ResearchPanel() {
 
     if (game?.uiManager?.activeHotbarTab === 'research') {
       game.uiManager.setHotbarTab(null);
-    }
-
-    const mobileControls = document.getElementById('mobileControls');
-    if (mobileControls) {
-      mobileControls.style.display = '';
     }
   };
 

@@ -22,7 +22,7 @@ header button:focus{outline:none;border-color:#2b3d59}
 .loading-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#38bdf8,#3b82f6);transition:width .25s ease}
 .loading-detail{font-size:clamp(12px,1.6vw,14px);color:#94a3b8}
 #react-root{display:contents;pointer-events:none;z-index:50}
-header,#headerDropdown,#mobileControls,.gameover-overlay,.resource-bar,.debug-console-overlay{pointer-events:auto}
+header,#headerDropdown,#mobileControls,#help,#toast,.changelog-modal,#error-overlay,.gameover-overlay,.resource-bar,.debug-console-overlay{pointer-events:auto}
 .gameover-overlay{position:fixed;inset:0;pointer-events:auto;font-family:"Press Start 2P", monospace;color:#ffffff;z-index:100}
 .gameover-fade{position:absolute;inset:0;background:#000000}
 .gameover-guilt{position:absolute;inset:0}

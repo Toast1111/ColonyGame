@@ -4,7 +4,7 @@ import { getMobileControlsState, subscribeMobileControls } from '../stores/mobil
 export function MobileControls() {
   const state = useSyncExternalStore(subscribeMobileControls, getMobileControlsState, getMobileControlsState);
 
-  if (!state.visible) {
+  if (!state.visible || state.suppressed) {
     return null;
   }
 

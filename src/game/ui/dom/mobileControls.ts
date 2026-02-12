@@ -1,12 +1,3 @@
-export interface MobileControlsCallbacks {
-  onErase: () => void;
-  onPause: () => void;
-  onFastForward: () => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onSkipTutorial: () => void;
-}
-
 export interface MobileControlsHandle {
   show(): void;
   hide(): void;

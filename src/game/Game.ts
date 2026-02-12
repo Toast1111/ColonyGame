@@ -2176,14 +2176,6 @@ export class Game {
     const toastManager = (this as any).toastManager;
     if (toastManager && typeof toastManager.show === 'function') {
       toastManager.show(msg, ms);
-    } else {
-      // Fallback to old method if ToastManager not yet initialized
-      const el = document.getElementById('toast') as HTMLDivElement | null;
-      if (!el) return;
-      el.textContent = msg;
-      el.style.opacity = '1';
-      clearTimeout((el as any)._t);
-      (el as any)._t = setTimeout(() => el.style.opacity = '0', ms);
     }
   }
 

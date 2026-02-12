@@ -5,20 +5,26 @@
  * This is the main entry point for UI initialization.
  */
 
-import { ErrorOverlay } from './dom/errorOverlay';
-import { ToastManager } from './dom/toast';
-import { HelpPanel } from './dom/helpPanel';
-import { type MobileControlsCallbacks, type MobileControlsHandle } from './dom/mobileControls';
+import { type MobileControlsHandle } from './dom/mobileControls';
 import { createMobileControlsBridge } from '../../react';
-import { ChangelogModal } from './dom/changelogModal';
+import {
+  createErrorOverlayBridge,
+  createToastBridge,
+  createHelpPanelBridge,
+  createChangelogBridge,
+  type ErrorOverlayHandle,
+  type ToastHandle,
+  type HelpPanelHandle,
+  type ChangelogModalHandle
+} from '../../react';
 import type { Game } from '../Game';
 
 export interface UIComponents {
-  errorOverlay: ErrorOverlay;
-  toast: ToastManager;
-  helpPanel: HelpPanel;
+  errorOverlay: ErrorOverlayHandle;
+  toast: ToastHandle;
+  helpPanel: HelpPanelHandle;
   mobileControls: MobileControlsHandle;
-  changelogModal: ChangelogModal;
+  changelogModal: ChangelogModalHandle;
   canvas: HTMLCanvasElement;
   wrap: HTMLDivElement;
   gameRef: { current: Game | null };
@@ -32,8 +38,8 @@ export function initializeUI(game: Game | null = null): UIComponents {
   // Create main wrapper
   const wrap = createWrapper();
   
-  // Create error overlay (must be first for error handling)
-  const errorOverlay = new ErrorOverlay();
+  // Create error overlay bridge (must be first for error handling)
+  const errorOverlay = createErrorOverlayBridge();
   
   // Create canvas
   const canvas = createCanvas();
@@ -41,56 +47,18 @@ export function initializeUI(game: Game | null = null): UIComponents {
   // Use a game reference object that can be updated later
   const gameRef = { current: game };
   
-  // Create help panel
-  const helpPanel = new HelpPanel();
-  
-  // Create changelog modal
-  const changelogModal = new ChangelogModal();
-  
-  // Setup mobile controls callbacks
-  const mobileCallbacks: MobileControlsCallbacks = {
-    onErase: () => {
-      if (gameRef.current) {
-        // Toggle erase mode
-        gameRef.current.eraseMode = !gameRef.current.eraseMode;
-        gameRef.current.toast(gameRef.current.eraseMode ? 'Erase mode ON' : 'Erase mode OFF');
-      }
-    },
-    onPause: () => {
-      if (gameRef.current) {
-        gameRef.current.paused = !gameRef.current.paused;
-        gameRef.current.toast(gameRef.current.paused ? 'Paused' : 'Resumed');
-      }
-    },
-    onFastForward: () => {
-      if (gameRef.current) {
-        gameRef.current.fastForward = gameRef.current.fastForward === 1 ? 6 : 1;
-        gameRef.current.toast(gameRef.current.fastForward > 1 ? 'Fast-forward ON' : 'Fast-forward OFF');
-      }
-    },
-    onZoomIn: () => {
-      if (gameRef.current) {
-        gameRef.current.camera.zoom = Math.min(2.2, gameRef.current.camera.zoom * 1.1);
-      }
-    },
-    onZoomOut: () => {
-      if (gameRef.current) {
-        gameRef.current.camera.zoom = Math.max(0.6, gameRef.current.camera.zoom / 1.1);
-      }
-    },
-    onSkipTutorial: () => {
-      if (gameRef.current && gameRef.current.tutorialSystem) {
-        gameRef.current.tutorialSystem.skip();
-      }
-    }
-  };
+  // Create help panel bridge
+  const helpPanel = createHelpPanelBridge();
+
+  // Create changelog modal bridge
+  const changelogModal = createChangelogBridge();
   
   // Create mobile controls
   const mobileControls = createMobileControlsBridge();
   mobileControls.hide();
   
-  // Create toast manager
-  const toast = new ToastManager();
+  // Create toast bridge
+  const toast = createToastBridge();
   
   // Assemble the UI structure
   wrap.appendChild(canvas);
@@ -180,6 +148,7 @@ export function linkGameToUI(components: UIComponents, game: Game): void {
   (game as any).toastManager = components.toast;
   (game as any).helpPanel = components.helpPanel;
   (game as any).mobileControls = components.mobileControls;
+  (game as any).ui = components;
 
   game.syncMobileControls();
   game.refreshTouchUIState();

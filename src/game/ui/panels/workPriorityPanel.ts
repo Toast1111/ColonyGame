@@ -6,6 +6,7 @@
  */
 
 import { toggleWorkPriorityPanel as reactToggle, setWorkPriorityVisible, getWorkPriorityState } from '../../../react/stores/workPriorityStore';
+import { setMobileControlsSuppressed } from '../../../react/stores/mobileControlsStore';
 
 /**
  * Toggle the work priority panel
@@ -17,12 +18,8 @@ export function toggleWorkPriorityPanel(): void {
   try { 
     (window as any).game?.audioManager?.play(isOpen ? 'ui.panel.open' : 'ui.panel.close'); 
   } catch {}
-  
-  // Hide/show mobile controls
-  const mobileControls = document.getElementById('mobileControls');
-  if (mobileControls) {
-    mobileControls.style.display = isOpen ? 'none' : '';
-  }
+
+  setMobileControlsSuppressed(isOpen);
 }
 
 /**
@@ -46,10 +43,6 @@ export function closeWorkPriorityPanel(clearHotbarTab = true): void {
       game.uiManager.setHotbarTab(null);
     }
   }
-  
-  // Restore mobile controls visibility
-  const mobileControls = document.getElementById('mobileControls');
-  if (mobileControls) {
-    mobileControls.style.display = '';
-  }
+
+  setMobileControlsSuppressed(false);
 }

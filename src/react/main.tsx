@@ -8,6 +8,10 @@ import { BuildMenu } from './ui/BuildMenu';
 import { ColonistProfilePanel } from './ui/ColonistBioPanel';
 import { WorkPriorityPanel } from './ui/WorkPriorityPanel';
 import { ResearchPanel } from './ui/ResearchPanel';
+import { HelpPanel } from './ui/HelpPanel';
+import { ChangelogModal } from './ui/ChangelogModal';
+import { Toast } from './ui/Toast';
+import { ErrorOverlay } from './ui/ErrorOverlay';
 
 const rootId = 'react-root';
 let container = document.getElementById(rootId);
@@ -53,6 +57,10 @@ createRoot(container).render(
     <ResearchPanel />
     <Hotbar />
     <MobileControls />
+    <HelpPanel />
+    <ChangelogModal />
+    <Toast />
+    <ErrorOverlay />
     <DebugConsole />
     <GameOverOverlay />
   </>
