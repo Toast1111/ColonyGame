@@ -16,6 +16,7 @@ import { BUILD_TYPES } from "../buildings";
 import { isMountainTile as checkIsMountainTile } from "../terrain";
 import { updateCookingState, updateStonecuttingState, updateSmeltingState, updateSmithingState, updateCoolingState, updateEquipmentState, updateMineState, updateRestingState, updateSleepState, updateResearchState, updateIdleState, updateMoveState, updateGuardState, updateBuildState } from "./states";
 import { canInterruptColonist, forceInterruptIntent, shouldEnterDecisionPhase, getColonistIntent, setColonistIntent, updateColonistIntent, hasIntent, createWorkIntent } from "../systems/colonistIntent";
+import { createWoodDebris, createHealingSparkles } from '../../core/particles';
 
 const WORKING_STATES: ColonistState[] = [
   'build',
@@ -858,6 +859,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           
           if (success) {
             if (game.msg) game.msg(`${c.profile?.name || 'Doctor'} successfully applied ${treatmentName} to ${patient.profile?.name || 'patient'}`, 'good');
+            // Healing sparkle effect on successful treatment
+            const healingParticles = createHealingSparkles(patient.x, patient.y);
+            game.particles.push(...healingParticles);
           } else {
             if (game.msg) game.msg(`${c.profile?.name || 'Doctor'} failed to apply ${treatmentName} to ${patient.profile?.name || 'patient'}`, 'warn');
           }
@@ -1791,6 +1795,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             const amount = Math.round(6 * yieldMult);
             const dropAt = { x: t.x, y: t.y };
             (game as any).itemManager?.dropItems('wood', amount, dropAt);
+            
+            // Wood debris particles
+            const woodParticles = createWoodDebris(t.x, t.y, 1.0);
+            game.particles.push(...woodParticles);
+            
             (game.trees as any[]).splice((game.trees as any[]).indexOf(t), 1);
             if (game.assignedTargets.has(t)) game.assignedTargets.delete(t);
             game.msg(`Dropped ${amount} wood`, 'good');
@@ -1880,6 +1889,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
             const woodAmount = Math.round(8 * yieldMult); // Planted trees give more wood than wild trees
             const dropAt = { x: treeSpot.x, y: treeSpot.y };
             game.itemManager.dropItems('wood', woodAmount, dropAt);
+            
+            // Wood debris particles
+            const woodParticles = createWoodDebris(treeSpot.x, treeSpot.y, 1.0);
+            game.particles.push(...woodParticles);
+            
             game.msg(`Harvested tree (dropped ${woodAmount} wood)`, 'good');
             if (c.skills) grantSkillXP(c, 'Plants', 30, c.t || 0);
           }

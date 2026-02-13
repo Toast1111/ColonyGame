@@ -4,6 +4,7 @@ import { T } from '../../constants';
 import { isMountainTile as checkIsMountainTile, mineMountainTile, ORE_PROPERTIES, getOreTypeFromId, OreType } from '../../terrain';
 import { grantSkillXP, skillLevel, skillWorkSpeedMultiplier } from '../skills';
 import type { ItemType } from '../../types/items';
+import { createStoneDebris } from '../../../core/particles';
 
 // Handles the mining state (mountain tiles and rocks)
 export function updateMineState(
@@ -118,6 +119,10 @@ export function updateMineState(
           const dropAt = { x: worldX, y: worldY };
           (game as any).itemManager?.dropItems(resourceType, amount, dropAt);
           game.msg(`Mined ${amount} ${oreProps.name}`, 'good');
+          
+          // Stone debris particles for mountain mining
+          const stoneParticles = createStoneDebris(worldX, worldY, 1.2);
+          game.particles.push(...stoneParticles);
 
           game.navigationManager.rebuildNavGridPartial(worldX, worldY, T * 2);
           game.renderManager?.invalidateWorldCache();
@@ -195,6 +200,11 @@ export function updateMineState(
       const amount = Math.round(5 * yieldMult);
       const dropAt = { x: r.x, y: r.y };
       (game as any).itemManager?.dropItems('stone', amount, dropAt);
+      
+      // Stone debris particles for rock mining
+      const stoneParticles = createStoneDebris(r.x, r.y, 1.0);
+      game.particles.push(...stoneParticles);
+      
       (game.rocks as any[]).splice((game.rocks as any[]).indexOf(r), 1);
       if (game.assignedTargets.has(r)) game.assignedTargets.delete(r);
       game.msg(`Dropped ${amount} stone`, 'good');

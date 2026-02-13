@@ -7,6 +7,7 @@
 
 import { RESEARCH_TREE, ResearchNode, isResearchAvailable, getResearch } from "../research/researchDatabase";
 import type { Building } from "../types";
+import { createCraftingSparkles } from '../../core/particles';
 
 export interface ResearchProgress {
   researchId: string;
@@ -191,6 +192,16 @@ export class ResearchManager {
     // Clear current research
     if (this.currentResearch?.researchId === researchId) {
       this.currentResearch = null;
+    }
+    
+    // Crafting sparkles effect on research completion
+    if (this.game && this.game.state && this.game.state.particles) {
+      const bench = this.game.buildings.find(b => b.kind === 'research_bench' && b.done);
+      if (bench) {
+        const center = this.game.centerOf(bench);
+        const sparkles = createCraftingSparkles(center.x, center.y);
+        this.game.state.particles.push(...sparkles);
+      }
     }
 
     console.log(`Research completed: ${node.name}`);

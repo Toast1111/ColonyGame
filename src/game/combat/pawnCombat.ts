@@ -2,7 +2,7 @@ import type { Game } from "../Game";
 import type { Colonist, Enemy } from "../types";
 import { grantSkillXP, skillLevel } from "../colonist_systems/skills";
 import { itemDatabase } from "../../data/itemDatabase";
-import { createMuzzleFlash, createProjectileTrail } from "../../core/particles";
+import { createMuzzleFlash, createProjectileTrail, createBloodSplatter } from "../../core/particles";
 import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";
 import { isUnarmed, selectUnarmedAttack, calculateUnarmedDamage } from "./unarmedCombat";
 
@@ -516,9 +516,19 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         if (isColonist) {
           const meleeType = stats?.isMelee ? damageType : 'bruise';
           (game as any).applyDamageToColonist(target, dmg, meleeType);
+          
+          // Blood splatter effect on colonist melee hit
+          const attackAngle = Math.atan2(target.y - c.y, target.x - c.x);
+          const bloodParticles = createBloodSplatter(target.x, target.y, attackAngle, 0.7);
+          game.particles.push(...bloodParticles);
         } else {
           // Regular enemy damage
           target.hp -= dmg;
+          
+          // Blood splatter effect on enemy melee hit
+          const attackAngle = Math.atan2(target.y - c.y, target.x - c.x);
+          const bloodParticles = createBloodSplatter(target.x, target.y, attackAngle, 0.7);
+          game.particles.push(...bloodParticles);
           
           // Check for stun (weapon-based or unarmed)
           if (shouldStun && stunDuration > 0) {
@@ -654,9 +664,19 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
       const isColonist = (game.colonists as any[]).includes(target);
       if (isColonist) {
         (game as any).applyDamageToColonist(target, meleeDmg, 'bruise');
+        
+        // Blood splatter effect on gun-bash hit
+        const attackAngle = Math.atan2(target.y - c.y, target.x - c.x);
+        const bloodParticles = createBloodSplatter(target.x, target.y, attackAngle, 0.5);
+        game.particles.push(...bloodParticles);
       } else {
         // Regular enemy damage
         target.hp -= meleeDmg;
+        
+        // Blood splatter effect on gun-bash hit
+        const attackAngle = Math.atan2(target.y - c.y, target.x - c.x);
+        const bloodParticles = createBloodSplatter(target.x, target.y, attackAngle, 0.5);
+        game.particles.push(...bloodParticles);
       }
       
       // Play gun-bash impact sound (blunt impact)

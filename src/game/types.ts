@@ -436,6 +436,17 @@ export type Particle = {
   x: number; y: number; vx: number; vy: number; 
   life: number; maxLife: number; 
   size: number; color: string; alpha: number;
+  // Enhanced properties for dynamic effects
+  rotation?: number;         // Current rotation in radians
+  rotationSpeed?: number;    // Rotation speed (rad/s)
+  scale?: number;            // Size multiplier (1.0 = normal)
+  scaleSpeed?: number;       // Scale change rate
+  gravity?: number;          // Custom gravity multiplier (default 1.0)
+  drag?: number;             // Air resistance (default 0.98)
+  bounce?: number;           // Bounciness factor (0-1)
+  type?: 'spark' | 'smoke' | 'debris' | 'glow' | 'blood' | 'dust';
+  secondaryColor?: string;   // For gradient effects
+  glowIntensity?: number;    // Glow/bloom strength
 };
 
 export type Message = { text: string; t: number; kind: "info" | "warn" | "good" | "bad" };

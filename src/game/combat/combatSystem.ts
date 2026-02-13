@@ -1,7 +1,7 @@
 import type { Game } from "../Game";
 import type { Building, Bullet, Enemy } from "../types";
 import { grantSkillXP } from "../colonist_systems/skills";
-import { createMuzzleFlash, createProjectileTrail, createImpactEffect, updateParticles } from "../../core/particles";
+import { createMuzzleFlash, createProjectileTrail, createImpactEffect, createBloodSplatter, updateParticles } from "../../core/particles";
 import { dist2 } from "../../core/utils";
 import { getWeaponAudioByDefName } from "../audio/weaponAudioMap";
 import { itemDatabase } from "../../data/itemDatabase";
@@ -328,8 +328,11 @@ export function updateProjectiles(game: Game, dt: number) {
           }
         }
         
+        // Impact and blood splatter effects
+        const bulletAngle = Math.atan2(b.vy, b.vx);
         const impact = createImpactEffect(hitEnemy.x, hitEnemy.y);
-        game.particles.push(...impact);
+        const blood = createBloodSplatter(hitEnemy.x, hitEnemy.y, bulletAngle, 1.0);
+        game.particles.push(...impact, ...blood);
         game.bullets.splice(i, 1);
         continue;
       }
@@ -357,8 +360,11 @@ export function updateProjectiles(game: Game, dt: number) {
         // Warning message
         game.msg(`Turret hit ${colonist.profile?.name || 'Colonist'}! Friendly fire!`, 'warn');
         
+        // Impact and blood splatter effects
+        const bulletAngle = Math.atan2(b.vy, b.vx);
         const impact = createImpactEffect(colonist.x, colonist.y);
-        game.particles.push(...impact);
+        const blood = createBloodSplatter(colonist.x, colonist.y, bulletAngle, 0.8);
+        game.particles.push(...impact, ...blood);
         game.bullets.splice(i, 1);
         continue;
       }
