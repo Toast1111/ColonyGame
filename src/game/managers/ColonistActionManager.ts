@@ -47,6 +47,11 @@ export class ColonistActionManager {
       colonist.isDrafted = true;
       colonist.draftedTarget = null;
       colonist.draftedPosition = null;
+
+      // Ensure the colonist exits any building so drafted orders/combat apply.
+      if (colonist.inside) {
+        this.game.leaveBuilding(colonist);
+      }
       
       // Force clear any existing tasks/paths to allow immediate control
       colonist.task = null;

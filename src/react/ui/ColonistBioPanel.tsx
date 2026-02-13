@@ -139,7 +139,12 @@ export function ColonistProfilePanel() {
   const tabRects = state.tabRects ?? [];
   const closeRect = state.closeRect ?? null;
 
-  const handleClose = () => {
+  const isDrafted = !!state.colonist?.isDrafted;
+
+  const handleClose = (force = false) => {
+    if (isDrafted && !force) {
+      return;
+    }
     const game = (window as any).game;
     if (game) {
       game.selColonist = null;
@@ -154,18 +159,28 @@ export function ColonistProfilePanel() {
     }
   };
 
+  const overlayStyle = isDrafted ? { pointerEvents: 'none' as const } : undefined;
+  const panelStyle = {
+    left: `${panelRect.x}px`,
+    top: `${panelRect.y}px`,
+    width: `${panelRect.w}px`,
+    height: `${panelRect.h}px`,
+    ['--ui-scale' as any]: uiScale,
+    ...(isDrafted ? { pointerEvents: 'auto' as const } : null)
+  };
+
   return (
-    <div className="colonist-profile-overlay" aria-hidden="true">
-      <div className="colonist-profile-backdrop" onPointerDown={handleClose} />
+    <div className="colonist-profile-overlay" aria-hidden="true" style={overlayStyle}>
+      {!isDrafted && (
+        <div
+          className="colonist-profile-backdrop"
+          onPointerDown={() => handleClose(false)}
+        />
+      )}
       <div
         className="colonist-profile-panel"
-        style={{
-          left: `${panelRect.x}px`,
-          top: `${panelRect.y}px`,
-          width: `${panelRect.w}px`,
-          height: `${panelRect.h}px`,
-          ['--ui-scale' as any]: uiScale
-        }}
+        style={panelStyle}
+        onContextMenu={(event) => event.preventDefault()}
       >
         <div className="colonist-profile-tabs">
           {tabRects.map((tab) => (
@@ -226,7 +241,7 @@ export function ColonistProfilePanel() {
             className="colonist-profile-close"
             onPointerDown={(event) => {
               event.stopPropagation();
-              handleClose();
+              handleClose(true);
             }}
           >
             ✕

@@ -651,7 +651,7 @@ export class Game {
     // Handled inside newGame() to keep stockpile-backed resources consistent.
     
     // Initialize research system
-    this.researchManager = new ResearchManager();
+    this.researchManager = new ResearchManager(this);
     this.eventManager = new EventManager(this, createDefaultEvents());
     this.sandStormSystem = new SandStormSystem(this);
     
@@ -1221,7 +1221,7 @@ export class Game {
           if (this.colonistPanelRect) {
             const r = this.colonistPanelRect;
             const inside = mx0 >= r.x && mx0 <= r.x + r.w && my0 >= r.y && my0 <= r.y + r.h;
-            // On desktop, only close when clicking outside if not over the panel
+            // On desktop, clicking outside the panel deselects.
             if (!inside) { this.selColonist = null; this.follow = false; return; }
           }
         }
@@ -1269,6 +1269,7 @@ export class Game {
             return; // Click was handled by control panel
           }
         }
+
         
         // Check for modern build menu clicks
         if (this.uiManager.activeHotbarTab === 'build') {
