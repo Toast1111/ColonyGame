@@ -764,7 +764,6 @@ export class RenderManager {
 
     for (const c of game.colonists) {
       if (!c.alive || !c.path || c.path.length === 0) continue;
-      if (!inViewport(c.x, c.y)) continue; // Cull paths for colonists outside viewport
       
       // Draw the path from colonist's current position
       ctx.strokeStyle = '#00ffff';
@@ -819,7 +818,7 @@ export class RenderManager {
       const colonistAny = c as any;
       const repathAt = colonistAny.lastRepathAt as number | undefined;
       const repathNode = colonistAny.lastRepathNode as { x: number; y: number } | undefined;
-      if (repathAt != null && repathNode && inViewport(repathNode.x, repathNode.y)) {
+      if (repathAt != null && repathNode) {
         const ageMs = now - repathAt;
         if (ageMs >= 0 && ageMs < 1200) {
           const t = 1 - ageMs / 1200;
@@ -865,8 +864,6 @@ export class RenderManager {
 
     // Enemy paths
     for (const e of game.enemies) {
-      if (!inViewport(e.x, e.y)) continue; // Cull paths for enemies outside viewport
-      
       const enemyAny = e as any;
       const path = enemyAny.path;
       if (!path || path.length === 0) continue;
@@ -891,7 +888,7 @@ export class RenderManager {
 
       const repathAt = enemyAny.lastRepathAt as number | undefined;
       const repathNode = enemyAny.lastRepathNode as { x: number; y: number } | undefined;
-      if (repathAt != null && repathNode && inViewport(repathNode.x, repathNode.y)) {
+      if (repathAt != null && repathNode) {
         const ageMs = now - repathAt;
         if (ageMs >= 0 && ageMs < 1200) {
           const t = 1 - ageMs / 1200;
@@ -1457,6 +1454,55 @@ export class RenderManager {
         ctx.fill();
         ctx.stroke();
         
+        ctx.restore();
+      }
+    }
+
+    for (let i = 0; i < game.enemies.length; i++) {
+      const e = game.enemies[i];
+
+      // Convert world position to screen position
+      const screenX = (e.x - game.camera.x) * game.camera.zoom;
+      const screenY = (e.y - game.camera.y) * game.camera.zoom;
+
+      // Check if enemy is off-screen
+      if (screenX < -arrowSize || screenX > canvas.width + arrowSize ||
+          screenY < -arrowSize || screenY > canvas.height + arrowSize) {
+        // Calculate arrow position at screen edge
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+
+        const dx = screenX - centerX;
+        const dy = screenY - centerY;
+        const angle = Math.atan2(dy, dx);
+
+        // Find intersection with screen edge
+        let edgeX = centerX + Math.cos(angle) * (canvas.width / 2 - screenMargin);
+        let edgeY = centerY + Math.sin(angle) * (canvas.height / 2 - screenMargin);
+
+        // Clamp to screen bounds with margin
+        edgeX = Math.max(screenMargin, Math.min(canvas.width - screenMargin, edgeX));
+        edgeY = Math.max(screenMargin, Math.min(canvas.height - screenMargin, edgeY));
+
+        // Draw arrow pointing toward off-screen enemy
+        ctx.fillStyle = '#ef4444'; // Red
+        ctx.strokeStyle = '#b91c1c'; // Darker red
+        ctx.lineWidth = 2;
+
+        ctx.save();
+        ctx.translate(edgeX, edgeY);
+        ctx.rotate(angle);
+
+        // Draw arrow shape
+        ctx.beginPath();
+        ctx.moveTo(arrowSize / 2, 0);
+        ctx.lineTo(-arrowSize / 2, -arrowSize / 3);
+        ctx.lineTo(-arrowSize / 4, 0);
+        ctx.lineTo(-arrowSize / 2, arrowSize / 3);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
         ctx.restore();
       }
     }
