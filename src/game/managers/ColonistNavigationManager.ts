@@ -265,9 +265,7 @@ export class ColonistNavigationManager {
           if (fallback && fallback.length) {
             colonistAny.pendingPathRequest = undefined;
             colonistAny.pendingPathPromise = null;
-            c.path = fallback;
-            c.pathIndex = 0;
-            c.pathGoal = { x: target.x, y: target.y };
+            this.applyPath(c, fallback, target);
             return false;
           }
         }
@@ -307,9 +305,7 @@ export class ColonistNavigationManager {
               }
 
               if (resolved && resolved.length) {
-                c.path = resolved;
-                c.pathIndex = 0;
-                c.pathGoal = { x: target.x, y: target.y };
+                this.applyPath(c, resolved, target);
               } else {
                 this.clearPath(c);
               }
@@ -323,9 +319,7 @@ export class ColonistNavigationManager {
               console.warn('[Game] Async pathfinding failed, using fallback:', error);
               const fallback = this.game.navigationManager.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
               if (fallback && fallback.length) {
-                c.path = fallback;
-                c.pathIndex = 0;
-                c.pathGoal = { x: target.x, y: target.y };
+                this.applyPath(c, fallback, target);
               }
             });
         }
@@ -336,9 +330,7 @@ export class ColonistNavigationManager {
       // Compute path immediately when not using async workers
       const p = this.game.computePathWithDangerAvoidance(c, c.x, c.y, target.x, target.y);
       if (p && p.length) {
-        c.path = p;
-        c.pathIndex = 0;
-        c.pathGoal = { x: target.x, y: target.y };
+        this.applyPath(c, p, target);
       }
     }
 
@@ -445,7 +437,9 @@ export class ColonistNavigationManager {
         // Don't shift array when using pathIndex
       } else if (target) {
         const p = this.game.computePath(c.x, c.y, target.x, target.y);
-        if (p && p.length) { c.path = p; c.pathIndex = 0; } // PATHINDEX RE-ENABLED
+        if (p && p.length) {
+          this.applyPath(c, p, target);
+        } // PATHINDEX RE-ENABLED
       }
       c.jitterScore = 0; c.jitterWindow = 0; c.lastDistToNode = undefined; (c as any).lastDistSign = undefined;
       if (!c.path || c.pathIndex == null || c.pathIndex >= c.path.length) return false; // RE-ENABLED
@@ -483,6 +477,68 @@ export class ColonistNavigationManager {
     handleColonistPassingThroughDoor(c);
 
     return false;
+  }
+
+  /**
+   * Pick a forward path node near the colonist to avoid snap-back on re-path.
+   */
+  private getPathStartIndex(
+    path: { x: number; y: number }[],
+    cx: number,
+    cy: number,
+    target?: { x: number; y: number }
+  ): number {
+    const toTargetX = target ? target.x - cx : 0;
+    const toTargetY = target ? target.y - cy : 0;
+    const hasTarget = !!target && (toTargetX !== 0 || toTargetY !== 0);
+    let bestIdx = -1;
+    let bestDist = Infinity;
+
+    for (let i = 0; i < path.length; i++) {
+      const dx = path[i].x - cx;
+      const dy = path[i].y - cy;
+      if (hasTarget && dx * toTargetX + dy * toTargetY < 0) continue;
+      const dist = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+
+    if (bestIdx === -1) {
+      for (let i = 0; i < path.length; i++) {
+        const dx = path[i].x - cx;
+        const dy = path[i].y - cy;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = i;
+        }
+      }
+    }
+
+    if (bestIdx < 0) return 0;
+
+    const closeDist = (T * 0.25) * (T * 0.25);
+    if (bestIdx < path.length - 1 && bestDist < closeDist) {
+      return bestIdx + 1;
+    }
+
+    return bestIdx;
+  }
+
+  private applyPath(c: Colonist, path: { x: number; y: number }[], target?: { x: number; y: number }): void {
+    const startIndex = this.getPathStartIndex(path, c.x, c.y, target);
+    c.path = path;
+    c.pathIndex = startIndex;
+    if (target) {
+      c.pathGoal = { x: target.x, y: target.y };
+    }
+
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const debugAny = c as any;
+    debugAny.lastRepathAt = now;
+    debugAny.lastRepathNode = path[startIndex] ? { x: path[startIndex].x, y: path[startIndex].y } : { x: c.x, y: c.y };
   }
 
   /**

@@ -760,6 +760,8 @@ export class RenderManager {
       return x >= minX && x <= maxX && y >= minY && y <= maxY;
     };
 
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+
     for (const c of game.colonists) {
       if (!c.alive || !c.path || c.path.length === 0) continue;
       if (!inViewport(c.x, c.y)) continue; // Cull paths for colonists outside viewport
@@ -812,6 +814,22 @@ export class RenderManager {
         ctx.beginPath();
         ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
         ctx.fill();
+      }
+
+      const colonistAny = c as any;
+      const repathAt = colonistAny.lastRepathAt as number | undefined;
+      const repathNode = colonistAny.lastRepathNode as { x: number; y: number } | undefined;
+      if (repathAt != null && repathNode && inViewport(repathNode.x, repathNode.y)) {
+        const ageMs = now - repathAt;
+        if (ageMs >= 0 && ageMs < 1200) {
+          const t = 1 - ageMs / 1200;
+          const radius = 6 + (1 - t) * 10;
+          ctx.strokeStyle = `rgba(0, 255, 0, ${0.8 * t})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(repathNode.x, repathNode.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       }
 
       // Final task target (different from path target) - only if different from path goal
