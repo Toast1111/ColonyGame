@@ -393,7 +393,7 @@ export class MedicalWorkGiver {
     if (!patient.health) return null;
 
     // Prioritize bleeding, infection, then pain
-    const bleeding = patient.health.injuries.find(inj => inj.bleeding > 0.2 && !inj.bandaged);
+    const bleeding = patient.health.injuries.find(inj => inj.bleeding > 0.2 && !inj.bandaged && !inj.treatedBy);
     if (bleeding) {
       const treatment = MEDICAL_TREATMENTS.find(t => 
         t.id === 'bandage_wound' && 
@@ -403,7 +403,7 @@ export class MedicalWorkGiver {
       if (treatment) return treatment;
     }
 
-    const infection = patient.health.injuries.find(inj => inj.infected);
+    const infection = patient.health.injuries.find(inj => inj.infected && !inj.treatedBy);
     if (infection) {
       const treatment = MEDICAL_TREATMENTS.find(t => 
         t.id === 'treat_infection' && 
@@ -415,6 +415,7 @@ export class MedicalWorkGiver {
     // Find most severe untreated injury
     const sortedInjuries = [...patient.health.injuries].sort((a, b) => b.severity - a.severity);
     for (const injury of sortedInjuries) {
+      if (injury.treatedBy) continue;
       const applicable = MEDICAL_TREATMENTS.filter(t => 
         t.canTreatInjuryTypes.includes(injury.type) &&
         t.canTreatBodyParts.includes(injury.bodyPart) &&
@@ -453,7 +454,8 @@ export class MedicalWorkGiver {
     // Get all injuries that match this treatment type
     const matchingInjuries = patient.health.injuries.filter(inj =>
       treatment.canTreatInjuryTypes.includes(inj.type) &&
-      treatment.canTreatBodyParts.includes(inj.bodyPart)
+      treatment.canTreatBodyParts.includes(inj.bodyPart) &&
+      !inj.treatedBy
     );
 
     // Filter out injuries that already have jobs assigned

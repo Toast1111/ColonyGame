@@ -319,6 +319,17 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     c.hp = overallHealth;
     c.hp = overallHealth;
 
+    // Allow slow recovery while moving if no bed/doctor is available
+    if ((c as any).mobileRecovery && c.health) {
+      const slowFactor = 0.2; // very slow recovery while moving/working
+      healInjuries(c, dt * slowFactor);
+      c.hp = Math.min(100, c.hp + 0.2 * dt);
+      if (c.hp >= 95 && (!c.health.injuries || c.health.injuries.length === 0)) {
+        (c as any).mobileRecovery = false;
+        (c as any).mobileRecoveryUntil = 0;
+      }
+    }
+
     // Auto medical seeking trigger (basic): if bleeding significantly or severe injury
     if (c.alive && (c.health.injuries.some(i => (i.bleeding > 0.25 && !i.bandaged) || i.severity > 0.7 || i.infected))) {
       // Mark for medical only if not already being treated
@@ -327,6 +338,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       }
     } else {
       (c as any).needsMedical = false;
+    }
+
+    if (c.state === 'resting' || c.state === 'beingTreated') {
+      (c as any).mobileRecovery = false;
+      (c as any).mobileRecoveryUntil = 0;
     }
 
     // DOWNED STATE HANDLING -------------------------------------------------
@@ -600,7 +616,11 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       const urgentBleed = c.health?.injuries?.some((i: any) => i.bleeding > 0.4) ? 4 : 0;
       const lowBlood = c.health?.bloodLevel && c.health.bloodLevel < 0.4 ? 6 : 0;
       const prioBoost = Math.min(8, urgentBleed + lowBlood + Math.floor(missingHp / 10));
-      set('beingTreated', 90 + prioBoost, 'needs medical bed rest');
+      if (waitingForDoctor) {
+        set('beingTreated', 90 + prioBoost, 'waiting for doctor');
+      } else if (!((c as any).mobileRecoveryUntil > (c.t || 0))) {
+        set('heal', 88 + prioBoost, 'needs medical bed rest');
+      }
     }
     
     // Self-care intent for very low health (falls back to self-tend if enabled)
@@ -704,20 +724,10 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           break;
         }
       }
-
-      // Self-tend in place when no bed entry is possible
-      const selfTend = (c as any).selfTend;
-      if (selfTend && c.health) {
-        const slowFactor = 0.5; // slower than doctor treatment
-        healInjuries(c, dt * slowFactor);
-        c.hp = Math.min(100, c.hp + 0.8 * dt * slowFactor);
-      } else if (c.health) {
-        c.hp = Math.min(100, c.hp + 0.4 * dt);
-      }
-
-      if (c.hp >= 85 && (!c.health?.injuries || c.health.injuries.length === 0)) {
-        changeState('seekTask', 'self-healed enough');
-      }
+      // No bed available: allow movement while slowly recovering
+      (c as any).mobileRecovery = true;
+      (c as any).mobileRecoveryUntil = (c.t || 0) + 20;
+      changeState('seekTask', 'no bed available for recovery');
       break;
     }
     case 'doctoring': {
@@ -735,6 +745,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         // No job assigned - this shouldn't happen, but recover gracefully
         (c as any).taskData = null;
         c.task = null;
+        stopMedicalAudio(game, c, true);
+        (c as any).treatmentProgress = 0;
         changeState('seekTask', 'no medical job assigned');
         break;
       }
@@ -815,8 +827,27 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         (c as any).medicalJob = null;
         (c as any).taskData = null;
         c.task = null;
+        stopMedicalAudio(game, c, true);
+        (c as any).treatmentProgress = 0;
+        if (patient) {
+          (patient as any).treatmentProgress = 0;
+          (patient as any).treatmentTime = 0;
+        }
         changeState('seekTask', 'patient no longer needs treatment');
         break;
+      }
+
+      if (job.reservedBy) {
+        (patient as any).isBeingTreated = true;
+        (patient as any).doctorId = job.reservedBy;
+        (patient as any).mobileRecovery = false;
+        (patient as any).mobileRecoveryUntil = 0;
+        if (patient.state !== 'downed' && patient.state !== 'resting' && patient.state !== 'beingTreated') {
+          patient.task = null;
+          patient.target = null;
+          patient.state = 'beingTreated';
+          patient.stateSince = 0;
+        }
       }
 
       // Move to patient
@@ -828,6 +859,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
         game.moveAlongPath(c, dt, { x: patient.x, y: patient.y }, treatmentRange);
         // Reset treatment timer when not in range
         (c as any).treatmentProgress = 0;
+        (patient as any).treatmentProgress = 0;
+        (patient as any).treatmentTime = 0;
         stopMedicalAudio(game, c, true);
       } else {
         // Close enough to perform treatment
@@ -839,6 +872,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           (c as any).treatmentProgress = 0;
         }
         (c as any).treatmentProgress += dt;
+        (patient as any).treatmentProgress = (c as any).treatmentProgress;
+        (patient as any).treatmentTime = treatmentTime;
         startTendingAudio(game, c, patient);
         
         if ((c as any).treatmentProgress >= treatmentTime) {
@@ -871,6 +906,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           (c as any).medicalJob = null;
           (c as any).taskData = null;
           (c as any).treatmentProgress = 0;
+          (patient as any).treatmentProgress = 0;
+          (patient as any).treatmentTime = 0;
           stopMedicalAudio(game, c, true);
           
           // If patient is downed, haul them to the best available medical bed
@@ -918,7 +955,9 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
       
       if (isBeingTreated && doctorId) {
         const doctor = game.colonists.find((col: Colonist) => (col as any).id === doctorId);
-        if (doctor) {
+        const doctorJob = (doctor as any)?.medicalJob || (doctor as any)?.taskData?.medicalJob;
+        const activeDoctoring = !!doctor && doctor.state === 'doctoring' && doctorJob && doctorJob.patientId === (c as any).id;
+        if (doctor && activeDoctoring) {
           const dx = doctor.x - c.x;
           const dy = doctor.y - c.y;
           if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
@@ -928,6 +967,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           if (c.stateSince > 90) {
             (c as any).isBeingTreated = false;
             (c as any).doctorId = undefined;
+            (c as any).treatmentProgress = 0;
+            (c as any).treatmentTime = 0;
           } else {
             break;
           }
@@ -935,6 +976,8 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
           // Doctor vanished or abandoned - clear and retry bed logic
           (c as any).isBeingTreated = false;
           (c as any).doctorId = undefined;
+          (c as any).treatmentProgress = 0;
+          (c as any).treatmentTime = 0;
         }
       }
 

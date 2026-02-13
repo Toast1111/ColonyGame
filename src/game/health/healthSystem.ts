@@ -282,6 +282,7 @@ export interface DamageOptions {
   armorPenetration?: number; // Future use
   createInjury?: boolean;    // default true
   damageMultiplier?: number; // situational modifiers
+  nonLethal?: boolean;        // Prevent body part destruction; force downed on critical hits
 }
 
 // Applies damage, creates injury, updates death + returns whether colonist died
@@ -304,11 +305,28 @@ export function applyDamageToColonist(
 
   // Select body part
   const part = options.bodyPart ? health.bodyParts.find(p => p.type === options.bodyPart)! : selectRandomBodyPart(health);
-  const dmg = Math.max(0, rawDamage * (options.damageMultiplier ?? 1));
+  const baseDamage = Math.max(0, rawDamage * (options.damageMultiplier ?? 1));
+  const isNonLethal = options.nonLethal === true;
+  let wouldDestroyPart = false;
+  let dmg = baseDamage;
+
+  if (isNonLethal && part.currentHp - dmg <= 0) {
+    wouldDestroyPart = true;
+    dmg = Math.max(0, part.currentHp - 1);
+  }
+
   const fatal = damageBodyPart(health, part.type, dmg, injuryType, performance.now());
 
+  if (isNonLethal && wouldDestroyPart) {
+    const hasSevereInjury = health.injuries.some(i => i.severity > 0.85);
+    if (!hasSevereInjury) {
+      health.injuries.push(createInjury('bruise', part.type, 0.9, performance.now()));
+    }
+    updateHealthStats(health);
+  }
+
   // If colonist died from vital part destruction
-  if (fatal) {
+  if (fatal && !isNonLethal) {
     handleColonistDeath(game, colonist, `Destroyed vital ${part.label}`);
     return { died: true, bodyPart: part.type, fatal: true, cause: 'vital_part' };
   }

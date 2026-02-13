@@ -71,6 +71,36 @@ function drawResourceGatheringProgress(
 }
 
 /**
+ * Draw progress bar for medical treatment on a patient
+ */
+function drawTreatmentProgress(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  colonist: any
+): void {
+  const totalTime = colonist.treatmentTime || 0;
+  const progressTime = colonist.treatmentProgress || 0;
+  if (totalTime <= 0 || progressTime <= 0) return;
+
+  const progress = Math.max(0, Math.min(1, progressTime / totalTime));
+  if (progress < 0.02) return;
+
+  const barWidth = 26;
+  const barHeight = 4;
+  const barY = y - 14;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  ctx.fillRect(x - barWidth / 2 - 1, barY - 1, barWidth + 2, barHeight + 2);
+
+  ctx.fillStyle = 'rgba(45, 55, 72, 0.9)';
+  ctx.fillRect(x - barWidth / 2, barY, barWidth, barHeight);
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.fillRect(x - barWidth / 2, barY, barWidth * progress, barHeight);
+}
+
+/**
  * Enhanced colonist avatar with directional sprite rendering
  * Renders the full colonist with body, clothing, head, hair, and status indicators
  */
@@ -297,6 +327,10 @@ export function drawColonistAvatar(
     // The progress bar function expects screen coordinates (x, y params)
     // but we're currently in colonist-relative coordinates due to ctx.translate(x, y)
     drawResourceGatheringProgress(ctx, 0, offsetY, colonist);
+  }
+
+  if (colonist.state === 'beingTreated') {
+    drawTreatmentProgress(ctx, 0, -offsetY, colonist);
   }
   
   // Carrying indicator - show icon if colonist is carrying something

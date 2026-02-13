@@ -461,6 +461,7 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         
         // Determine animation type based on weapon or unarmed
         const weaponDefName = c.inventory?.equipment?.weapon?.defName;
+        const isUnarmedAttack = !weaponDefName;
         if (weaponDefName === 'Knife') {
           c.meleeAttackType = 'stab';
         } else if (weaponDefName) {
@@ -515,7 +516,8 @@ export function updateColonistCombat(game: Game, c: Colonist, dt: number) {
         const isColonist = (game.colonists as any[]).includes(target);
         if (isColonist) {
           const meleeType = stats?.isMelee ? damageType : 'bruise';
-          (game as any).applyDamageToColonist(target, dmg, meleeType);
+          const damageOptions = isUnarmedAttack ? { nonLethal: true, source: 'unarmed' } : undefined;
+          (game as any).applyDamageToColonist(target, dmg, meleeType, damageOptions);
           
           // Blood splatter effect on colonist melee hit
           const attackAngle = Math.atan2(target.y - c.y, target.x - c.x);

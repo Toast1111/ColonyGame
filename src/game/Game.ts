@@ -43,7 +43,7 @@ import { initializeColonistHealth } from "./health/healthSystem";
 import { playUiClickPrimary, playUiClickSecondary, playUiDragEnd, playUiDragStart, playUiHotbarHover, playUiHover } from "./audio/helpers/uiAudio";
 import { medicalSystem, MEDICAL_TREATMENTS } from "./health/medicalSystem";
 import { medicalWorkGiver } from "./health/medicalWorkGiver";
-import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth } from './health/healthSystem';
+import { applyDamageToColonist, getInjurySummary, basicFieldTreatment, calculateOverallHealth, type DamageOptions } from './health/healthSystem';
 import { executeSurgery, getHospitalBedBonus } from './health/surgerySystem';
 import { drawParticles } from "../core/particles";
 import { updateTurret as updateTurretCombat, updateProjectiles as updateProjectilesCombat } from "./combat/combatSystem";
@@ -725,7 +725,12 @@ export class Game {
 
   // Enhanced combat damage system with armor reduction wrapper
   // This is a convenience method that applies armor before delegating to the health system
-  applyDamageToColonist(colonist: Colonist, damage: number, damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise'): void {
+  applyDamageToColonist(
+    colonist: Colonist,
+    damage: number,
+    damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise',
+    options: DamageOptions = {}
+  ): void {
     // Initialize health system if not present
     if (!colonist.health) {
       initializeColonistHealth(colonist);
@@ -745,7 +750,8 @@ export class Game {
     // This handles body part selection, injury creation, and all health system logic
     const result = applyDamageToColonist(this, colonist, effectiveDamage, damageType, {
       source: 'combat',
-      damageMultiplier: 1.0 // Armor already applied above
+      damageMultiplier: 1.0, // Armor already applied above
+      ...options
     });
 
     // Show appropriate damage message based on result

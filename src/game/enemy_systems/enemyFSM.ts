@@ -347,7 +347,7 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
       if (!movedThisTick && (e as any).meleeCd <= 0) {
         // Check if enemy has a weapon or is unarmed
         const weapon = (e as any).inventory?.equipment?.weapon;
-        let finalDamage = e.dmg;
+          let finalDamage = e.dmg;
         let damageType: 'cut' | 'bruise' | 'burn' | 'bite' | 'gunshot' | 'fracture' = 'bruise';
         let cooldown = 1.0;
         let shouldStun = false;
@@ -394,7 +394,9 @@ export function updateEnemyFSM(game: any, e: Enemy, dt: number) {
         
         // Apply damage
         if (typeof (game as any).applyDamageToColonist === 'function') {
-          (game as any).applyDamageToColonist(c, finalDamage, damageType);
+          const isUnarmedAttack = !(weapon && weapon.defName);
+          const damageOptions = isUnarmedAttack ? { nonLethal: true, source: 'unarmed' } : undefined;
+          (game as any).applyDamageToColonist(c, finalDamage, damageType, damageOptions);
         } else {
           c.hp -= finalDamage;
         }
