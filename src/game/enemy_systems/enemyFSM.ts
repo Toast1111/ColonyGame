@@ -42,6 +42,51 @@ const PATH_NODE_EPS = 4;    // Smaller tolerance for reaching nodes (grid-aligne
 const PATH_SPEED_BONUS = 25;
 const STUCK_RESET_TIME = 0.75;
 
+function getEnemyPathStartIndex(
+  path: { x: number; y: number }[],
+  ex: number,
+  ey: number,
+  target: { x: number; y: number }
+): number {
+  const toTargetX = target.x - ex;
+  const toTargetY = target.y - ey;
+  const hasTarget = toTargetX !== 0 || toTargetY !== 0;
+  let bestIdx = -1;
+  let bestDist = Infinity;
+
+  for (let i = 0; i < path.length; i++) {
+    const dx = path[i].x - ex;
+    const dy = path[i].y - ey;
+    if (hasTarget && dx * toTargetX + dy * toTargetY < 0) continue;
+    const dist = dx * dx + dy * dy;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i;
+    }
+  }
+
+  if (bestIdx === -1) {
+    for (let i = 0; i < path.length; i++) {
+      const dx = path[i].x - ex;
+      const dy = path[i].y - ey;
+      const dist = dx * dx + dy * dy;
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestIdx = i;
+      }
+    }
+  }
+
+  if (bestIdx < 0) return 0;
+
+  const closeDist = (T * 0.25) * (T * 0.25);
+  if (bestIdx < path.length - 1 && bestDist < closeDist) {
+    return bestIdx + 1;
+  }
+
+  return bestIdx;
+}
+
 function ensureEnemyPath(game: any, e: Enemy, target: { x: number; y: number }, dt: number): boolean {
   const enemyAny = e as any;
   const distToGoal = Math.hypot(target.x - e.x, target.y - e.y);
@@ -68,19 +113,19 @@ function ensureEnemyPath(game: any, e: Enemy, target: { x: number; y: number }, 
     );
     
     if (newPath && newPath.length) {
-      // Remove nodes we're already past
-      while (newPath.length && Math.hypot(newPath[0].x - e.x, newPath[0].y - e.y) < T * 0.25) {
-        newPath.shift();
-      }
-      if (!newPath.length) {
+      const startIndex = getEnemyPathStartIndex(newPath, e.x, e.y, target);
+      if (startIndex >= newPath.length) {
         enemyAny.path = undefined;
         enemyAny.pathIndex = undefined;
         return false;
       }
       enemyAny.path = newPath;
-      enemyAny.pathIndex = 0;
+      enemyAny.pathIndex = startIndex;
       enemyAny.pathGoal = { x: target.x, y: target.y };
       enemyAny.repath = 1.5 + Math.random() * 1.0; // Longer repath interval
+      const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      enemyAny.lastRepathAt = now;
+      enemyAny.lastRepathNode = newPath[startIndex] ? { x: newPath[startIndex].x, y: newPath[startIndex].y } : { x: e.x, y: e.y };
       return true;
     }
     enemyAny.path = undefined;

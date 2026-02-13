@@ -888,6 +888,21 @@ export class RenderManager {
         ctx.fillStyle = i === enemyAny.pathIndex ? '#ff0000' : '#ff8888';
         ctx.fillRect(node.x - 2, node.y - 2, 4, 4);
       }
+
+      const repathAt = enemyAny.lastRepathAt as number | undefined;
+      const repathNode = enemyAny.lastRepathNode as { x: number; y: number } | undefined;
+      if (repathAt != null && repathNode && inViewport(repathNode.x, repathNode.y)) {
+        const ageMs = now - repathAt;
+        if (ageMs >= 0 && ageMs < 1200) {
+          const t = 1 - ageMs / 1200;
+          const radius = 6 + (1 - t) * 10;
+          ctx.strokeStyle = `rgba(255, 64, 64, ${0.8 * t})`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(repathNode.x, repathNode.y, radius, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
     }
   }
 
