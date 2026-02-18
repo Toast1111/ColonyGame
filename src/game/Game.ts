@@ -126,15 +126,18 @@ export class Game {
       this.game = game;
     }
     
+    /** Queue a navigation rebuild on the next safe update tick. */
     requestFullRebuild(): void {
       this.fullRebuildQueued = true;
       this.rebuildQueued = true;
     }
     
+    /** Mark cached world layers dirty so they are regenerated once this frame ends. */
     requestCacheInvalidation(): void {
       this.cacheInvalidationQueued = true;
     }
     
+    /** Execute deferred rebuild/cache operations in a predictable order. */
     processQueue(): void {
       if (this.cacheInvalidationQueued) {
         // Invalidate world cache (deferred to prevent performance issues)
@@ -151,6 +154,7 @@ export class Game {
       this.rebuildQueued = false;
     }
     
+    /** Return true when a deferred nav rebuild is still pending. */
     hasQueuedRebuilds(): boolean {
       return this.rebuildQueued;
     }
@@ -176,12 +180,14 @@ export class Game {
   private justUnlockedFollow = false; // Flag to prevent bio panel close after unlocking follow
   // lastInputWasTouch moved to inputManager (see getter/setter below)
 
+  /** Calculate total colony storage slots contributed by completed storage structures. */
   getStorageCapacity(): number {
     const warehouses = this.state.buildings.filter(b => b.done && b.kind === 'warehouse').length;
     const tents = this.state.buildings.filter(b => b.done && b.kind === 'tent').length;
     return this.resourceSystem.getStorageCapacity(warehouses, tents);
   }
 
+  /** Compute max supported colonists from HQ baseline plus finished lodging buildings. */
   getPopulationCap(): number {
     const base = this.buildings.find(b => b.kind === 'hq') ? 3 : 0;
     const lodging = this.buildings
@@ -190,6 +196,10 @@ export class Game {
     return base + lodging;
   }
 
+  /**
+   * Add resources while honoring active storage model.
+   * Falls back to legacy counters when item/stockpile systems are unavailable.
+   */
   addResource(type: keyof Resources, amount: number): number {
     if (!this.itemManager) {
       const capacity = this.getStorageCapacity();
@@ -225,6 +235,7 @@ export class Game {
     return amount;
   }
 
+  /** Aggregate stockpiled floor items into resource totals used by the HUD/economy. */
   private getStockpileResourceTotals(): Required<Resources> {
     const totals: Required<Resources> = {
       wood: 0,
@@ -269,6 +280,7 @@ export class Game {
     return totals;
   }
 
+  /** Mirror stockpile item counts into the resource system for UI and game logic consumers. */
   syncResourcesFromStockpiles(): void {
     const totals = this.getStockpileResourceTotals();
     for (const key of Object.keys(totals) as (keyof Resources)[]) {
@@ -276,6 +288,7 @@ export class Game {
     }
   }
 
+  /** Convert legacy startup resource counters into physical stockpile items. */
   private materializeResourcesToStockpiles(): void {
     if (!this.itemManager) return;
 
@@ -309,6 +322,7 @@ export class Game {
     this.syncResourcesFromStockpiles();
   }
 
+  /** Remove a requested amount of a resource from allowed stockpile items. */
   consumeStockpileResource(type: keyof Resources, amount: number): number {
     if (!this.itemManager || amount <= 0) return 0;
 
@@ -348,6 +362,7 @@ export class Game {
     return consumed;
   }
 
+  /** Spend a compound resource cost from stockpiles, failing if any component is short. */
   consumeStockpileCost(cost?: Partial<Resources>): boolean {
     if (!cost) return true;
     if (!hasCost(this.RES, cost)) return false;
@@ -397,6 +412,7 @@ export class Game {
   
   get RES(): Resources { return this.resourceSystem.getResourcesRef(); }
 
+  /** Release all reservation records linked to a colonist target/build claim. */
   private releaseColonistReservations(c: Colonist): void {
     if (c.target) {
       const target = c.target as any;
@@ -411,6 +427,7 @@ export class Game {
     }
   }
 
+  /** Drop stale mining-tile assignments that no active miner still targets. */
   private cleanupMiningAssignments(): void {
     const assigned = this.reservationManager.getAssignedTiles();
     if (assigned.size === 0) return;
@@ -843,11 +860,13 @@ export class Game {
     console.log(`UI Scale calculated: ${scale.toFixed(2)} for ${currentWidth}x${currentHeight}`);
   }
 
+  /** Safely access optional mobile controls bridge attached at runtime. */
   private getMobileControlsInstance(): MobileControlsHandle | null {
     const mc = (this as any).mobileControls as MobileControlsHandle | undefined;
     return mc ?? null;
   }
 
+  /** Push current pause/FF/erase state into the on-screen mobile controls UI. */
   syncMobileControls(): void {
     const mc = this.getMobileControlsInstance();
     if (!mc) return;
@@ -863,6 +882,7 @@ export class Game {
     return this.getMobileControlsInstance();
   }
 
+  /** Apply touch UI mode to DOM classes and control visibility. */
   private applyTouchUIState(): void {
     const enabled = this.touchUIEnabledInternal;
     if (typeof document !== 'undefined' && document.body) {
@@ -879,6 +899,10 @@ export class Game {
     this.syncMobileControls();
   }
 
+  /**
+   * Toggle touch-optimized UI mode.
+   * Manual toggles lock automatic device-based switching until reset.
+   */
   setTouchUIEnabled(enabled: boolean, manual = false): void {
     if (manual) {
       this.touchUIManualOverride = enabled;
@@ -890,6 +914,7 @@ export class Game {
     this.applyTouchUIState();
   }
 
+  /** Reapply touch UI presentation from the current internal flags. */
   refreshTouchUIState(): void {
     this.applyTouchUIState();
   }
@@ -900,12 +925,14 @@ export class Game {
   }
   
   // Helper function to scale values
+  /** Scale a pixel value using current UI scale and return an integer result. */
   scale(value: number): number {
     return Math.round(value * this.uiScale);
   }
 
   screenToWorld = (sx: number, sy: number) => this.cameraSystem.screenToWorld(sx, sy);
 
+  /** Build a tile-aligned drag rectangle for zone creation, including tap shortcuts. */
   private computeStockpileRect(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut: boolean): { x: number; y: number; width: number; height: number } | null {
     if (!start || !end) { return null; }
     
@@ -954,6 +981,7 @@ export class Game {
     return { x: clampedX, y: clampedY, width, height };
   }
 
+  /** Finalize stockpile drag and create a stockpile zone if the drag is valid. */
   private finalizeStockpileDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
     if (!this.itemManager) { return false; }
     const rect = this.computeStockpileRect(start, end, allowTapShortcut);
@@ -964,6 +992,7 @@ export class Game {
     return true;
   }
 
+  /** Finalize drag selection and create a tree-growing management zone. */
   private finalizeTreeGrowingZoneDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
     const rect = this.computeStockpileRect(start, end, allowTapShortcut);
     if (!rect) { return false; }
@@ -973,6 +1002,7 @@ export class Game {
     return true;
   }
 
+  /** Finalize drag selection and register a new mining designation zone. */
   private finalizeMiningZoneDrag(start: { x: number; y: number } | null, end: { x: number; y: number } | null, allowTapShortcut = false): boolean {
     try {
       const rect = this.computeStockpileRect(start, end, allowTapShortcut);
@@ -1008,6 +1038,7 @@ export class Game {
     }
   }
 
+  /** Return the current drag-preview rectangle for zone painting overlays. */
   getZoneDragPreviewRect(): { x: number; y: number; width: number; height: number } | null {
     if (!this.uiManager.zoneDragStart) { return null; }
     const dragging = this.mouse.rdown || this.touchZoneDragActive;
@@ -1018,6 +1049,7 @@ export class Game {
     return this.computeStockpileRect(this.uiManager.zoneDragStart, current, this.touchZoneDragActive);
   }
 
+  /** Manage delayed visibility of the zoomed-out tactical overlay hint. */
   private updateZoomOverlay(): void {
     const isFullyZoomedOut = this.camera.zoom <= Game.MIN_ZOOM_FOR_OVERLAY;
     
@@ -1971,6 +2003,7 @@ export class Game {
     this.placeAtMouse();
   }
 
+  /** Hit-test colonists in reverse draw order so top-most selectable pawn is returned. */
   findColonistAt(x: number, y: number): Colonist | null {
     for (let i = this.colonists.length - 1; i >= 0; i--) {
       const c = this.colonists[i];
@@ -1982,6 +2015,7 @@ export class Game {
     return null;
   }
   
+  /** Hit-test enemies in reverse order and ignore dead pawns. */
   findEnemyAt(x: number, y: number): Enemy | null {
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
@@ -1992,6 +2026,7 @@ export class Game {
     return null;
   }
 
+  /** Locate the building footprint under a world position, optionally including unfinished builds. */
   findBuildingAt(x: number, y: number, opts?: { includeUnderConstruction?: boolean }): Building | null {
     const includeUnderConstruction = opts?.includeUnderConstruction ?? false;
     for (let i = this.buildings.length - 1; i >= 0; i--) {
@@ -2004,6 +2039,7 @@ export class Game {
     return null;
   }
 
+  /** Push a transient in-game message and mirror it to toast UI feedback. */
   msg(text: string, kind: Message["kind"] = 'info') { 
     this.messages.push({ text, t: 4, kind }); 
     this.toast(text, 1600); 
@@ -2456,10 +2492,14 @@ export class Game {
   evictColonistsFrom(b: Building) { evictColonistsFromPlacement(this, b); }
 
   // AI Methods - Delegated to managers (extracted from 500-line monolith!)
+  /** Return effective occupancy limit for a building through reservation rules. */
   buildingCapacity(b: Building): number { return this.reservationManager.getBuildingCapacity(b); }
+  /** Check whether a building has a free slot, optionally ignoring one occupant. */
   buildingHasSpace(b: Building, ignoreColonist?: Colonist): boolean { return this.reservationManager.buildingHasSpace(b, ignoreColonist); }
+  /** Reserve a sleeping slot for a colonist in a given shelter building. */
   reserveSleepSpot(c: Colonist, b: Building): boolean { return this.reservationManager.reserveSleepSpot(c, b); }
   releaseSleepReservation(c: Colonist) { this.reservationManager.releaseSleepReservation(c); }
+  /** Attempt to move a colonist into a building while honoring occupancy reservations. */
   tryEnterBuilding(c: Colonist, b: Building): boolean { return this.reservationManager.enterBuilding(c, b, this.centerOf(b)); }
   leaveBuilding(c: Colonist) { this.reservationManager.leaveBuilding(c); }
   releaseBuildReservation(c: Colonist) { this.reservationManager.releaseBuildReservation(c); }
@@ -2479,6 +2519,7 @@ export class Game {
   }
 
   // Building methods moved to BuildingManager
+  /** Determine whether at least one powered, manned turret can cover this building. */
   isProtectedByTurret(b: Building): boolean {
     return this.buildingManager.isProtectedByTurret(b);
   }
@@ -2569,6 +2610,7 @@ export class Game {
       }
     }
   }
+  /** Convenience input helper that checks current keyboard state. */
   keyPressed(k: string): boolean { 
     return this.inputManager.keyPressed(k);
   }
@@ -2934,6 +2976,7 @@ export class Game {
    * Mark dirty regions for entities that have moved or changed
    * This allows selective rendering of only changed areas
    */
+  /** Mark world/screen regions that changed this frame for optimized redraws. */
   private markDirtyRegions(): void {
     const { dirtyRectTracker, camera } = this;
     const camZoom = camera.zoom;
@@ -3111,6 +3154,7 @@ export class Game {
   // Helper functions for context menu actions - moved to ColonistActionManager
 
   // Medical methods moved to MedicalManager
+  /** Evaluate whether injuries are severe enough to prioritize bed treatment. */
   colonistNeedsMedicalBed(colonist: Colonist): boolean {
     return this.medicalManager.colonistNeedsMedicalBed(colonist);
   }
@@ -3162,10 +3206,12 @@ export class Game {
     this.medicalManager.assignComprehensiveMedicalCare(patient);
   }
 
+  /** Select the best available doctor for a given patient. */
   findBestDoctor(patient: Colonist): Colonist | null {
     return this.medicalManager.findBestDoctor(patient);
   }
 
+  /** Read medicine skill level with safe defaults for missing skill data. */
   getColonistMedicalSkill(colonist: Colonist): number {
     return this.medicalManager.getColonistMedicalSkill(colonist);
   }
