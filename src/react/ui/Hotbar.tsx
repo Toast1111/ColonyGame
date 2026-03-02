@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import type { HotbarTab } from '../../game/ui/hud/modernHotbar';
-import { getHotbarState, subscribeHotbar } from '../stores/hotbarStore';
+import { ensureHotbarViewportTracking, getHotbarState, subscribeHotbar } from '../stores/hotbarStore';
 
 const TABS: Array<{ id: HotbarTab; label: string; enabled: boolean }> = [
   { id: 'build', label: 'Build', enabled: true },
@@ -23,7 +23,18 @@ function getHotbarHeight(canvasHeight: number, isTouch: boolean): number {
 
 export function Hotbar() {
   const state = useSyncExternalStore(subscribeHotbar, getHotbarState, getHotbarState);
-  const height = getHotbarHeight(state.canvasHeight || window.innerHeight, state.isTouch);
+  useEffect(() => {
+    ensureHotbarViewportTracking();
+  }, []);
+
+  const viewportHeight = state.viewportHeight || state.canvasHeight || window.innerHeight;
+  const safeAreaBottom = Math.max(0, state.safeAreaInsetBottom || 0);
+  const height = getHotbarHeight(viewportHeight, state.isTouch);
+  const totalHeight = height + safeAreaBottom;
+  const fontSize = Math.max(state.isTouch ? 16 : 12, height * (state.isTouch ? 0.34 : 0.3));
+  const fontPx = Math.floor(fontSize);
+  const tabHeight = Math.min(height, fontPx + (state.isTouch ? 8 : 6));
+  const tabOffsetY = Math.max(0, Math.floor((height - tabHeight) / 2));
 
   const onTabClick = (tab: HotbarTab, enabled: boolean) => {
     if (!enabled) return;
@@ -38,7 +49,20 @@ export function Hotbar() {
   };
 
   return (
-    <div className="hotbar" style={{ height: `${height}px` }}>
+    <div
+      className="hotbar"
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: `${totalHeight}px`,
+        paddingBottom: `${safeAreaBottom}px`,
+        boxSizing: 'border-box',
+        alignItems: 'flex-start'
+      }}
+    >
       {TABS.map((tab) => {
         const isActive = state.activeTab === tab.id;
         const className = `hotbar-tab${isActive ? ' active' : ''}${tab.enabled ? '' : ' disabled'}`;
@@ -47,6 +71,12 @@ export function Hotbar() {
             key={tab.id}
             className={className}
             type="button"
+            style={{
+              height: `${tabHeight}px`,
+              marginTop: `${tabOffsetY}px`,
+              fontSize: `${fontPx}px`,
+              padding: '0 4px'
+            }}
             onClick={() => onTabClick(tab.id, tab.enabled)}
             onMouseEnter={() => onTabHover(tab.id, tab.enabled)}
           >

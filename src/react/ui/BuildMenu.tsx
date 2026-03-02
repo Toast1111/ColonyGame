@@ -1,6 +1,6 @@
-import { useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { BUILD_TYPES, groupByCategory } from '../../game/buildings';
-import { getHotbarState, subscribeHotbar } from '../stores/hotbarStore';
+import { ensureHotbarViewportTracking, getHotbarState, subscribeHotbar } from '../stores/hotbarStore';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -60,6 +60,10 @@ function getHotbarHeight(canvasHeight: number, isTouch: boolean): number {
 
 export function BuildMenu() {
   const state = useSyncExternalStore(subscribeHotbar, getHotbarState, getHotbarState);
+  useEffect(() => {
+    ensureHotbarViewportTracking();
+  }, []);
+
   const game = (window as any).game;
   const isOpen = state.activeTab === 'build';
   const [tooltip, setTooltip] = useState<null | { x: number; y: number; name: string; description?: string; cost?: string }>(null);
@@ -74,9 +78,11 @@ export function BuildMenu() {
     return null;
   }
 
-  const hotbarHeight = getHotbarHeight(state.canvasHeight || window.innerHeight, state.isTouch);
+  const viewportWidth = state.viewportWidth || state.canvasWidth || window.innerWidth;
+  const viewportHeight = state.viewportHeight || state.canvasHeight || window.innerHeight;
+  const hotbarHeight = getHotbarHeight(viewportHeight, state.isTouch) + Math.max(0, state.safeAreaInsetBottom || 0);
   const { menuHeight, menuWidth, menuX, menuY, panelGap, categoryPanelWidth, buildingPanelWidth } =
-    getMenuDimensions(state.canvasWidth || window.innerWidth, state.canvasHeight || window.innerHeight, hotbarHeight, state.isTouch);
+    getMenuDimensions(viewportWidth, viewportHeight, hotbarHeight, state.isTouch);
 
   const headerHeight = Math.max(menuHeight * 0.08, state.isTouch ? 46 : 34);
   const categoryItemHeight = Math.max(menuHeight * 0.08, state.isTouch ? 56 : 42);

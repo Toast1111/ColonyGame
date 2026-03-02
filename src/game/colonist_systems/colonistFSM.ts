@@ -643,8 +643,7 @@ export function updateColonistFSM(game: any, c: Colonist, dt: number) {
     return best;
   }
 
-  // Colonists now control their own bed entry/exit via spatial interactions
-  // No more automatic forcing into resting when inside buildings
+  // No automatic forcing into resting when inside buildings
   {
     const statePriority = (s: ColonistState | undefined): number => {
       switch (s) {
