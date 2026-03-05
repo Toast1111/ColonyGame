@@ -3,6 +3,7 @@ import type { Building, BuildingDef, Resources } from "./types";
 import { initializeBuildingInventory, shouldHaveInventory, getDefaultInventoryCapacity } from "./systems/buildingInventory";
 import { ZONE_TYPES } from "./zones";
 
+// Get ready to delete the house building, as it serves no puppose anymore
 export const BUILD_TYPES: Record<string, BuildingDef> = {
   house: { 
     category:'Housing', 
@@ -19,14 +20,14 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
   farm: { 
     category:'Production', 
     name: 'Farm', 
-    description: 'Grows crops that colonists can harvest for food. Takes 2 days to grow.',
+    description: 'Grows crops that colonists can harvest for food. Takes 1 day to grow.',
     key: '2', 
     cost: { wood: 15 }, 
     hp: 120, 
     size: { w: 2, h: 2 }, 
     build: 80, 
     color: COLORS.farm, 
-    growTime: 0.5, // 1 unit = 2 days with 0.5 growth per day
+    growTime: 1.0, // 1 unit = 1 days with 1.0 growth per day
   },
   turret: { 
     category:'Defense', 
@@ -168,7 +169,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
   stonecutting_table: {
     category: 'Production',
     name: 'Stonecutting Table',
-    description: 'Cut rubble from mountain mining into refined stone blocks. Surface rocks provide stone directly.',
+    description: 'Cut rubble from mountains into refined stone blocks. Surface rocks provide stone directly.',
     key: 'T',
     cost: { wood: 30, stone: 5 },
     hp: 180,
@@ -177,6 +178,7 @@ export const BUILD_TYPES: Record<string, BuildingDef> = {
     color: '#708090',  // Slate gray
     popCap: 1  // One stonecutter at a time
   },
+  // should just be deleted as it serves no purpose
   pantry: {
     category: 'Furniture',
     name: 'Pantry',

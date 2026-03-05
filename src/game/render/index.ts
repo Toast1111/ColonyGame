@@ -365,7 +365,11 @@ export function drawPoly(ctx: CanvasRenderingContext2D, x: number, y: number, r:
   ctx.closePath(); ctx.fill();
 }
 
-export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
+export function drawBuilding(
+  ctx: CanvasRenderingContext2D,
+  b: Building,
+  opts?: { showTurretRange?: boolean }
+) {
   // Path visual: subtle darker tile
   if ((b as any).kind === 'path') {
     ctx.fillStyle = '#1f2937';
@@ -632,8 +636,8 @@ export function drawBuilding(ctx: CanvasRenderingContext2D, b: Building) {
     }
   }
 
-  // Turret range visualization
-  if (b.kind === 'turret' && (b as any).range) { 
+  // Turret range visualization (shown only for active contexts, e.g. selected turret)
+  if (opts?.showTurretRange && b.kind === 'turret' && (b as any).range) {
     const cx = b.x + b.w / 2; const cy = b.y + b.h / 2;
     // Use rgba() instead of globalAlpha for better performance
     ctx.fillStyle = 'rgba(226, 243, 255, 0.07)'; // #e2f3ff with 0.07 alpha

@@ -44,6 +44,7 @@ export class UIManager {
   
   // Selection state
   selColonist: Colonist | null = null;
+  selBuilding: Building | null = null;
   follow = false; // Camera follow selected colonist
   
   // Pending placement state (for touch/precise placement)
@@ -176,9 +177,23 @@ export class UIManager {
    */
   selectColonist(colonist: Colonist | null): void {
     this.selColonist = colonist;
+    if (colonist) {
+      this.selBuilding = null;
+    }
     // Restore last active tab when selecting a colonist
     if (colonist) {
       this.colonistProfileTab = this.lastProfileTab;
+    }
+  }
+
+  /**
+   * Select a building
+   */
+  selectTargetBuilding(building: Building | null): void {
+    this.selBuilding = building;
+    if (building) {
+      this.selColonist = null;
+      this.follow = false;
     }
   }
   
@@ -323,6 +338,7 @@ export class UIManager {
     this.selectedBuild = null;
     this.showBuildMenu = false;
     this.selColonist = null;
+    this.selBuilding = null;
     this.follow = false;
     this.pendingPlacement = null;
     this.pendingDragging = false;

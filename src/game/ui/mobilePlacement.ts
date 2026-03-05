@@ -89,6 +89,17 @@ export function drawMobilePlacementUI(game: Game): void {
   ctx.setLineDash([4, 3]);
   ctx.strokeRect(scr.x + 0.5, scr.y + 0.5, sw - 1, sh - 1);
   ctx.setLineDash([]);
+
+  // Turret placement preview range
+  if (p.key === 'turret' && (def as any).range) {
+    const centerX = scr.x + sw / 2;
+    const centerY = scr.y + sh / 2;
+    const screenRange = (def as any).range * game.camera.zoom;
+    ctx.fillStyle = 'rgba(226, 243, 255, 0.07)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, screenRange, 0, Math.PI * 2);
+    ctx.fill();
+  }
   
   ctx.restore();
 

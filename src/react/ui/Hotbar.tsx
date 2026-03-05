@@ -33,8 +33,6 @@ export function Hotbar() {
   const totalHeight = height + safeAreaBottom;
   const fontSize = Math.max(state.isTouch ? 16 : 12, height * (state.isTouch ? 0.34 : 0.3));
   const fontPx = Math.floor(fontSize);
-  const tabHeight = Math.min(height, fontPx + (state.isTouch ? 8 : 6));
-  const tabOffsetY = Math.max(0, Math.floor((height - tabHeight) / 2));
 
   const onTabClick = (tab: HotbarTab, enabled: boolean) => {
     if (!enabled) return;
@@ -60,30 +58,40 @@ export function Hotbar() {
         height: `${totalHeight}px`,
         paddingBottom: `${safeAreaBottom}px`,
         boxSizing: 'border-box',
-        alignItems: 'flex-start'
+        alignItems: 'stretch'
       }}
     >
-      {TABS.map((tab) => {
-        const isActive = state.activeTab === tab.id;
-        const className = `hotbar-tab${isActive ? ' active' : ''}${tab.enabled ? '' : ' disabled'}`;
-        return (
-          <button
-            key={tab.id}
-            className={className}
-            type="button"
-            style={{
-              height: `${tabHeight}px`,
-              marginTop: `${tabOffsetY}px`,
-              fontSize: `${fontPx}px`,
-              padding: '0 4px'
-            }}
-            onClick={() => onTabClick(tab.id, tab.enabled)}
-            onMouseEnter={() => onTabHover(tab.id, tab.enabled)}
-          >
-            {tab.label}
-          </button>
-        );
-      })}
+      <div
+        style={{
+          display: 'flex',
+          gap: '8px',
+          width: '100%',
+          height: `${height}px`,
+          alignItems: 'stretch'
+        }}
+      >
+        {TABS.map((tab) => {
+          const isActive = state.activeTab === tab.id;
+          const className = `hotbar-tab${isActive ? ' active' : ''}${tab.enabled ? '' : ' disabled'}`;
+          return (
+            <button
+              key={tab.id}
+              className={className}
+              type="button"
+              style={{
+                height: '100%',
+                fontSize: `${fontPx}px`,
+                padding: '0 4px',
+                boxSizing: 'border-box'
+              }}
+              onClick={() => onTabClick(tab.id, tab.enabled)}
+              onMouseEnter={() => onTabHover(tab.id, tab.enabled)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

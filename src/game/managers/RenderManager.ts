@@ -300,7 +300,7 @@ export class RenderManager {
       const centerX = b.x + b.w / 2;
       const centerY = b.y + b.h / 2;
       if (!inViewport(centerX, centerY, radius)) continue;
-      drawBuilding(ctx, b);
+      drawBuilding(ctx, b, { showTurretRange: b === game.selBuilding && b.kind === 'turret' });
     }
 
     // Colonist hiding indicators - show person icons on buildings with colonists inside
@@ -598,6 +598,16 @@ export class RenderManager {
         // COLORS.ghost or #ff6b6b with 0.6 alpha built into the color
         ctx.fillStyle = can ? (typeof COLORS.ghost === 'string' && COLORS.ghost.includes('rgba') ? COLORS.ghost : 'rgba(100, 200, 100, 0.6)') : 'rgba(255, 107, 107, 0.53)'; // 0.53 = 0.88 * 0.6
         ctx.fillRect(gx, gy, def.size.w * T, def.size.h * T);
+
+        // Turret placement preview range
+        if (game.selectedBuild === 'turret' && (def as any).range) {
+          const cx = gx + (def.size.w * T) / 2;
+          const cy = gy + (def.size.h * T) / 2;
+          ctx.fillStyle = 'rgba(226, 243, 255, 0.07)';
+          ctx.beginPath();
+          ctx.arc(cx, cy, (def as any).range, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 

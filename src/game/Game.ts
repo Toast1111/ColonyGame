@@ -503,6 +503,9 @@ export class Game {
   
   get selColonist() { return this.uiManager.selColonist; }
   set selColonist(value) { this.uiManager.selColonist = value; }
+
+  get selBuilding() { return this.uiManager.selBuilding; }
+  set selBuilding(value) { this.uiManager.selBuilding = value; }
   
   get follow() { return this.uiManager.follow; }
   set follow(value) { this.uiManager.follow = value; }
@@ -1322,6 +1325,7 @@ export class Game {
               } else if (clickResult.type === 'building') {
                 // Building or zone clicked - select it and close menus
                 this.selectedBuild = clickResult.value;
+                this.selBuilding = null;
                 playUiClickPrimary(this);
                 this.uiManager.setHotbarTab(null); // Close the build menu
                 
@@ -1350,8 +1354,22 @@ export class Game {
         else {
           // Try to select a colonist; if none under cursor, place building
           const col = this.findColonistAt(this.mouse.wx, this.mouse.wy);
-          if (col) { this.selColonist = col; this.follow = true; }
-          else { this.placeAtMouse(); }
+          if (col) {
+            this.selBuilding = null;
+            this.selColonist = col;
+            this.follow = true;
+          }
+          else {
+            const clickedBuilding = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
+            if (clickedBuilding && !this.selectedBuild && !this.pendingPlacement) {
+              this.selBuilding = clickedBuilding;
+              this.selColonist = null;
+              this.follow = false;
+              return;
+            }
+            this.selBuilding = null;
+            this.placeAtMouse();
+          }
         }
       }
       if ((e as MouseEvent).button === 2) {
@@ -1392,6 +1410,7 @@ export class Game {
         }
 
         const clickedBuilding = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
+        this.selBuilding = clickedBuilding || null;
         if (clickedBuilding && showBuildingContextMenu(this, clickedBuilding, this.mouse.x, this.mouse.y)) {
           return;
         }
@@ -1942,6 +1961,7 @@ export class Game {
             playUiClickPrimary(this);
           } else if (clickResult.type === 'building') {
             this.selectedBuild = clickResult.value;
+            this.selBuilding = null;
               playUiClickPrimary(this);
             this.uiManager.setHotbarTab(null);
             this.toast('Selected: ' + BUILD_TYPES[clickResult.value].name);
@@ -1993,9 +2013,15 @@ export class Game {
     }
 
     const col = colonistUnderPointer;
-    if (col) { this.selColonist = col; this.follow = true; return; }
+    if (col) {
+      this.selBuilding = null;
+      this.selColonist = col;
+      this.follow = true;
+      return;
+    }
 
     const building = this.findBuildingAt(this.mouse.wx, this.mouse.wy);
+    this.selBuilding = building || null;
     if (building && showBuildingContextMenu(this, building, this.mouse.x, this.mouse.y)) {
       return;
     }
